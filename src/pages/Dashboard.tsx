@@ -1,7 +1,7 @@
+// Import necessary dependencies
 import React, { useEffect, useState } from 'react';
 import Grid from '@mui/material/Grid';
 import { 
-  Container, 
   Paper, 
   Typography, 
   Box,
@@ -12,7 +12,39 @@ import {
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { Dayjs } from 'dayjs';
+import { 
+  BarChart, 
+  Bar, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer 
+} from 'recharts';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { fetchDashboardData, DashboardData } from '../services/dashboardService';
+
+// Mock data for charts
+const profitData = [
+  { name: 'Jan', profit: 4000, expenses: 2400 },
+  { name: 'Feb', profit: 3000, expenses: 1398 },
+  { name: 'Mar', profit: 2000, expenses: 9800 },
+  { name: 'Apr', profit: 2780, expenses: 3908 },
+  { name: 'May', profit: 1890, expenses: 4800 },
+  { name: 'Jun', profit: 2390, expenses: 3800 },
+];
+
+const portfolioTrendData = [
+  { name: 'Jan', value: 90000 },
+  { name: 'Feb', value: 85000 },
+  { name: 'Mar', value: 95000 },
+  { name: 'Apr', value: 99000 },
+  { name: 'May', value: 97000 },
+  { name: 'Jun', value: 99129 },
+];
 
 const Dashboard: React.FC = () => {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -34,17 +66,17 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <Container sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
         <CircularProgress />
-      </Container>
+      </Box>
     );
   }
 
   if (!data) {
     return (
-      <Container sx={{ p: 3 }}>
+      <Box sx={{ p: 3 }}>
         <Typography>Error loading dashboard data.</Typography>
-      </Container>
+      </Box>
     );
   }
 
@@ -82,7 +114,7 @@ const Dashboard: React.FC = () => {
         </Grid>
       </Paper>
 
-      {/* Portfolio Value */}
+      {/* Portfolio Value Display */}
       <Paper sx={{ p: 2, mb: 3 }}>
         <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
           ${data.totalInventory.toLocaleString()}
@@ -119,6 +151,99 @@ const Dashboard: React.FC = () => {
           <Paper sx={{ p: 2, textAlign: 'center' }}>
             <Typography variant="h6">Profit Margin</Typography>
             <Typography variant="h4">{data.profitMargin}%</Typography>
+          </Paper>
+        </Grid>
+
+        {/* Portfolio Metrics */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>Portfolio Metrics</Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Net Profit
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6">$2,500</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
+                      <TrendingUpIcon fontSize="small" />
+                      <Typography variant="caption">+15%</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={12} sm={6} md={3}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Total Spend
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="h6">$12,000</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
+                      <TrendingDownIcon fontSize="small" />
+                      <Typography variant="caption">-5%</Typography>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Items Purchased
+                  </Typography>
+                  <Typography variant="h6">45</Typography>
+                </Box>
+              </Grid>
+
+              <Grid item xs={12} sm={6} md={3}>
+                <Box>
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Items Sold
+                  </Typography>
+                  <Typography variant="h6">32</Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </Paper>
+        </Grid>
+
+        {/* Charts */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2, mb: 3 }}>
+            <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={profitData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="profit" fill="#8884d8" />
+                <Bar dataKey="expenses" fill="#82ca9d" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Paper>
+        </Grid>
+
+        <Grid item xs={12}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>Portfolio Value Trend</Typography>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={portfolioTrendData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Line 
+                  type="monotone" 
+                  dataKey="value" 
+                  stroke="#8884d8" 
+                  strokeWidth={2}
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </Paper>
         </Grid>
       </Grid>
