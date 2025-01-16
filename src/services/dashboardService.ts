@@ -91,45 +91,29 @@ export interface DashboardData {
  * 
  * @returns {Promise<DashboardData>} Promise that resolves to dashboard data
  * @throws {Error} When the API request fails or returns invalid data
- * 
- * @example
- * try {
- *   const dashboardData = await fetchDashboardData({
- *     startDate: new Date('2024-01-01'),
- *     endDate: new Date('2024-12-31')
- *   });
- *   console.log(dashboardData.portfolioValue);
- * } catch (error) {
- *   console.error('Failed to fetch dashboard data:', error);
- * }
  */
 export const fetchDashboardData = async (
   options?: { startDate?: Date; endDate?: Date }
 ): Promise<DashboardData> => {
-  try {
-    // TODO: Implement actual API call
-    const response = await fetch('/api/dashboard', {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Add query parameters if dates are provided
-      ...(options && {
-        body: JSON.stringify(options)
-      })
-    });
+  // Simulate API call delay
+  await new Promise(resolve => setTimeout(resolve, 1000));
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+  // Return mock data matching the interface
+  return {
+    portfolioValue: 50000,
+    totalInventory: 500,
+    activeListings: 250,
+    monthlySales: 10000,
+    profitMargin: 25,
+    metrics: {
+      netProfit: 2500,
+      netProfitChange: 15,
+      totalSpend: 12000,
+      totalSpendChange: -5,
+      itemsPurchased: 45,
+      itemsSold: 32
     }
-
-    const data = await response.json();
-    return data as DashboardData;
-
-  } catch (error) {
-    console.error('Error fetching dashboard data:', error);
-    throw error;
-  }
+  };
 };
 
 /**
@@ -149,4 +133,3 @@ export class DashboardServiceError extends Error {
     this.name = 'DashboardServiceError';
   }
 }
-  

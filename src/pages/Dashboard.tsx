@@ -29,10 +29,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { fetchDashboardData, DashboardData } from '../services/dashboardService';
 import InventorySection from '../components/InventorySection';
 
-/**
- * Mock data for profit visualization
- * @type {Array<{name: string, profit: number, expenses: number}>}
- */
+// Mock data for charts
 const profitData = [
   { name: 'Jan', profit: 4000, expenses: 2400 },
   { name: 'Feb', profit: 3000, expenses: 1398 },
@@ -42,10 +39,6 @@ const profitData = [
   { name: 'Jun', profit: 2390, expenses: 3800 },
 ];
 
-/**
- * Mock data for portfolio trend visualization
- * @type {Array<{name: string, value: number}>}
- */
 const portfolioTrendData = [
   { name: 'Jan', value: 90000 },
   { name: 'Feb', value: 85000 },
@@ -55,70 +48,27 @@ const portfolioTrendData = [
   { name: 'Jun', value: 99129 },
 ];
 
-/**
- * Dashboard Component
- * 
- * @component
- * @description Main dashboard view displaying various metrics and charts including:
- * - Date range selection
- * - Portfolio value
- * - Key statistics (Total Inventory, Active Listings, Sales, Profit Margin)
- * - Portfolio metrics
- * - Profit breakdown chart
- * - Portfolio value trend chart
- * 
- * @returns {JSX.Element} Rendered Dashboard component
- */
 const Dashboard: React.FC = () => {
-  /**
-   * Dashboard data state
-   * @state
-   * @type {DashboardData | null} Data fetched from the backend
-   */
   const [data, setData] = useState<DashboardData | null>(null);
-
-  /**
-   * Loading state indicator
-   * @state
-   * @type {boolean} True while data is being fetched
-   */
   const [loading, setLoading] = useState(true);
-
-  /**
-   * Start date for filtering dashboard data
-   * @state
-   * @type {Dayjs | null} Selected start date
-   */
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
-
-  /**
-   * End date for filtering dashboard data
-   * @state
-   * @type {Dayjs | null} Selected end date
-   */
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
 
-  /**
-   * Fetch dashboard data on component mount
-   * @effect
-   * @description Initiates data fetch when component mounts and handles loading states
-   */
   useEffect(() => {
-    fetchDashboardData()
-      .then((result) => {
-        setData(result);      // Store the fetched data
-        setLoading(false);    // Turn off loading state
-      })
-      .catch((error) => {
+    const fetchData = async () => {
+      try {
+        const result = await fetchDashboardData();
+        setData(result);
+      } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        setLoading(false);    // Turn off loading even on error
-      });
-  }, []); // Empty dependency array means this runs once when component mounts
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  /**
-   * Loading state render
-   * @returns {JSX.Element} Loading spinner centered on page
-   */
+    fetchData();
+  }, []);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -127,10 +77,6 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  /**
-   * Error state render
-   * @returns {JSX.Element} Error message when data fetch fails
-   */
   if (!data) {
     return (
       <Box sx={{ p: 3 }}>
@@ -176,10 +122,10 @@ const Dashboard: React.FC = () => {
       {/* Portfolio Value Display */}
       <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
         <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          $500
+          ${data.portfolioValue.toLocaleString()}
         </Typography>
         <Typography color="text.secondary">
-          250 items in inventory
+          {data.totalInventory} items in inventory
         </Typography>
       </Paper>
 
@@ -188,28 +134,28 @@ const Dashboard: React.FC = () => {
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
             <Typography variant="h6">Total Inventory</Typography>
-            <Typography variant="h4">500</Typography>
+            <Typography variant="h4">{data.totalInventory}</Typography>
           </Paper>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
             <Typography variant="h6">Active Listings</Typography>
-            <Typography variant="h4">250</Typography>
+            <Typography variant="h4">{data.activeListings}</Typography>
           </Paper>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
             <Typography variant="h6">Sales This Month</Typography>
-            <Typography variant="h4">$10000</Typography>
+            <Typography variant="h4">${data.monthlySales}</Typography>
           </Paper>
         </Grid>
 
         <Grid item xs={12} sm={6} md={3}>
           <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
             <Typography variant="h6">Profit Margin</Typography>
-            <Typography variant="h4">25%</Typography>
+            <Typography variant="h4">{data.profitMargin}%</Typography>
           </Paper>
         </Grid>
       </Grid>
@@ -224,10 +170,10 @@ const Dashboard: React.FC = () => {
                 Net Profit
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6">$2,500</Typography>
+                <Typography variant="h6">${data.metrics.netProfit}</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
                   <TrendingUpIcon fontSize="small" />
-                  <Typography variant="caption">+15%</Typography>
+                  <Typography variant="caption">{data.metrics.netProfitChange}%</Typography>
                 </Box>
               </Box>
             </Box>
@@ -239,10 +185,10 @@ const Dashboard: React.FC = () => {
                 Total Spend
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6">$12,000</Typography>
+                <Typography variant="h6">${data.metrics.totalSpend}</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
                   <TrendingDownIcon fontSize="small" />
-                  <Typography variant="caption">-5%</Typography>
+                  <Typography variant="caption">{data.metrics.totalSpendChange}%</Typography>
                 </Box>
               </Box>
             </Box>
@@ -253,7 +199,7 @@ const Dashboard: React.FC = () => {
               <Typography variant="subtitle2" color="text.secondary">
                 Items Purchased
               </Typography>
-              <Typography variant="h6">45</Typography>
+              <Typography variant="h6">{data.metrics.itemsPurchased}</Typography>
             </Box>
           </Grid>
 
@@ -262,7 +208,7 @@ const Dashboard: React.FC = () => {
               <Typography variant="subtitle2" color="text.secondary">
                 Items Sold
               </Typography>
-              <Typography variant="h6">32</Typography>
+              <Typography variant="h6">{data.metrics.itemsSold}</Typography>
             </Box>
           </Grid>
         </Grid>
@@ -359,11 +305,11 @@ const Dashboard: React.FC = () => {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-      </Grid>
 
-      {/* Inventory Section */}
-      <Grid item xs={12}>
-        <InventorySection />
+        {/* Inventory Section */}
+        <Grid item xs={12}>
+          <InventorySection />
+        </Grid>
       </Grid>
     </Box>
   );
