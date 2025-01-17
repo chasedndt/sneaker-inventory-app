@@ -28,6 +28,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { fetchDashboardData, DashboardData } from '../services/dashboardService';
 import InventorySection from '../components/InventorySection';
+import PortfolioValue from '../components/PortfolioValue';
 
 // Mock data for charts
 const profitData = [
@@ -37,15 +38,6 @@ const profitData = [
   { name: 'Apr', profit: 2780, expenses: 3908 },
   { name: 'May', profit: 1890, expenses: 4800 },
   { name: 'Jun', profit: 2390, expenses: 3800 },
-];
-
-const portfolioTrendData = [
-  { name: 'Jan', value: 90000 },
-  { name: 'Feb', value: 85000 },
-  { name: 'Mar', value: 95000 },
-  { name: 'Apr', value: 99000 },
-  { name: 'May', value: 97000 },
-  { name: 'Jun', value: 99129 },
 ];
 
 const Dashboard: React.FC = () => {
@@ -120,14 +112,11 @@ const Dashboard: React.FC = () => {
       </Paper>
 
       {/* Portfolio Value Display */}
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-          ${data.portfolioValue.toLocaleString()}
-        </Typography>
-        <Typography color="text.secondary">
-          {data.totalInventory} items in inventory
-        </Typography>
-      </Paper>
+      <PortfolioValue 
+  currentValue={data.portfolioValue}
+  valueChange={22324.19} // We'll make this dynamic later
+  percentageChange={29.07} // We'll make this dynamic later
+/>
 
       {/* Stats Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
@@ -264,47 +253,6 @@ const Dashboard: React.FC = () => {
           </Paper>
         </Grid>
 
-        <Grid item xs={12}>
-          <Paper sx={{ 
-            p: 3,
-            borderRadius: 2,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-          }}>
-            <Typography variant="h6" gutterBottom>Portfolio Value Trend</Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={portfolioTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  width={80}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <Tooltip 
-                  formatter={(value) => [`$${value}`, 'Value']}
-                  contentStyle={{ 
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#8884d8" 
-                  strokeWidth={2}
-                  dot={{ fill: '#8884d8', strokeWidth: 2 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
 
         {/* Inventory Section */}
         <Grid item xs={12}>
