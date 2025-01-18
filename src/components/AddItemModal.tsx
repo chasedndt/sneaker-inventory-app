@@ -1,4 +1,3 @@
-
 // src/components/AddItemModal.tsx
 import React, { useState } from 'react';
 import {
@@ -15,6 +14,8 @@ import {
   Typography
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import ProductDetailsForm from './AddItem/ProductDetailsForm';
+import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 
 const steps = [
   'Product Details',
@@ -23,6 +24,25 @@ const steps = [
   'Images'
 ];
 
+interface ProductDetailsFormData {
+  category: CategoryType;
+  productName: string;
+  reference: string;
+  colorway: string;
+  brand: string;
+}
+
+interface SizeEntry {
+  system: string;
+  size: string;
+  quantity: string;
+}
+
+interface SizesQuantityData {
+  sizeSystem: string;
+  selectedSizes: SizeEntry[];
+}
+
 interface AddItemModalProps {
   open: boolean;
   onClose: () => void;
@@ -30,9 +50,93 @@ interface AddItemModalProps {
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   const [activeStep, setActiveStep] = useState(0);
+  
+  const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
+    category: 'Sneakers',
+    productName: '',
+    reference: '',
+    colorway: '',
+    brand: ''
+  });
+
+  const [sizesQuantity, setSizesQuantity] = useState<SizesQuantityData>({
+    sizeSystem: '',
+    selectedSizes: []
+  });
+
+  const [errors, setErrors] = useState<{
+    [key: string]: string;
+  }>({});
+
+  const handleProductDetailsChange = (field: keyof ProductDetailsFormData, value: string) => {
+    if (field === 'category') {
+      setProductDetails(prev => ({
+        ...prev,
+        [field]: value as CategoryType
+      }));
+      // Reset sizes when category changes
+      setSizesQuantity({
+        sizeSystem: '',
+        selectedSizes: []
+      });
+    } else {
+      setProductDetails(prev => ({
+        ...prev,
+        [field]: value
+      }));
+    }
+
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  };
+
+  const validateProductDetails = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    
+    if (!productDetails.category) {
+      newErrors.category = 'Category is required';
+    }
+    if (!productDetails.productName) {
+      newErrors.productName = 'Product name is required';
+    }
+    if (!productDetails.brand) {
+      newErrors.brand = 'Brand is required';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateSizesQuantity = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    
+    if (!sizesQuantity.sizeSystem) {
+      newErrors.sizeSystem = 'Size system is required';
+    }
+    if (sizesQuantity.selectedSizes.length === 0) {
+      newErrors.sizes = 'At least one size must be selected';
+    }
+
+    setErrors(prev => ({ ...prev, ...newErrors }));
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleNext = () => {
-    setActiveStep((prevStep) => prevStep + 1);
+    let isValid = true;
+
+    if (activeStep === 0) {
+      isValid = validateProductDetails();
+    } else if (activeStep === 1) {
+      isValid = validateSizesQuantity();
+    }
+
+    if (isValid) {
+      setActiveStep((prevStep) => prevStep + 1);
+    }
   };
 
   const handleBack = () => {
@@ -41,6 +145,18 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
 
   const handleClose = () => {
     setActiveStep(0);
+    setProductDetails({
+      category: 'Sneakers',
+      productName: '',
+      reference: '',
+      colorway: '',
+      brand: ''
+    });
+    setSizesQuantity({
+      sizeSystem: '',
+      selectedSizes: []
+    });
+    setErrors({});
     onClose();
   };
 
@@ -64,7 +180,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         justifyContent: 'space-between', 
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Create a new product</Typography>
+        <Typography variant="h6">Add New Item</Typography>
         <IconButton
           aria-label="close"
           onClick={handleClose}
@@ -85,13 +201,21 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
       </Box>
 
       <DialogContent sx={{ p: 3 }}>
-        {/* Step content will go here */}
         <Box sx={{ minHeight: '400px' }}>
           {activeStep === 0 && (
-            <Typography>Product Details Form</Typography>
+            <ProductDetailsForm
+              formData={productDetails}
+              onChange={handleProductDetailsChange}
+              errors={errors}
+            />
           )}
           {activeStep === 1 && (
-            <Typography>Sizes & Quantity Form</Typography>
+            <SizesQuantityForm
+              category={productDetails.category}
+              formData={sizesQuantity}
+              onChange={(newData) => setSizesQuantity(newData)}
+              errors={errors}
+            />
           )}
           {activeStep === 2 && (
             <Typography>Purchase Details Form</Typography>
