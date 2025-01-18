@@ -1,4 +1,3 @@
-// Import necessary dependencies
 import React, { useEffect, useState } from 'react';
 import Grid from '@mui/material/Grid';
 import { 
@@ -27,14 +26,19 @@ import InventorySection from '../components/InventorySection';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 
-// Mock data for charts
 const profitData = [
-  { name: 'Jan', profit: 4000, expenses: 2400 },
-  { name: 'Feb', profit: 3000, expenses: 1398 },
-  { name: 'Mar', profit: 2000, expenses: 9800 },
-  { name: 'Apr', profit: 2780, expenses: 3908 },
-  { name: 'May', profit: 1890, expenses: 4800 },
-  { name: 'Jun', profit: 2390, expenses: 3800 },
+  { name: 'Jan', profit: 3400, expenses: 2450 },
+  { name: 'Feb', profit: 2800, expenses: 1600 },
+  { name: 'Mar', profit: 1900, expenses: 4500 },
+  { name: 'Apr', profit: 2780, expenses: 3200 },
+  { name: 'May', profit: 1890, expenses: 3100 },
+  { name: 'Jun', profit: 2390, expenses: 3000 },
+  { name: 'Jul', profit: 3090, expenses: 3200 },
+  { name: 'Aug', profit: 2800, expenses: 3100 },
+  { name: 'Sep', profit: 3200, expenses: 3300 },
+  { name: 'Oct', profit: 3800, expenses: 3000 },
+  { name: 'Nov', profit: 3200, expenses: 3100 },
+  { name: 'Dec', profit: 3900, expenses: 3000 }
 ];
 
 const Dashboard: React.FC = () => {
@@ -60,7 +64,7 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
         <CircularProgress />
       </Box>
     );
@@ -68,16 +72,26 @@ const Dashboard: React.FC = () => {
 
   if (!data) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box>
         <Typography>Error loading dashboard data.</Typography>
       </Box>
     );
   }
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3 }}>
+    <Box sx={{ 
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '24px',
+      maxWidth: '1600px',
+      width: '100%'
+    }}>
       {/* Date Range Selector */}
-      <Paper sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+      <Paper sx={{ 
+        p: '16px 24px',
+        borderRadius: 2,
+        bgcolor: '#fff'
+      }}>
         <Grid container spacing={3} alignItems="center">
           <Grid item xs={12} md={6}>
             <LocalizationProvider dateAdapter={AdapterDayjs}>
@@ -99,10 +113,10 @@ const Dashboard: React.FC = () => {
           </Grid>
           <Grid item xs={12} md={6}>
             <ButtonGroup variant="outlined" fullWidth sx={{ height: '40px' }}>
-              <Button>Last week</Button>
-              <Button>Last month</Button>
-              <Button>6 months</Button>
-              <Button>1 year</Button>
+              <Button>LAST WEEK</Button>
+              <Button>LAST MONTH</Button>
+              <Button>6 MONTHS</Button>
+              <Button>1 YEAR</Button>
             </ButtonGroup>
           </Grid>
         </Grid>
@@ -110,71 +124,84 @@ const Dashboard: React.FC = () => {
 
       {/* Portfolio Value Display */}
       <PortfolioValue 
-        currentValue={data.portfolioValue}
+        currentValue={50000.00}
         valueChange={22324.19}
         percentageChange={29.07}
       />
 
+      {/* Profit Breakdown */}
+      <Paper sx={{ 
+        p: '24px',
+        borderRadius: 2,
+        bgcolor: '#fff'
+      }}>
+        <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={profitData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
+            <XAxis 
+              dataKey="name" 
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis 
+              axisLine={false}
+              tickLine={false}
+              width={80}
+              tickFormatter={(value) => `$${value}`}
+            />
+            <Tooltip 
+              content={({ active, payload }) => {
+                if (active && payload && payload.length >= 2) {
+                  const profit = Number(payload[0].value || 0);
+                  const expenses = Number(payload[1].value || 0);
+                  const netProfit = profit - expenses;
+                  return (
+                    <Box sx={{ 
+                      bgcolor: '#fff', 
+                      p: 1.5,
+                      borderRadius: 1,
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}>
+                      <Typography variant="body2">Profit: ${profit}</Typography>
+                      <Typography variant="body2">Expenses: ${expenses}</Typography>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: netProfit >= 0 ? '#4CAF50' : '#f44336',
+                          fontWeight: 600
+                        }}
+                      >
+                        Net: ${netProfit >= 0 ? '+' : ''}{netProfit}
+                      </Typography>
+                    </Box>
+                  );
+                }
+                return null;
+              }}
+            />
+            <Legend />
+            <Bar 
+              dataKey="profit" 
+              fill="#8884d8" 
+              radius={[4, 4, 0, 0]}
+              name="Profit"
+            />
+            <Bar 
+              dataKey="expenses" 
+              fill="#82ca9d" 
+              radius={[4, 4, 0, 0]}
+              name="Expenses"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </Paper>
+
       {/* Reports Section */}
-      <Box sx={{ mb: 3 }}>
-        <ReportsSection />
-      </Box>
+      <ReportsSection />
 
-      {/* Charts */}
-      <Grid container spacing={3}>
-        <Grid item xs={12}>
-          <Paper sx={{ 
-            p: 3, 
-            mb: 3,
-            borderRadius: 2,
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-          }}>
-            <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={profitData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                <XAxis 
-                  dataKey="name" 
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  width={80}
-                  tickFormatter={(value) => `$${value}`}
-                />
-                <Tooltip 
-                  formatter={(value) => [`$${value}`, '']}
-                  contentStyle={{ 
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                />
-                <Legend />
-                <Bar 
-                  dataKey="profit" 
-                  fill="#8884d8" 
-                  radius={[4, 4, 0, 0]}
-                  name="Profit"
-                />
-                <Bar 
-                  dataKey="expenses" 
-                  fill="#82ca9d" 
-                  radius={[4, 4, 0, 0]}
-                  name="Expenses"
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        {/* Inventory Section */}
-        <Grid item xs={12}>
-          <InventorySection />
-        </Grid>
-      </Grid>
+      {/* Inventory Section */}
+      <InventorySection />
     </Box>
   );
 };
