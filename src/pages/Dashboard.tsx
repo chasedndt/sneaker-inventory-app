@@ -15,8 +15,6 @@ import { Dayjs } from 'dayjs';
 import { 
   BarChart, 
   Bar, 
-  LineChart, 
-  Line, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -24,11 +22,10 @@ import {
   ResponsiveContainer,
   Legend 
 } from 'recharts';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { fetchDashboardData, DashboardData } from '../services/dashboardService';
 import InventorySection from '../components/InventorySection';
 import PortfolioValue from '../components/PortfolioValue';
+import ReportsSection from '../components/ReportsSection';
 
 // Mock data for charts
 const profitData = [
@@ -113,95 +110,15 @@ const Dashboard: React.FC = () => {
 
       {/* Portfolio Value Display */}
       <PortfolioValue 
-  currentValue={data.portfolioValue}
-  valueChange={22324.19} // We'll make this dynamic later
-  percentageChange={29.07} // We'll make this dynamic later
-/>
+        currentValue={data.portfolioValue}
+        valueChange={22324.19}
+        percentageChange={29.07}
+      />
 
-      {/* Stats Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-            <Typography variant="h6">Total Inventory</Typography>
-            <Typography variant="h4">{data.totalInventory}</Typography>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-            <Typography variant="h6">Active Listings</Typography>
-            <Typography variant="h4">{data.activeListings}</Typography>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-            <Typography variant="h6">Sales This Month</Typography>
-            <Typography variant="h4">${data.monthlySales}</Typography>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center', borderRadius: 2 }}>
-            <Typography variant="h6">Profit Margin</Typography>
-            <Typography variant="h4">{data.profitMargin}%</Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Portfolio Metrics */}
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h6" gutterBottom>Portfolio Metrics</Typography>
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary">
-                Net Profit
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6">${data.metrics.netProfit}</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
-                  <TrendingUpIcon fontSize="small" />
-                  <Typography variant="caption">{data.metrics.netProfitChange}%</Typography>
-                </Box>
-              </Box>
-            </Box>
-          </Grid>
-          
-          <Grid item xs={12} sm={6} md={3}>
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary">
-                Total Spend
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6">${data.metrics.totalSpend}</Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
-                  <TrendingDownIcon fontSize="small" />
-                  <Typography variant="caption">{data.metrics.totalSpendChange}%</Typography>
-                </Box>
-              </Box>
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary">
-                Items Purchased
-              </Typography>
-              <Typography variant="h6">{data.metrics.itemsPurchased}</Typography>
-            </Box>
-          </Grid>
-
-          <Grid item xs={12} sm={6} md={3}>
-            <Box>
-              <Typography variant="subtitle2" color="text.secondary">
-                Items Sold
-              </Typography>
-              <Typography variant="h6">{data.metrics.itemsSold}</Typography>
-            </Box>
-          </Grid>
-        </Grid>
-      </Paper>
+      {/* Reports Section */}
+      <Box sx={{ mb: 3 }}>
+        <ReportsSection />
+      </Box>
 
       {/* Charts */}
       <Grid container spacing={3}>
@@ -252,7 +169,6 @@ const Dashboard: React.FC = () => {
             </ResponsiveContainer>
           </Paper>
         </Grid>
-
 
         {/* Inventory Section */}
         <Grid item xs={12}>
