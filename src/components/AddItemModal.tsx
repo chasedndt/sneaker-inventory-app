@@ -11,7 +11,8 @@ import {
   StepLabel,
   Box,
   IconButton,
-  Typography
+  Typography,
+  Alert
 } from '@mui/material';
 import { Dayjs } from 'dayjs';
 import CloseIcon from '@mui/icons-material/Close';
@@ -19,6 +20,7 @@ import ProductDetailsForm from './AddItem/ProductDetailsForm';
 import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
 import ImagesUploadForm from './AddItem/ImagesUploadForm';
+import { api } from '../services/api';
 
 const steps = [
   'Product Details',
@@ -65,6 +67,7 @@ interface PurchaseDetailsData {
 
 interface ImageFile extends File {
   preview?: string;
+  id?: string;
 }
 
 interface AddItemModalProps {
@@ -75,6 +78,8 @@ interface AddItemModalProps {
 const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   // Step management
   const [activeStep, setActiveStep] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   
   // Form states
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
@@ -239,7 +244,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   };
 
   // Navigation handlers
-  const handleNext = () => {
+  const handleNext = async () => {
     let isValid = true;
 
     if (activeStep === 0) {
@@ -251,17 +256,31 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     } else if (activeStep === 3) {
       isValid = validateImages();
       if (isValid) {
-        // Handle final submission
-        console.log('Final submission:', {
-          productDetails,
-          sizesQuantity,
-          purchaseDetails,
-          images
-        });
+        setIsSubmitting(true);
+        setSubmitError(null);
+        try {
+          // Upload images first
+          const uploadedImages = await api.uploadImages(images);
+          
+          // Then submit the full form
+          await api.addItem({
+            productDetails,
+            sizesQuantity,
+            purchaseDetails,
+            images: uploadedImages
+          });
+          
+          handleClose();
+        } catch (error) {
+          setSubmitError('Failed to submit item. Please try again.');
+          isValid = false;
+        } finally {
+          setIsSubmitting(false);
+        }
       }
     }
 
-    if (isValid) {
+    if (isValid && activeStep < steps.length - 1) {
       setActiveStep((prevStep) => prevStep + 1);
     }
   };
@@ -308,6 +327,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     });
     setImages([]);
     setErrors({});
+    setSubmitError(null);
     onClose();
   }, [images, onClose]);
 
@@ -385,10 +405,16 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         </Box>
       </DialogContent>
 
+      {submitError && (
+        <Alert severity="error" sx={{ mx: 3, mb: 2 }}>
+          {submitError}
+        </Alert>
+      )}
+
       <DialogActions sx={{ p: 3 }}>
         <Button
           onClick={handleBack}
-          disabled={activeStep === 0}
+          disabled={activeStep === 0 || isSubmitting}
           variant="outlined"
         >
           Back
@@ -397,8 +423,9 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
           onClick={activeStep === steps.length - 1 ? handleClose : handleNext}
           variant="contained"
           color="primary"
+          disabled={isSubmitting}
         >
-          {activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
+          {isSubmitting ? 'Submitting...' : activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
         </Button>
       </DialogActions>
     </Dialog>
