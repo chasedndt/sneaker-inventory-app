@@ -3,18 +3,17 @@ import React from 'react';
 import {
   Box,
   TextField,
-  MenuItem,
   FormControl,
   InputLabel,
   Select,
-  FormHelperText,
-  Grid
+  MenuItem,
+  Grid,
+  SelectChangeEvent
 } from '@mui/material';
-import { SelectChangeEvent } from '@mui/material/Select';
+import { CategoryType } from './SizesQuantityForm';
 
-// Interface for form data
 interface ProductDetailsFormData {
-  category: string;
+  category: CategoryType;
   productName: string;
   reference: string;
   colorway: string;
@@ -27,10 +26,11 @@ interface ProductDetailsFormProps {
   errors: Partial<Record<keyof ProductDetailsFormData, string>>;
 }
 
-// Mock categories - replace with API data later
-const categories = [
+const categories: CategoryType[] = [
   'Sneakers',
-  'Clothing',
+  'Streetwear',
+  'Handbags',
+  'Watches',
   'Accessories',
   'Electronics',
   'Other'
@@ -41,25 +41,16 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
   onChange,
   errors
 }) => {
-  const handleSelectChange = (event: SelectChangeEvent) => {
-    onChange('category', event.target.value);
-  };
-
   return (
     <Box sx={{ mt: 2 }}>
       <Grid container spacing={3}>
-        {/* Category Selection */}
         <Grid item xs={12}>
-          <FormControl 
-            fullWidth 
-            error={!!errors.category}
-          >
-            <InputLabel id="category-label">Category *</InputLabel>
+          <FormControl fullWidth error={!!errors.category}>
+            <InputLabel>Category *</InputLabel>
             <Select
-              labelId="category-label"
               value={formData.category}
               label="Category *"
-              onChange={handleSelectChange}
+              onChange={(e: SelectChangeEvent) => onChange('category', e.target.value)}
             >
               {categories.map((category) => (
                 <MenuItem key={category} value={category}>
@@ -67,13 +58,9 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
                 </MenuItem>
               ))}
             </Select>
-            {errors.category && (
-              <FormHelperText>{errors.category}</FormHelperText>
-            )}
           </FormControl>
         </Grid>
 
-        {/* Product Name */}
         <Grid item xs={12}>
           <TextField
             fullWidth
@@ -82,11 +69,9 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
             onChange={(e) => onChange('productName', e.target.value)}
             error={!!errors.productName}
             helperText={errors.productName}
-            placeholder="e.g., Air Jordan 1 High"
           />
         </Grid>
 
-        {/* Reference/SKU */}
         <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
@@ -95,11 +80,9 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
             onChange={(e) => onChange('reference', e.target.value)}
             error={!!errors.reference}
             helperText={errors.reference}
-            placeholder="e.g., 555088-134"
           />
         </Grid>
 
-        {/* Colorway */}
         <Grid item xs={12} sm={6}>
           <TextField
             fullWidth
@@ -108,11 +91,9 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
             onChange={(e) => onChange('colorway', e.target.value)}
             error={!!errors.colorway}
             helperText={errors.colorway}
-            placeholder="e.g., University Blue/White"
           />
         </Grid>
 
-        {/* Brand */}
         <Grid item xs={12}>
           <TextField
             fullWidth
@@ -121,7 +102,6 @@ const ProductDetailsForm: React.FC<ProductDetailsFormProps> = ({
             onChange={(e) => onChange('brand', e.target.value)}
             error={!!errors.brand}
             helperText={errors.brand}
-            placeholder="e.g., Nike"
           />
         </Grid>
       </Grid>

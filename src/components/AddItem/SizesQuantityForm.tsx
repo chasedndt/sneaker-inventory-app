@@ -17,10 +17,11 @@ import {
   DialogActions,
   SelectChangeEvent
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import RemoveIcon from '@mui/icons-material/Remove';
 import CloseIcon from '@mui/icons-material/Close';
 
-// Type Definitions
-export type CategoryType = 'Sneakers' | 'Streetwear';
+export type CategoryType = 'Sneakers' | 'Streetwear' | 'Handbags' | 'Watches' | 'Accessories' | 'Electronics' | 'Other';
 
 interface SizeEntry {
   system: string;
@@ -41,13 +42,22 @@ interface SizesQuantityFormProps {
   };
 }
 
-// Constants
-const sizeSystems: Record<CategoryType, string[]> = {
-  'Sneakers': ['EU', 'US', 'UK', 'KR', 'CM'],
-  'Streetwear': ['EU', 'US']
+type SizesByCategoryType = {
+  Sneakers: Record<string, string[]>;
+  Streetwear: Record<string, string[]>;
 };
 
-const sizes: Record<CategoryType, Record<string, string[]>> = {
+const sizeSystems: Record<CategoryType, string[]> = {
+  'Sneakers': ['EU', 'US', 'UK', 'KR', 'CM'],
+  'Streetwear': ['EU', 'US'],
+  'Handbags': [],
+  'Watches': [],
+  'Accessories': [],
+  'Electronics': [],
+  'Other': []
+};
+
+const sizes: SizesByCategoryType = {
   Sneakers: {
     EU: ['35.5', '36', '36.5', '37.5', '38', '38.5', '39', '40', '40.5', '41', 
          '42', '42.5', '43', '44', '44.5', '45', '45.5', '46', '47', '47.5', '48.5', '49.5'],
@@ -75,10 +85,26 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
   const [isCustomSizeDialogOpen, setIsCustomSizeDialogOpen] = useState(false);
   const [customSize, setCustomSize] = useState('');
 
-  const handleSizeSystemChange = (system: string) => {
+  const usesSizeSystem = ['Sneakers', 'Streetwear'].includes(category);
+
+  const handleQuantityChange = (index: number, change: number) => {
+    const newSizes = [...formData.selectedSizes];
+    const currentQuantity = parseInt(newSizes[index]?.quantity || '1');
+    const newQuantity = Math.max(1, currentQuantity + change);
+    
+    if (newSizes[index]) {
+      newSizes[index].quantity = newQuantity.toString();
+    } else {
+      newSizes.push({
+        system: '',
+        size: '',
+        quantity: newQuantity.toString()
+      });
+    }
+    
     onChange({
-      sizeSystem: system,
-      selectedSizes: []
+      ...formData,
+      selectedSizes: newSizes
     });
   };
 
@@ -96,21 +122,20 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
     });
   };
 
-  const handleCustomSizeAdd = () => {
+  const handleAddCustomSize = () => {
     if (customSize) {
-      handleSizeClick(customSize);
+      const newEntry: SizeEntry = {
+        system: formData.sizeSystem,
+        size: customSize,
+        quantity: '1'
+      };
+      onChange({
+        ...formData,
+        selectedSizes: [...formData.selectedSizes, newEntry]
+      });
       setCustomSize('');
       setIsCustomSizeDialogOpen(false);
     }
-  };
-
-  const handleQuantityChange = (index: number, value: string) => {
-    const newSizes = [...formData.selectedSizes];
-    newSizes[index].quantity = value;
-    onChange({
-      ...formData,
-      selectedSizes: newSizes
-    });
   };
 
   const handleRemoveSize = (index: number) => {
@@ -121,73 +146,62 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
     });
   };
 
-  return (
+  const renderQuantityOnlyForm = () => (
     <Box sx={{ mt: 2 }}>
-      <FormControl fullWidth sx={{ mb: 3 }} error={!!errors.sizeSystem}>
-        <InputLabel>Size System</InputLabel>
-        <Select
-          value={formData.sizeSystem}
-          label="Size System"
-          onChange={(e: SelectChangeEvent) => handleSizeSystemChange(e.target.value)}
-        >
-          {sizeSystems[category]?.map((system) => (
-            <MenuItem key={system} value={system}>{system}</MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      <Typography variant="subtitle1" sx={{ mb: 2 }}>
+        Select Quantity
+      </Typography>
 
-      {formData.sizeSystem && (
-        <>
-          <Typography variant="subtitle1" sx={{ mb: 2 }}>
-            Select Sizes
-          </Typography>
-          <Grid container spacing={1} sx={{ mb: 3 }}>
-            {sizes[category]?.[formData.sizeSystem]?.map((size) => (
-              <Grid item key={size}>
-                <Button
-                  variant={formData.selectedSizes.some(s => s.size === size) ? 'contained' : 'outlined'}
-                  onClick={() => handleSizeClick(size)}
-                  size="small"
-                  sx={{
-                    minWidth: '60px',
-                    borderRadius: 1
-                  }}
-                >
-                  {size}
-                </Button>
-              </Grid>
-            ))}
-          </Grid>
-        </>
-      )}
-
-      {formData.selectedSizes.length > 0 && (
-        <Box sx={{ mt: 3 }}>
-          {formData.selectedSizes.map((entry, index) => (
-            <Grid container spacing={2} key={index} sx={{ mb: 1, alignItems: 'center' }}>
-              <Grid item xs={2}>
-                <Typography>{entry.system}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography>{entry.size}</Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <TextField
-                  type="number"
-                  value={entry.quantity}
-                  onChange={(e) => handleQuantityChange(index, e.target.value)}
-                  size="small"
-                  InputProps={{ inputProps: { min: 1 } }}
-                />
-              </Grid>
-              <Grid item xs={2}>
-                <IconButton onClick={() => handleRemoveSize(index)}>
-                  <CloseIcon />
-                </IconButton>
-              </Grid>
-            </Grid>
-          ))}
+      {formData.selectedSizes.length === 0 ? (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <IconButton 
+            onClick={() => handleQuantityChange(0, -1)}
+            sx={{ border: '1px solid', borderColor: 'divider' }}
+          >
+            <RemoveIcon />
+          </IconButton>
+          <TextField
+            value={1}
+            size="small"
+            sx={{ width: '80px', mx: 2 }}
+            InputProps={{ readOnly: true }}
+          />
+          <IconButton 
+            onClick={() => handleQuantityChange(0, 1)}
+            sx={{ border: '1px solid', borderColor: 'divider' }}
+          >
+            <AddIcon />
+          </IconButton>
         </Box>
+      ) : (
+        formData.selectedSizes.map((entry, index) => (
+          <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <IconButton 
+              onClick={() => handleQuantityChange(index, -1)}
+              sx={{ border: '1px solid', borderColor: 'divider' }}
+            >
+              <RemoveIcon />
+            </IconButton>
+            <TextField
+              value={entry.quantity}
+              size="small"
+              sx={{ width: '80px', mx: 2 }}
+              InputProps={{ readOnly: true }}
+            />
+            <IconButton 
+              onClick={() => handleQuantityChange(index, 1)}
+              sx={{ border: '1px solid', borderColor: 'divider' }}
+            >
+              <AddIcon />
+            </IconButton>
+            {entry.size && (
+              <Typography sx={{ ml: 2 }}>{entry.size}</Typography>
+            )}
+            <IconButton onClick={() => handleRemoveSize(index)} sx={{ ml: 'auto' }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        ))
       )}
 
       <Button
@@ -199,16 +213,69 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
           color: 'text.secondary'
         }}
       >
-        Add custom size
+        Add custom size/type
       </Button>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      {usesSizeSystem ? (
+        <>
+          <FormControl fullWidth sx={{ mb: 3 }} error={!!errors.sizeSystem}>
+            <InputLabel>Size System</InputLabel>
+            <Select
+              value={formData.sizeSystem}
+              label="Size System"
+              onChange={(e: SelectChangeEvent) => onChange({
+                ...formData,
+                sizeSystem: e.target.value,
+                selectedSizes: []
+              })}
+            >
+              {sizeSystems[category]?.map((system: string) => (
+                <MenuItem key={system} value={system}>{system}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {formData.sizeSystem && (
+            <>
+              <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                Select Sizes
+              </Typography>
+              <Grid container spacing={1} sx={{ mb: 3 }}>
+                {(category === 'Sneakers' || category === 'Streetwear') && formData.sizeSystem && 
+                  ((sizes[category as keyof SizesByCategoryType][formData.sizeSystem] || []).map((size: string) => (
+                    <Grid item key={size}>
+                      <Button
+                        variant={formData.selectedSizes.some(s => s.size === size) ? 'contained' : 'outlined'}
+                        onClick={() => handleSizeClick(size)}
+                        size="small"
+                        sx={{
+                          minWidth: '60px',
+                          borderRadius: 1
+                        }}
+                      >
+                        {size}
+                      </Button>
+                    </Grid>
+                  )))}
+              </Grid>
+            </>
+          )}
+        </>
+      ) : (
+        renderQuantityOnlyForm()
+      )}
 
       <Dialog open={isCustomSizeDialogOpen} onClose={() => setIsCustomSizeDialogOpen(false)}>
-        <DialogTitle>Add Custom Size</DialogTitle>
+        <DialogTitle>Add Custom Size/Type</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Size"
+            label="Size/Type"
             fullWidth
             value={customSize}
             onChange={(e) => setCustomSize(e.target.value)}
@@ -216,7 +283,7 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setIsCustomSizeDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleCustomSizeAdd}>Add</Button>
+          <Button onClick={handleAddCustomSize}>Add</Button>
         </DialogActions>
       </Dialog>
     </Box>

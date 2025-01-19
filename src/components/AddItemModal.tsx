@@ -13,9 +13,12 @@ import {
   IconButton,
   Typography
 } from '@mui/material';
+import { Dayjs } from 'dayjs';
 import CloseIcon from '@mui/icons-material/Close';
 import ProductDetailsForm from './AddItem/ProductDetailsForm';
 import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
+import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
+import ImagesUploadForm from './AddItem/ImagesUploadForm';
 
 const steps = [
   'Product Details',
@@ -24,6 +27,7 @@ const steps = [
   'Images'
 ];
 
+// Interface definitions
 interface ProductDetailsFormData {
   category: CategoryType;
   productName: string;
@@ -43,14 +47,29 @@ interface SizesQuantityData {
   selectedSizes: SizeEntry[];
 }
 
+interface PurchaseDetailsData {
+  purchasePrice: string;
+  marketPrice: string;
+  purchaseDate: Dayjs | null;
+  purchaseLocation: string;
+  condition: string;
+  notes: string;
+}
+
+interface ImageFile extends File {
+  preview?: string;
+}
+
 interface AddItemModalProps {
   open: boolean;
   onClose: () => void;
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
+  // Step management
   const [activeStep, setActiveStep] = useState(0);
   
+  // Form states
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
     category: 'Sneakers',
     productName: '',
@@ -64,10 +83,23 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     selectedSizes: []
   });
 
+  const [purchaseDetails, setPurchaseDetails] = useState<PurchaseDetailsData>({
+    purchasePrice: '',
+    marketPrice: '',
+    purchaseDate: null,
+    purchaseLocation: '',
+    condition: '',
+    notes: ''
+  });
+
+  const [images, setImages] = useState<ImageFile[]>([]);
+
+  // Error handling state
   const [errors, setErrors] = useState<{
     [key: string]: string;
   }>({});
 
+  // Product Details handlers
   const handleProductDetailsChange = (field: keyof ProductDetailsFormData, value: string) => {
     if (field === 'category') {
       setProductDetails(prev => ({
@@ -94,6 +126,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     }
   };
 
+  // Validation functions
   const validateProductDetails = (): boolean => {
     const newErrors: { [key: string]: string } = {};
     
@@ -125,6 +158,38 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     return Object.keys(newErrors).length === 0;
   };
 
+  const validatePurchaseDetails = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    
+    if (!purchaseDetails.purchasePrice) {
+      newErrors.purchasePrice = 'Purchase price is required';
+    }
+    if (!purchaseDetails.marketPrice) {
+      newErrors.marketPrice = 'Market price is required';
+    }
+    if (!purchaseDetails.purchaseDate) {
+      newErrors.purchaseDate = 'Purchase date is required';
+    }
+    if (!purchaseDetails.condition) {
+      newErrors.condition = 'Condition is required';
+    }
+
+    setErrors(prev => ({ ...prev, ...newErrors }));
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const validateImages = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+    
+    if (images.length === 0) {
+      newErrors.images = 'At least one image is required';
+    }
+
+    setErrors(prev => ({ ...prev, ...newErrors }));
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Navigation handlers
   const handleNext = () => {
     let isValid = true;
 
@@ -132,9 +197,22 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
       isValid = validateProductDetails();
     } else if (activeStep === 1) {
       isValid = validateSizesQuantity();
+    } else if (activeStep === 2) {
+      isValid = validatePurchaseDetails();
+    } else if (activeStep === 3) {
+      isValid = validateImages();
+      if (isValid) {
+        // Handle final submission
+        console.log('Final submission:', {
+          productDetails,
+          sizesQuantity,
+          purchaseDetails,
+          images
+        });
+      }
     }
 
-    if (isValid) {
+    if (isValid && activeStep < steps.length - 1) {
       setActiveStep((prevStep) => prevStep + 1);
     }
   };
@@ -144,6 +222,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   };
 
   const handleClose = () => {
+    // Clean up image previews
+    images.forEach(image => {
+      if (image.preview) {
+        URL.revokeObjectURL(image.preview);
+      }
+    });
+
     setActiveStep(0);
     setProductDetails({
       category: 'Sneakers',
@@ -156,6 +241,15 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
       sizeSystem: '',
       selectedSizes: []
     });
+    setPurchaseDetails({
+      purchasePrice: '',
+      marketPrice: '',
+      purchaseDate: null,
+      purchaseLocation: '',
+      condition: '',
+      notes: ''
+    });
+    setImages([]);
     setErrors({});
     onClose();
   };
@@ -218,10 +312,18 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
             />
           )}
           {activeStep === 2 && (
-            <Typography>Purchase Details Form</Typography>
+            <PurchaseDetailsForm
+              formData={purchaseDetails}
+              onChange={(field, value) => setPurchaseDetails(prev => ({ ...prev, [field]: value }))}
+              errors={errors}
+            />
           )}
           {activeStep === 3 && (
-            <Typography>Images Upload</Typography>
+            <ImagesUploadForm
+              images={images}
+              onChange={setImages}
+              errors={errors}
+            />
           )}
         </Box>
       </DialogContent>
@@ -239,7 +341,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
           variant="contained"
           color="primary"
         >
-          {activeStep === steps.length - 1 ? 'Add Product' : 'Next'}
+          {activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
         </Button>
       </DialogActions>
     </Dialog>
