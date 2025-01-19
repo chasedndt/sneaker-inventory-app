@@ -1,5 +1,5 @@
 // src/components/AddItemModal.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -27,7 +27,6 @@ const steps = [
   'Images'
 ];
 
-// Interface definitions
 interface ProductDetailsFormData {
   category: CategoryType;
   productName: string;
@@ -49,11 +48,19 @@ interface SizesQuantityData {
 
 interface PurchaseDetailsData {
   purchasePrice: string;
+  purchaseCurrency: string;
+  shippingPrice: string;
+  shippingCurrency: string;
   marketPrice: string;
   purchaseDate: Dayjs | null;
   purchaseLocation: string;
   condition: string;
   notes: string;
+  orderID: string;
+  tags: string[];
+  taxType: 'none' | 'vat' | 'salesTax';
+  vatPercentage: string;
+  salesTaxPercentage: string;
 }
 
 interface ImageFile extends File {
@@ -85,11 +92,19 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
 
   const [purchaseDetails, setPurchaseDetails] = useState<PurchaseDetailsData>({
     purchasePrice: '',
+    purchaseCurrency: '£',
+    shippingPrice: '',
+    shippingCurrency: '£',
     marketPrice: '',
     purchaseDate: null,
     purchaseLocation: '',
     condition: '',
-    notes: ''
+    notes: '',
+    orderID: '',
+    tags: [],
+    taxType: 'none',
+    vatPercentage: '',
+    salesTaxPercentage: ''
   });
 
   const [images, setImages] = useState<ImageFile[]>([]);
@@ -100,7 +115,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   }>({});
 
   // Product Details handlers
-  const handleProductDetailsChange = (field: keyof ProductDetailsFormData, value: string) => {
+  const handleProductDetailsChange = useCallback((field: keyof ProductDetailsFormData, value: string) => {
     if (field === 'category') {
       setProductDetails(prev => ({
         ...prev,
@@ -124,7 +139,22 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         [field]: ''
       }));
     }
-  };
+  }, [errors]);
+
+  const handleSizesQuantityChange = useCallback((newData: SizesQuantityData) => {
+    setSizesQuantity(newData);
+  }, []);
+
+  const handlePurchaseDetailsChange = useCallback((field: keyof PurchaseDetailsData, value: any) => {
+    setPurchaseDetails(prev => ({ ...prev, [field]: value }));
+    
+    if (errors[field]) {
+      setErrors(prev => ({
+        ...prev,
+        [field]: ''
+      }));
+    }
+  }, [errors]);
 
   // Validation functions
   const validateProductDetails = (): boolean => {
@@ -146,12 +176,28 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
 
   const validateSizesQuantity = (): boolean => {
     const newErrors: { [key: string]: string } = {};
+    const usesSizeSystem = ['Sneakers', 'Streetwear'].includes(productDetails.category);
     
-    if (!sizesQuantity.sizeSystem) {
-      newErrors.sizeSystem = 'Size system is required';
-    }
-    if (sizesQuantity.selectedSizes.length === 0) {
-      newErrors.sizes = 'At least one size must be selected';
+    if (usesSizeSystem) {
+      if (!sizesQuantity.sizeSystem) {
+        newErrors.sizeSystem = 'Size system is required';
+      }
+      if (sizesQuantity.selectedSizes.length === 0) {
+        newErrors.sizes = 'At least one size must be selected';
+      }
+    } else {
+      // For quantity-only categories
+      if (sizesQuantity.selectedSizes.length === 0) {
+        setSizesQuantity({
+          sizeSystem: '',
+          selectedSizes: [{
+            system: '',
+            size: '',
+            quantity: '1'
+          }]
+        });
+      }
+      return true;
     }
 
     setErrors(prev => ({ ...prev, ...newErrors }));
@@ -164,14 +210,17 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     if (!purchaseDetails.purchasePrice) {
       newErrors.purchasePrice = 'Purchase price is required';
     }
-    if (!purchaseDetails.marketPrice) {
-      newErrors.marketPrice = 'Market price is required';
+    if (!purchaseDetails.purchaseLocation) {
+      newErrors.purchaseLocation = 'Purchase location is required';
     }
     if (!purchaseDetails.purchaseDate) {
       newErrors.purchaseDate = 'Purchase date is required';
     }
-    if (!purchaseDetails.condition) {
-      newErrors.condition = 'Condition is required';
+    if (purchaseDetails.taxType === 'vat' && !purchaseDetails.vatPercentage) {
+      newErrors.vatPercentage = 'VAT percentage is required when VAT is enabled';
+    }
+    if (purchaseDetails.taxType === 'salesTax' && !purchaseDetails.salesTaxPercentage) {
+      newErrors.salesTaxPercentage = 'Sales tax percentage is required when Sales Tax is enabled';
     }
 
     setErrors(prev => ({ ...prev, ...newErrors }));
@@ -212,7 +261,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
       }
     }
 
-    if (isValid && activeStep < steps.length - 1) {
+    if (isValid) {
       setActiveStep((prevStep) => prevStep + 1);
     }
   };
@@ -221,7 +270,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     setActiveStep((prevStep) => prevStep - 1);
   };
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     // Clean up image previews
     images.forEach(image => {
       if (image.preview) {
@@ -243,16 +292,24 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     });
     setPurchaseDetails({
       purchasePrice: '',
+      purchaseCurrency: '£',
+      shippingPrice: '',
+      shippingCurrency: '£',
       marketPrice: '',
       purchaseDate: null,
       purchaseLocation: '',
       condition: '',
-      notes: ''
+      notes: '',
+      orderID: '',
+      tags: [],
+      taxType: 'none',
+      vatPercentage: '',
+      salesTaxPercentage: ''
     });
     setImages([]);
     setErrors({});
     onClose();
-  };
+  }, [images, onClose]);
 
   return (
     <Dialog 
@@ -307,14 +364,14 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
             <SizesQuantityForm
               category={productDetails.category}
               formData={sizesQuantity}
-              onChange={(newData) => setSizesQuantity(newData)}
+              onChange={handleSizesQuantityChange}
               errors={errors}
             />
           )}
           {activeStep === 2 && (
             <PurchaseDetailsForm
               formData={purchaseDetails}
-              onChange={(field, value) => setPurchaseDetails(prev => ({ ...prev, [field]: value }))}
+              onChange={handlePurchaseDetailsChange}
               errors={errors}
             />
           )}

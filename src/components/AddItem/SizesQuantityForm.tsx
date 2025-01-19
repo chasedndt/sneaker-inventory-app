@@ -1,5 +1,5 @@
 // src/components/AddItem/SizesQuantityForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -87,20 +87,23 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
 
   const usesSizeSystem = ['Sneakers', 'Streetwear'].includes(category);
 
-  const handleQuantityChange = (index: number, change: number) => {
-    const newSizes = [...formData.selectedSizes];
-    const currentQuantity = parseInt(newSizes[index]?.quantity || '1');
-    const newQuantity = Math.max(1, currentQuantity + change);
-    
-    if (newSizes[index]) {
-      newSizes[index].quantity = newQuantity.toString();
-    } else {
-      newSizes.push({
-        system: '',
-        size: '',
-        quantity: newQuantity.toString()
+  useEffect(() => {
+    if (!usesSizeSystem && formData.selectedSizes.length === 0) {
+      onChange({
+        sizeSystem: '',
+        selectedSizes: [{
+          system: '',
+          size: '',
+          quantity: '1'
+        }]
       });
     }
+  }, [usesSizeSystem, formData.selectedSizes.length, onChange]);
+
+  const handleQuantityChange = (index: number, value: string) => {
+    const newSizes = [...formData.selectedSizes];
+    const newQuantity = Math.max(1, parseInt(value) || 1);
+    newSizes[index].quantity = newQuantity.toString();
     
     onChange({
       ...formData,
@@ -109,17 +112,25 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
   };
 
   const handleSizeClick = (size: string) => {
-    if (formData.selectedSizes.some(s => s.size === size)) return;
-    
-    const newEntry: SizeEntry = {
-      system: formData.sizeSystem,
-      size: size,
-      quantity: '1'
-    };
-    onChange({
-      ...formData,
-      selectedSizes: [...formData.selectedSizes, newEntry]
-    });
+    if (formData.selectedSizes.some(s => s.size === size)) {
+      // If size is already selected, remove it
+      const newSizes = formData.selectedSizes.filter(s => s.size !== size);
+      onChange({
+        ...formData,
+        selectedSizes: newSizes
+      });
+    } else {
+      // If size is not selected, add it
+      const newEntry: SizeEntry = {
+        system: formData.sizeSystem,
+        size: size,
+        quantity: '1'
+      };
+      onChange({
+        ...formData,
+        selectedSizes: [...formData.selectedSizes, newEntry]
+      });
+    }
   };
 
   const handleAddCustomSize = () => {
@@ -152,57 +163,34 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
         Select Quantity
       </Typography>
 
-      {formData.selectedSizes.length === 0 ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+      {formData.selectedSizes.map((entry, index) => (
+        <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <IconButton 
-            onClick={() => handleQuantityChange(0, -1)}
+            onClick={() => handleQuantityChange(index, (parseInt(entry.quantity) - 1).toString())}
             sx={{ border: '1px solid', borderColor: 'divider' }}
           >
             <RemoveIcon />
           </IconButton>
           <TextField
-            value={1}
+            value={entry.quantity}
             size="small"
             sx={{ width: '80px', mx: 2 }}
             InputProps={{ readOnly: true }}
           />
           <IconButton 
-            onClick={() => handleQuantityChange(0, 1)}
+            onClick={() => handleQuantityChange(index, (parseInt(entry.quantity) + 1).toString())}
             sx={{ border: '1px solid', borderColor: 'divider' }}
           >
             <AddIcon />
           </IconButton>
+          {entry.size && (
+            <Typography sx={{ ml: 2 }}>{entry.size}</Typography>
+          )}
+          <IconButton onClick={() => handleRemoveSize(index)} sx={{ ml: 'auto' }}>
+            <CloseIcon />
+          </IconButton>
         </Box>
-      ) : (
-        formData.selectedSizes.map((entry, index) => (
-          <Box key={index} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <IconButton 
-              onClick={() => handleQuantityChange(index, -1)}
-              sx={{ border: '1px solid', borderColor: 'divider' }}
-            >
-              <RemoveIcon />
-            </IconButton>
-            <TextField
-              value={entry.quantity}
-              size="small"
-              sx={{ width: '80px', mx: 2 }}
-              InputProps={{ readOnly: true }}
-            />
-            <IconButton 
-              onClick={() => handleQuantityChange(index, 1)}
-              sx={{ border: '1px solid', borderColor: 'divider' }}
-            >
-              <AddIcon />
-            </IconButton>
-            {entry.size && (
-              <Typography sx={{ ml: 2 }}>{entry.size}</Typography>
-            )}
-            <IconButton onClick={() => handleRemoveSize(index)} sx={{ ml: 'auto' }}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-        ))
-      )}
+      ))}
 
       <Button
         variant="outlined"
@@ -262,6 +250,35 @@ const SizesQuantityForm: React.FC<SizesQuantityFormProps> = ({
                     </Grid>
                   )))}
               </Grid>
+
+              {formData.selectedSizes.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  {formData.selectedSizes.map((entry, index) => (
+                    <Grid container spacing={2} key={index} sx={{ mb: 1, alignItems: 'center' }}>
+                      <Grid item xs={2}>
+                        <Typography>{entry.system}</Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <Typography>{entry.size}</Typography>
+                      </Grid>
+                      <Grid item xs={4}>
+                        <TextField
+                          type="number"
+                          value={entry.quantity}
+                          onChange={(e) => handleQuantityChange(index, e.target.value)}
+                          size="small"
+                          InputProps={{ inputProps: { min: 1 } }}
+                        />
+                      </Grid>
+                      <Grid item xs={2}>
+                        <IconButton onClick={() => handleRemoveSize(index)}>
+                          <CloseIcon />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  ))}
+                </Box>
+              )}
             </>
           )}
         </>
