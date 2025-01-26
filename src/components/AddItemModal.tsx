@@ -1,5 +1,5 @@
 // src/components/AddItemModal.tsx
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -15,12 +15,15 @@ import {
   Alert
 } from '@mui/material';
 import { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import CloseIcon from '@mui/icons-material/Close';
 import ProductDetailsForm from './AddItem/ProductDetailsForm';
 import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
 import ImagesUploadForm from './AddItem/ImagesUploadForm';
+import RecoveryDialog from './AddItem/RecoveryDialog';
 import { api } from '../services/api';
+import { loadFormData, saveFormData, clearFormData } from '../utils/formPersistence';
 
 const steps = [
   'Product Details',
@@ -76,12 +79,12 @@ interface AddItemModalProps {
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
-  // Step management
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [savedData, setSavedData] = useState<any>(null);
   
-  // Form states
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
     category: 'Sneakers',
     productName: '',
@@ -113,20 +116,59 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   });
 
   const [images, setImages] = useState<ImageFile[]>([]);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
-  // Error handling state
-  const [errors, setErrors] = useState<{
-    [key: string]: string;
-  }>({});
+  useEffect(() => {
+    if (open) {
+      const data = loadFormData();
+      if (data) {
+        setSavedData(data);
+        setShowRecoveryDialog(true);
+      }
+    }
+  }, [open]);
 
-  // Product Details handlers
+  useEffect(() => {
+    if (open) {
+      saveFormData({
+        activeStep,
+        productDetails,
+        sizesQuantity,
+        purchaseDetails: {
+          ...purchaseDetails,
+          purchaseDate: purchaseDetails.purchaseDate?.toISOString() || null
+        }
+      });
+    }
+  }, [open, activeStep, productDetails, sizesQuantity, purchaseDetails]);
+
+  const handleRecover = () => {
+    if (savedData) {
+      setActiveStep(savedData.activeStep);
+      setProductDetails(savedData.productDetails);
+      setSizesQuantity(savedData.sizesQuantity);
+      setPurchaseDetails({
+        ...savedData.purchaseDetails,
+        purchaseDate: savedData.purchaseDetails.purchaseDate 
+          ? dayjs(savedData.purchaseDetails.purchaseDate)
+          : null
+      });
+    }
+    setShowRecoveryDialog(false);
+  };
+
+  const handleDiscardSavedData = () => {
+    clearFormData();
+    setSavedData(null);
+    setShowRecoveryDialog(false);
+  };
+
   const handleProductDetailsChange = useCallback((field: keyof ProductDetailsFormData, value: string) => {
     if (field === 'category') {
       setProductDetails(prev => ({
         ...prev,
         [field]: value as CategoryType
       }));
-      // Reset sizes when category changes
       setSizesQuantity({
         sizeSystem: '',
         selectedSizes: []
@@ -161,7 +203,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     }
   }, [errors]);
 
-  // Validation functions
   const validateProductDetails = (): boolean => {
     const newErrors: { [key: string]: string } = {};
     
@@ -191,7 +232,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         newErrors.sizes = 'At least one size must be selected';
       }
     } else {
-      // For quantity-only categories
       if (sizesQuantity.selectedSizes.length === 0) {
         setSizesQuantity({
           sizeSystem: '',
@@ -243,7 +283,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     return Object.keys(newErrors).length === 0;
   };
 
-  // Navigation handlers
   const handleNext = async () => {
     let isValid = true;
 
@@ -259,17 +298,14 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         setIsSubmitting(true);
         setSubmitError(null);
         try {
-          // Upload images first
           const uploadedImages = await api.uploadImages(images);
-          
-          // Then submit the full form
           await api.addItem({
             productDetails,
             sizesQuantity,
             purchaseDetails,
             images: uploadedImages
           });
-          
+          clearFormData();
           handleClose();
         } catch (error) {
           setSubmitError('Failed to submit item. Please try again.');
@@ -290,7 +326,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   };
 
   const handleClose = useCallback(() => {
-    // Clean up image previews
     images.forEach(image => {
       if (image.preview) {
         URL.revokeObjectURL(image.preview);
@@ -328,107 +363,116 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     setImages([]);
     setErrors({});
     setSubmitError(null);
+    clearFormData();
     onClose();
   }, [images, onClose]);
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={handleClose}
-      maxWidth="md"
-      fullWidth
-      PaperProps={{
-        sx: {
-          borderRadius: 2,
-          minHeight: '600px'
-        }
-      }}
-    >
-      <DialogTitle sx={{ 
-        m: 0, 
-        p: 2, 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center'
-      }}>
-        <Typography variant="h6">Add New Item</Typography>
-        <IconButton
-          aria-label="close"
-          onClick={handleClose}
-          sx={{ color: 'grey.500' }}
-        >
-          <CloseIcon />
-        </IconButton>
-      </DialogTitle>
+    <>
+      <Dialog 
+        open={open} 
+        onClose={handleClose}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            minHeight: '600px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          m: 0, 
+          p: 2, 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center'
+        }}>
+          <Typography variant="h6">Add New Item</Typography>
+          <IconButton
+            aria-label="close"
+            onClick={handleClose}
+            sx={{ color: 'grey.500' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
 
-      <Box sx={{ width: '100%', px: 3 }}>
-        <Stepper activeStep={activeStep} alternativeLabel>
-          {steps.map((label) => (
-            <Step key={label}>
-              <StepLabel>{label}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-      </Box>
-
-      <DialogContent sx={{ p: 3 }}>
-        <Box sx={{ minHeight: '400px' }}>
-          {activeStep === 0 && (
-            <ProductDetailsForm
-              formData={productDetails}
-              onChange={handleProductDetailsChange}
-              errors={errors}
-            />
-          )}
-          {activeStep === 1 && (
-            <SizesQuantityForm
-              category={productDetails.category}
-              formData={sizesQuantity}
-              onChange={handleSizesQuantityChange}
-              errors={errors}
-            />
-          )}
-          {activeStep === 2 && (
-            <PurchaseDetailsForm
-              formData={purchaseDetails}
-              onChange={handlePurchaseDetailsChange}
-              errors={errors}
-            />
-          )}
-          {activeStep === 3 && (
-            <ImagesUploadForm
-              images={images}
-              onChange={setImages}
-              errors={errors}
-            />
-          )}
+        <Box sx={{ width: '100%', px: 3 }}>
+          <Stepper activeStep={activeStep} alternativeLabel>
+            {steps.map((label) => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
         </Box>
-      </DialogContent>
 
-      {submitError && (
-        <Alert severity="error" sx={{ mx: 3, mb: 2 }}>
-          {submitError}
-        </Alert>
-      )}
+        <DialogContent sx={{ p: 3 }}>
+          <Box sx={{ minHeight: '400px' }}>
+            {activeStep === 0 && (
+              <ProductDetailsForm
+                formData={productDetails}
+                onChange={handleProductDetailsChange}
+                errors={errors}
+              />
+            )}
+            {activeStep === 1 && (
+              <SizesQuantityForm
+                category={productDetails.category}
+                formData={sizesQuantity}
+                onChange={handleSizesQuantityChange}
+                errors={errors}
+              />
+            )}
+            {activeStep === 2 && (
+              <PurchaseDetailsForm
+                formData={purchaseDetails}
+                onChange={handlePurchaseDetailsChange}
+                errors={errors}
+              />
+            )}
+            {activeStep === 3 && (
+              <ImagesUploadForm
+                images={images}
+                onChange={setImages}
+                errors={errors}
+              />
+            )}
+          </Box>
+        </DialogContent>
 
-      <DialogActions sx={{ p: 3 }}>
-        <Button
-          onClick={handleBack}
-          disabled={activeStep === 0 || isSubmitting}
-          variant="outlined"
-        >
-          Back
-        </Button>
-        <Button
-          onClick={activeStep === steps.length - 1 ? handleClose : handleNext}
-          variant="contained"
-          color="primary"
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Submitting...' : activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+        {submitError && (
+          <Alert severity="error" sx={{ mx: 3, mb: 2 }}>
+            {submitError}
+          </Alert>
+        )}
+
+        <DialogActions sx={{ p: 3 }}>
+          <Button
+            onClick={handleBack}
+            disabled={activeStep === 0 || isSubmitting}
+            variant="outlined"
+          >
+            Back
+          </Button>
+          <Button
+            onClick={activeStep === steps.length - 1 ? handleClose : handleNext}
+            variant="contained"
+            color="primary"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? 'Submitting...' : activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <RecoveryDialog
+        open={showRecoveryDialog}
+        onRecover={handleRecover}
+        onDiscard={handleDiscardSavedData}
+      />
+    </>
   );
 };
 
