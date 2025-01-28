@@ -50,53 +50,92 @@ interface AddItemPayload {
   images: ImageFile[];
 }
 
-// API endpoints
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3001/api';
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
+console.log('Using API URL:', API_BASE_URL);
 
 export const api = {
+  testConnection: async () => {
+    try {
+      console.log('Testing API connection to:', `${API_BASE_URL}/test`);
+      const response = await fetch(`${API_BASE_URL}/test`);
+      console.log('Test connection response:', response);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      throw error;
+    }
+  },
+
   addItem: async (payload: AddItemPayload) => {
+    console.log('Starting addItem request with payload:', payload);
     try {
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
+          'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          purchaseDetails: {
+            ...payload.purchaseDetails,
+            purchaseDate: payload.purchaseDetails.purchaseDate?.toISOString() || null
+          }
+        })
       });
-
+      
+      console.log('Received addItem response:', response);
+      
       if (!response.ok) {
-        throw new Error('Failed to add item');
+        const errorData = await response.json().catch(() => null);
+        console.error('Error response data:', errorData);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-
-      return await response.json();
+      
+      const data = await response.json();
+      console.log('AddItem success response:', data);
+      return data;
     } catch (error) {
-      console.error('Error adding item:', error);
+      console.error('Error in addItem:', error);
       throw error;
     }
   },
 
   uploadImages: async (files: File[]) => {
+    console.log('Starting uploadImages with files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
     try {
       const formData = new FormData();
-      files.forEach((file) => {
+      files.forEach((file, index) => {
+        console.log(`Appending file ${index}:`, file.name, file.type, file.size);
         formData.append('images', file);
       });
 
       const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
-        body: formData,
+        credentials: 'include',
+        body: formData
       });
+      
+      console.log('Received upload response:', response);
 
       if (!response.ok) {
-        throw new Error('Failed to upload images');
+        const errorData = await response.json().catch(() => null);
+        console.error('Upload error response:', errorData);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      return await response.json();
+      const data = await response.json();
+      console.log('Upload success response:', data);
+      return data;
     } catch (error) {
-      console.error('Error uploading images:', error);
+      console.error('Error in uploadImages:', error);
       throw error;
     }
-  },
+  }
 };
 
 export type {
