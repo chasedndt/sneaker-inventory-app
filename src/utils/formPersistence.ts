@@ -41,7 +41,16 @@ const FORM_STORAGE_KEY = 'addItemFormData';
 
 export const saveFormData = (formData: FormState) => {
   try {
-    const serializedData = JSON.stringify(formData);
+    // Validate date before saving
+    const validatedData = {
+      ...formData,
+      purchaseDetails: {
+        ...formData.purchaseDetails,
+        purchaseDate: formData.purchaseDetails.purchaseDate || null
+      }
+    };
+    
+    const serializedData = JSON.stringify(validatedData);
     localStorage.setItem(FORM_STORAGE_KEY, serializedData);
   } catch (error) {
     console.error('Error saving form data:', error);
@@ -52,7 +61,21 @@ export const loadFormData = (): FormState | null => {
   try {
     const serializedData = localStorage.getItem(FORM_STORAGE_KEY);
     if (!serializedData) return null;
-    return JSON.parse(serializedData);
+    
+    const parsedData = JSON.parse(serializedData);
+    
+    // Ensure date is properly handled
+    if (parsedData.purchaseDetails && parsedData.purchaseDetails.purchaseDate) {
+      try {
+        // Validate the date string
+        new Date(parsedData.purchaseDetails.purchaseDate).toISOString();
+      } catch (error) {
+        console.error('Invalid date found in stored data');
+        parsedData.purchaseDetails.purchaseDate = null;
+      }
+    }
+    
+    return parsedData;
   } catch (error) {
     console.error('Error loading form data:', error);
     return null;
