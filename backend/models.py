@@ -1,5 +1,3 @@
-# backend/models.py
-
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
@@ -13,8 +11,8 @@ class Item(db.Model):
     # Product Details
     category = db.Column(db.String(50), nullable=False)
     product_name = db.Column(db.String(100), nullable=False)
-    reference = db.Column(db.String(100))  # Optional; if you want it compulsory, set nullable=False
-    colorway = db.Column(db.String(100))   # Optional; if you want it compulsory, set nullable=False
+    reference = db.Column(db.String(100))
+    colorway = db.Column(db.String(100))
     brand = db.Column(db.String(50), nullable=False)
     
     # Purchase Details
@@ -23,7 +21,7 @@ class Item(db.Model):
     shipping_price = db.Column(db.Float)
     shipping_currency = db.Column(db.String(10))
     market_price = db.Column(db.Float)
-    purchase_date = db.Column(db.DateTime, nullable=False)  # Now compulsory!
+    purchase_date = db.Column(db.DateTime, nullable=False)
     purchase_location = db.Column(db.String(100))
     condition = db.Column(db.String(50))
     notes = db.Column(db.Text)
@@ -37,6 +35,16 @@ class Item(db.Model):
     images = db.relationship('Image', backref='item', lazy=True)
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'category': self.category,
+            'productName': self.product_name,
+            'brand': self.brand,
+            'purchasePrice': self.purchase_price,
+            'purchaseDate': self.purchase_date.isoformat() if self.purchase_date else None
+        }
+
 class Size(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
@@ -49,6 +57,14 @@ class Image(db.Model):
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     path = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'filename': self.filename,
+            'item_id': self.item_id
+        }
 
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)

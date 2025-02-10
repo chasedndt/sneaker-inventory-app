@@ -4,13 +4,12 @@ from flask_migrate import Migrate
 import os
 from werkzeug.utils import secure_filename
 import logging
+from datetime import datetime
 from models import db, Item, Size, Image, Tag
 from config import Config
-from datetime import datetime  # Added this import
 
 def create_app():
     app = Flask(__name__)
-    
     app.config.from_object(Config)
     
     CORS(app, resources={
@@ -36,6 +35,9 @@ def create_app():
         os.makedirs(app.config['UPLOAD_FOLDER'])
         logger.info(f"Created upload directory at: {app.config['UPLOAD_FOLDER']}")
 
+    def allowed_file(filename):
+        return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
     @app.route('/api/test', methods=['GET'])
     def test_connection():
         logger.info("Test endpoint hit")
@@ -51,7 +53,6 @@ def create_app():
             data = request.get_json()
             logger.info(f"Received data: {data}")
             
-            # Convert purchase_date string to datetime
             try:
                 purchase_date = datetime.strptime(data['purchaseDate'], '%Y-%m-%d')
                 logger.info(f"Converted purchase date: {purchase_date}")
@@ -91,25 +92,6 @@ def create_app():
             logger.error(f"Error processing request: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/items', methods=['GET'])
-    def get_items():
-        try:
-            items = Item.query.all()
-            items_data = []
-            for item in items:
-                items_data.append({
-                    'id': item.id,
-                    'category': item.category,
-                    'productName': item.product_name,
-                    'brand': item.brand,
-                    'purchasePrice': item.purchase_price,
-                    'purchaseDate': item.purchase_date.strftime('%Y-%m-%d') if item.purchase_date else None
-                })
-            return jsonify(items_data), 200
-        except Exception as e:
-            logger.error(f"Error fetching items: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
     @app.route('/api/upload', methods=['POST'])
     def upload_images():
         try:
@@ -133,7 +115,6 @@ def create_app():
                 if file and allowed_file(file.filename):
                     filename = secure_filename(file.filename)
                     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    
                     file.save(filepath)
                     
                     new_image = Image(
@@ -152,8 +133,14 @@ def create_app():
             logger.error(f"Error processing upload: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    def allowed_file(filename):
-        return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+    @app.route('/api/items', methods=['GET'])
+    def get_items():
+        try:
+            items = Item.query.all()
+            return jsonify([item.to_dict() for item in items]), 200
+        except Exception as e:
+            logger.error(f"Error fetching items: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 
     @app.before_request
     def log_request_info():

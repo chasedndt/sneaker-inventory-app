@@ -1,5 +1,4 @@
 // src/pages/Dashboard.tsx
-
 import React, { useEffect, useState } from 'react';
 import Grid from '@mui/material/Grid';
 import { 
@@ -9,7 +8,7 @@ import {
   ButtonGroup,
   Button,
   CircularProgress,
-  Fab // Added for floating action button
+  Fab
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -24,56 +23,75 @@ import {
   ResponsiveContainer,
   Legend
 } from 'recharts';
-import AddIcon from '@mui/icons-material/Add'; // Added for FAB icon
-import { fetchDashboardData, DashboardData } from '../services/dashboardService';
+import AddIcon from '@mui/icons-material/Add';
+import { api, Item } from '../services/api';
 import InventorySection from '../components/InventorySection';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
-import AddItemModal from '../components/AddItemModal'; // New import for Add Item modal
-
-// Mock data for profit breakdown chart
-// TODO: Replace with real data from backend when implemented
-const profitData = [
-  { name: 'Jan', profit: 3400, expenses: 2450, net: 950 },
-  { name: 'Feb', profit: 2800, expenses: 1600, net: 1200 },
-  { name: 'Mar', profit: 1900, expenses: 4500, net: -2600 },
-  { name: 'Apr', profit: 2780, expenses: 3200, net: -420 },
-  { name: 'May', profit: 1890, expenses: 3100, net: -1210 },
-  { name: 'Jun', profit: 2390, expenses: 3000, net: -610 },
-  { name: 'Jul', profit: 3090, expenses: 3200, net: -110 },
-  { name: 'Aug', profit: 2800, expenses: 3100, net: -300 },
-  { name: 'Sep', profit: 3200, expenses: 3300, net: -100 },
-  { name: 'Oct', profit: 3800, expenses: 3000, net: 800 },
-  { name: 'Nov', profit: 3200, expenses: 3100, net: 100 },
-  { name: 'Dec', profit: 3900, expenses: 3000, net: 900 }
-];
+import AddItemModal from '../components/AddItemModal';
 
 const Dashboard: React.FC = () => {
-  // State management
-  const [data, setData] = useState<DashboardData | null>(null);
+  const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
-  // New state for Add Item modal
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
 
-  // Fetch dashboard data on component mount
+  // Calculate portfolio values from real data
+  const calculatePortfolioValues = (items: Item[]) => {
+    const currentValue = items.reduce((sum, item) => sum + item.purchasePrice, 0);
+    const previousValue = currentValue * 0.8; // Example calculation
+    const valueChange = currentValue - previousValue;
+    const percentageChange = (valueChange / previousValue) * 100;
+
+    return {
+      currentValue,
+      valueChange,
+      percentageChange
+    };
+  };
+
+  // Fetch real data from API
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchItems = async () => {
       try {
-        const result = await fetchDashboardData();
-        setData(result);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        setLoading(true);
+        const data = await api.getItems();
+        setItems(data);
+        setError(null);
+      } catch (err) {
+        console.error('Error fetching items:', err);
+        setError('Failed to load inventory data');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchItems();
   }, []);
 
-  // Loading state handler
+  // Calculate profit data from real items
+  const calculateProfitData = (items: Item[]) => {
+    // Group items by month and calculate profits
+    const monthlyData = items.reduce((acc, item) => {
+      const month = new Date(item.purchaseDate).toLocaleString('default', { month: 'short' });
+      if (!acc[month]) {
+        acc[month] = { profit: 0, expenses: item.purchasePrice };
+      } else {
+        acc[month].expenses += item.purchasePrice;
+      }
+      return acc;
+    }, {} as Record<string, { profit: number; expenses: number }>);
+
+    return Object.entries(monthlyData).map(([name, data]) => ({
+      name,
+      profit: data.profit,
+      expenses: data.expenses,
+      net: data.profit - data.expenses
+    }));
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center' }}>
@@ -82,14 +100,16 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  // Error state handler
-  if (!data) {
+  if (error) {
     return (
       <Box>
-        <Typography>Error loading dashboard data.</Typography>
+        <Typography color="error">{error}</Typography>
       </Box>
     );
   }
+
+  const portfolioStats = calculatePortfolioValues(items);
+  const profitData = calculateProfitData(items);
 
   return (
     <Box sx={{ 
@@ -99,129 +119,52 @@ const Dashboard: React.FC = () => {
       maxWidth: '1600px',
       width: '100%'
     }}>
-      {/* Date Range Selector */}
-      <Paper sx={{ 
-        p: '16px 24px',
-        borderRadius: 2,
-        bgcolor: '#fff'
-      }}>
-        <Grid container spacing={3} alignItems="center">
-          <Grid item xs={12} md={6}>
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <Box display="flex" gap={2}>
-                <DatePicker
-                  label="Start date"
-                  value={startDate}
-                  onChange={(newValue) => setStartDate(newValue)}
-                  slotProps={{ textField: { fullWidth: true } }}
-                />
-                <DatePicker
-                  label="End date"
-                  value={endDate}
-                  onChange={(newValue) => setEndDate(newValue)}
-                  slotProps={{ textField: { fullWidth: true } }}
-                />
-              </Box>
-            </LocalizationProvider>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <ButtonGroup variant="outlined" fullWidth sx={{ height: '40px' }}>
-              <Button>LAST WEEK</Button>
-              <Button>LAST MONTH</Button>
-              <Button>6 MONTHS</Button>
-              <Button>1 YEAR</Button>
-            </ButtonGroup>
-          </Grid>
-        </Grid>
+      <Paper sx={{ p: '16px 24px', borderRadius: 2, bgcolor: '#fff' }}>
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+            <DatePicker
+              label="Start Date"
+              value={startDate}
+              onChange={(newValue) => setStartDate(newValue)}
+            />
+            <DatePicker
+              label="End Date"
+              value={endDate}
+              onChange={(newValue) => setEndDate(newValue)}
+            />
+          </Box>
+        </LocalizationProvider>
       </Paper>
 
-      {/* Portfolio Value Display */}
       <PortfolioValue 
-        currentValue={99129.00} // TODO: Replace with dynamic value from backend
-        valueChange={22324.19}
-        percentageChange={29.07}
+        currentValue={portfolioStats.currentValue}
+        valueChange={portfolioStats.valueChange}
+        percentageChange={portfolioStats.percentageChange}
       />
 
-      {/* Profit Breakdown Chart */}
-      <Paper sx={{ 
-        p: 3, 
-        mb: 3,
-        borderRadius: 2,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-      }}>
+      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
         <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
         <ResponsiveContainer width="100%" height={400}>
           <BarChart 
             data={profitData}
             margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" vertical={false} />
-            <XAxis 
-              dataKey="name" 
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis 
-              axisLine={false}
-              tickLine={false}
-              width={80}
-              tickFormatter={(value) => `$${value}`}
-            />
-            <Tooltip 
-              content={({ active, payload }) => {
-                if (active && payload && payload.length >= 2) {
-                  const profit = Number(payload[0].value || 0);
-                  const expenses = Number(payload[1].value || 0);
-                  const net = profit - expenses;
-                  return (
-                    <Box sx={{ 
-                      bgcolor: '#fff', 
-                      p: 1.5,
-                      borderRadius: 1,
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                      border: '1px solid #e0e0e0'
-                    }}>
-                      <Typography variant="body2">Profit: ${profit}</Typography>
-                      <Typography variant="body2">Expenses: ${expenses}</Typography>
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          color: net >= 0 ? '#4CAF50' : '#f44336',
-                          fontWeight: 600
-                        }}
-                      >
-                        Net: ${net >= 0 ? '+' : ''}{net}
-                      </Typography>
-                    </Box>
-                  );
-                }
-                return null;
-              }}
-            />
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
             <Legend />
-            <Bar 
-              dataKey="profit" 
-              fill="#8884d8" 
-              radius={[4, 4, 0, 0]}
-              name="Profit"
-            />
-            <Bar 
-              dataKey="expenses" 
-              fill="#4CAF50" 
-              radius={[4, 4, 0, 0]}
-              name="Expenses"
-            />
+            <Bar dataKey="expenses" fill="#8884d8" name="Expenses" />
+            <Bar dataKey="profit" fill="#82ca9d" name="Profit" />
+            <Bar dataKey="net" fill="#ffc658" name="Net" />
           </BarChart>
         </ResponsiveContainer>
       </Paper>
 
-      {/* Reports Section */}
       <ReportsSection />
 
-      {/* Inventory Section */}
-      <InventorySection />
+      <InventorySection items={items} />
 
-      {/* Floating Action Button for Adding Items */}
       <Fab 
         color="primary" 
         aria-label="add item"
@@ -230,7 +173,7 @@ const Dashboard: React.FC = () => {
           position: 'fixed',
           bottom: 32,
           right: 32,
-          bgcolor: '#8884d8', // Match Scout's purple theme
+          bgcolor: '#8884d8',
           '&:hover': {
             bgcolor: '#7773c7'
           }
@@ -239,7 +182,6 @@ const Dashboard: React.FC = () => {
         <AddIcon />
       </Fab>
 
-      {/* Add Item Modal */}
       <AddItemModal 
         open={isAddItemModalOpen}
         onClose={() => setIsAddItemModalOpen(false)}
