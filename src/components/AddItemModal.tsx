@@ -1,5 +1,4 @@
-// ================ PART 1 START ================
-// AddItemModal.tsx - Part 1: Imports and Interfaces
+// src/components/AddItemModal.tsx - PART 1 START
 import React, { useState, useCallback, useEffect } from 'react';
 import {
   Dialog,
@@ -24,11 +23,8 @@ import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
 import ImagesUploadForm from './AddItem/ImagesUploadForm';
 import RecoveryDialog from './AddItem/RecoveryDialog';
-import { api } from '../services/api';
+import { api, AddItemPayload } from '../services/api';  // Updated import
 import { loadFormData, saveFormData, clearFormData } from '../utils/formPersistence';
-
-// Debug logging for API base URL
-console.log('AddItemModal mounted, API Configuration loaded');
 
 const steps = [
   'Product Details',
@@ -84,8 +80,6 @@ interface AddItemModalProps {
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
-  console.log('AddItemModal rendered with props:', { open });
-
   const [activeStep, setActiveStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -93,7 +87,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
   const [savedData, setSavedData] = useState<any>(null);
-  
+
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
     category: 'Sneakers',
     productName: '',
@@ -126,11 +120,9 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
 
   const [images, setImages] = useState<ImageFile[]>([]);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-// ================ PART 1 END ================
-// ================ PART 2 START ================
-// AddItemModal.tsx - Part 2: Effects and Validation Functions
+// PART 1 END
+// PART 2 START - Effects and Handlers
 useEffect(() => {
-  console.log('Recovery effect triggered, open:', open);
   if (open) {
     const data = loadFormData();
     if (data) {
@@ -144,16 +136,15 @@ useEffect(() => {
 useEffect(() => {
   if (open) {
     try {
-      console.log('Saving form data, current step:', activeStep);
       saveFormData({
         activeStep,
         productDetails,
         sizesQuantity,
         purchaseDetails: {
           ...purchaseDetails,
-          purchaseDate: purchaseDetails.purchaseDate?.isValid() ? 
-            purchaseDetails.purchaseDate.toISOString() : 
-            null
+          purchaseDate: purchaseDetails.purchaseDate?.isValid()
+            ? purchaseDetails.purchaseDate.toISOString()
+            : null
         }
       });
     } catch (error) {
@@ -163,7 +154,6 @@ useEffect(() => {
 }, [open, activeStep, productDetails, sizesQuantity, purchaseDetails]);
 
 const handleRecover = () => {
-  console.log('Recovering saved data');
   if (savedData) {
     setActiveStep(savedData.activeStep);
     setProductDetails(savedData.productDetails);
@@ -179,14 +169,12 @@ const handleRecover = () => {
 };
 
 const handleDiscardSavedData = () => {
-  console.log('Discarding saved data');
   clearFormData();
   setSavedData(null);
   setShowRecoveryDialog(false);
 };
 
 const handleProductDetailsChange = useCallback((field: keyof ProductDetailsFormData, value: string) => {
-  console.log('Product details change:', field, value);
   setSubmitError(null);
   if (field === 'category') {
     setProductDetails(prev => ({
@@ -203,7 +191,6 @@ const handleProductDetailsChange = useCallback((field: keyof ProductDetailsFormD
       [field]: value
     }));
   }
-
   if (errors[field]) {
     setErrors(prev => ({
       ...prev,
@@ -213,16 +200,13 @@ const handleProductDetailsChange = useCallback((field: keyof ProductDetailsFormD
 }, [errors]);
 
 const handleSizesQuantityChange = useCallback((newData: SizesQuantityData) => {
-  console.log('Sizes quantity change:', newData);
   setSubmitError(null);
   setSizesQuantity(newData);
 }, []);
 
 const handlePurchaseDetailsChange = useCallback((field: keyof PurchaseDetailsData, value: any) => {
-  console.log('Purchase details change:', field, value);
   setSubmitError(null);
   setPurchaseDetails(prev => ({ ...prev, [field]: value }));
-  
   if (errors[field]) {
     setErrors(prev => ({
       ...prev,
@@ -232,7 +216,6 @@ const handlePurchaseDetailsChange = useCallback((field: keyof PurchaseDetailsDat
 }, [errors]);
 
 const validateProductDetails = (): boolean => {
-  console.log('Validating product details');
   const newErrors: { [key: string]: string } = {};
   
   if (!productDetails.category) {
@@ -244,15 +227,11 @@ const validateProductDetails = (): boolean => {
   if (!productDetails.brand) {
     newErrors.brand = 'Brand is required';
   }
-
   setErrors(newErrors);
-  const isValid = Object.keys(newErrors).length === 0;
-  console.log('Product details validation result:', isValid);
-  return isValid;
+  return Object.keys(newErrors).length === 0;
 };
 
 const validateSizesQuantity = (): boolean => {
-  console.log('Validating sizes and quantity');
   const newErrors: { [key: string]: string } = {};
   const usesSizeSystem = ['Sneakers', 'Streetwear'].includes(productDetails.category);
   
@@ -276,15 +255,11 @@ const validateSizesQuantity = (): boolean => {
     }
     return true;
   }
-
   setErrors(prev => ({ ...prev, ...newErrors }));
-  const isValid = Object.keys(newErrors).length === 0;
-  console.log('Sizes validation result:', isValid);
-  return isValid;
+  return Object.keys(newErrors).length === 0;
 };
 
 const validatePurchaseDetails = (): boolean => {
-  console.log('Validating purchase details');
   const newErrors: { [key: string]: string } = {};
   
   if (!purchaseDetails.purchasePrice) {
@@ -302,74 +277,57 @@ const validatePurchaseDetails = (): boolean => {
   if (purchaseDetails.taxType === 'salesTax' && !purchaseDetails.salesTaxPercentage) {
     newErrors.salesTaxPercentage = 'Sales tax percentage is required when Sales Tax is enabled';
   }
-
   setErrors(prev => ({ ...prev, ...newErrors }));
-  const isValid = Object.keys(newErrors).length === 0;
-  console.log('Purchase details validation result:', isValid);
-  return isValid;
+  return Object.keys(newErrors).length === 0;
 };
-// ================ PART 2 END ================
-// ================ PART 3 START ================
-// AddItemModal.tsx - Part 3: Form Submission, Handlers and JSX
+
 const validateImages = (): boolean => {
-  console.log('Validating images:', images);
   const newErrors: { [key: string]: string } = {};
   
   if (images.length === 0) {
     newErrors.images = 'At least one image is required';
   }
-
   setErrors(prev => ({ ...prev, ...newErrors }));
-  const isValid = Object.keys(newErrors).length === 0;
-  console.log('Images validation result:', isValid);
-  return isValid;
+  return Object.keys(newErrors).length === 0;
 };
-
+// PART 2 END
+// PART 3 START - Form Submission Logic and JSX
 const handleNext = async () => {
   try {
     let isValid = true;
     setSubmitError(null);
-    console.log(`handleNext called - current step: ${activeStep}`);
 
     if (activeStep === 0) {
       isValid = validateProductDetails();
-      console.log('Product details validation:', isValid);
     } else if (activeStep === 1) {
       isValid = validateSizesQuantity();
-      console.log('Sizes validation:', isValid);
     } else if (activeStep === 2) {
       isValid = validatePurchaseDetails();
-      console.log('Purchase details validation:', isValid);
     } else if (activeStep === 3) {
-      console.log('Starting final step submission');
       try {
-        console.log('Testing API connection...');
         await api.testConnection();
-        
         isValid = validateImages();
-        console.log('Images validation:', isValid, 'Images:', images);
-        
         if (isValid) {
           setIsSubmitting(true);
           setIsUploading(true);
-          
-          console.log('Starting image upload...');
           setUploadProgress(25);
-          const uploadedImages = await api.uploadImages(images);
-          console.log('Images uploaded successfully:', uploadedImages);
           
+          const uploadedImages = await api.uploadImages(images);
           setUploadProgress(50);
-          const formData = {
+          
+          // Create properly typed payload
+          const formData: AddItemPayload = {
             productDetails,
             sizesQuantity,
-            purchaseDetails,
+            purchaseDetails: {
+              ...purchaseDetails,
+              purchaseDate: purchaseDetails.purchaseDate?.toISOString() || null
+            },
             images: uploadedImages
           };
-          console.log('Preparing to submit form data:', formData);
           
           const response = await api.addItem(formData);
           console.log('Form submission response:', response);
-          
           setUploadProgress(100);
           clearFormData();
           handleClose();
@@ -382,7 +340,6 @@ const handleNext = async () => {
     }
 
     if (isValid && activeStep < steps.length - 1) {
-      console.log(`Moving to next step: ${activeStep + 1}`);
       setActiveStep((prevStep) => prevStep + 1);
     }
   } catch (error: any) {
@@ -396,19 +353,16 @@ const handleNext = async () => {
 };
 
 const handleBack = () => {
-  console.log('Moving back one step');
   setActiveStep((prevStep) => prevStep - 1);
   setSubmitError(null);
 };
 
 const handleClose = useCallback(() => {
-  console.log('Closing modal and cleaning up');
   images.forEach(image => {
     if (image.preview) {
       URL.revokeObjectURL(image.preview);
     }
   });
-
   setActiveStep(0);
   setProductDetails({
     category: 'Sneakers',
@@ -572,5 +526,4 @@ return (
 };
 
 export default AddItemModal;
-// ================ PART 3 END ================
-
+// PART 3 END

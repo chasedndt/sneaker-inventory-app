@@ -32,7 +32,7 @@ interface PurchaseDetailsData {
   shippingPrice: string;
   shippingCurrency: string;
   marketPrice: string;
-  purchaseDate: Dayjs | null;
+  purchaseDate: string | null;  // Updated type
   purchaseLocation: string;
   condition: string;
   notes: string;
@@ -47,18 +47,26 @@ interface AddItemPayload {
   productDetails: ProductDetailsFormData;
   sizesQuantity: SizesQuantityData;
   purchaseDetails: PurchaseDetailsData;
-  images: ImageFile[];
+  images: any[];
+}
+
+// New interface for items received from backend
+export interface Item {
+  id: number;
+  category: string;
+  productName: string;
+  brand: string;
+  purchasePrice: number;
+  purchaseDate: string;
+  images?: string[];
 }
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
-console.log('Using API URL:', API_BASE_URL);
 
 export const api = {
   testConnection: async () => {
     try {
-      console.log('Testing API connection to:', `${API_BASE_URL}/test`);
       const response = await fetch(`${API_BASE_URL}/test`);
-      console.log('Test connection response:', response);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -70,7 +78,6 @@ export const api = {
   },
 
   addItem: async (payload: AddItemPayload) => {
-    console.log('Starting addItem request with payload:', payload);
     try {
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'POST',
@@ -79,16 +86,8 @@ export const api = {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...payload,
-          purchaseDetails: {
-            ...payload.purchaseDetails,
-            purchaseDate: payload.purchaseDetails.purchaseDate?.toISOString() || null
-          }
-        })
+        body: JSON.stringify(payload)
       });
-      
-      console.log('Received addItem response:', response);
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
@@ -96,9 +95,7 @@ export const api = {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
-      console.log('AddItem success response:', data);
-      return data;
+      return await response.json();
     } catch (error) {
       console.error('Error in addItem:', error);
       throw error;
@@ -106,11 +103,9 @@ export const api = {
   },
 
   uploadImages: async (files: File[]) => {
-    console.log('Starting uploadImages with files:', files.map(f => ({ name: f.name, type: f.type, size: f.size })));
     try {
       const formData = new FormData();
       files.forEach((file, index) => {
-        console.log(`Appending file ${index}:`, file.name, file.type, file.size);
         formData.append('images', file);
       });
 
@@ -119,22 +114,38 @@ export const api = {
         credentials: 'include',
         body: formData
       });
-      
-      console.log('Received upload response:', response);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error('Upload error response:', errorData);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('Upload success response:', data);
-      return data;
+      return await response.json();
     } catch (error) {
       console.error('Error in uploadImages:', error);
       throw error;
     }
+  },
+
+  getItems: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/items`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error('Error in getItems:', error);
+      throw error;
+    }
+  },
+
+  getItemImage: (filename: string) => {
+    return `${API_BASE_URL}/uploads/${filename}`;
   }
 };
 
