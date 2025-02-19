@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_migrate import Migrate
 import os
@@ -54,37 +54,46 @@ def create_app():
             logger.info(f"Received data: {data}")
             
             try:
-                purchase_date = datetime.strptime(data['purchaseDate'], '%Y-%m-%d')
+                purchase_date = datetime.strptime(data['purchaseDetails']['purchaseDate'], '%Y-%m-%dT%H:%M:%S.%fZ')
                 logger.info(f"Converted purchase date: {purchase_date}")
             except (KeyError, ValueError) as e:
                 logger.error(f"Purchase date error: {str(e)}")
-                return jsonify({'error': 'Invalid purchase date format. Use YYYY-MM-DD'}), 400
+                return jsonify({'error': 'Invalid purchase date format. Use ISO format'}), 400
             
             new_item = Item(
-                category=data['category'],
-                product_name=data['productName'],
-                reference=data.get('reference', ''),
-                colorway=data.get('colorway', ''),
-                brand=data['brand'],
-                purchase_price=data['purchasePrice'],
-                purchase_currency=data['purchaseCurrency'],
-                shipping_price=data.get('shippingPrice', 0),
-                shipping_currency=data.get('shippingCurrency', ''),
-                market_price=data.get('marketPrice', 0),
+                category=data['productDetails']['category'],
+                product_name=data['productDetails']['productName'],
+                reference=data['productDetails'].get('reference', ''),
+                colorway=data['productDetails'].get('colorway', ''),
+                brand=data['productDetails']['brand'],
+                purchase_price=float(data['purchaseDetails']['purchasePrice']),
+                purchase_currency=data['purchaseDetails']['purchaseCurrency'],
+                shipping_price=float(data['purchaseDetails'].get('shippingPrice', 0)),
+                shipping_currency=data['purchaseDetails'].get('shippingCurrency', ''),
+                market_price=float(data['purchaseDetails'].get('marketPrice', 0)),
                 purchase_date=purchase_date,
-                purchase_location=data.get('purchaseLocation', ''),
-                condition=data.get('condition', ''),
-                notes=data.get('notes', ''),
-                order_id=data.get('orderID', ''),
-                tax_type=data.get('taxType', ''),
-                vat_percentage=data.get('vatPercentage', 0),
-                sales_tax_percentage=data.get('salesTaxPercentage', 0)
+                purchase_location=data['purchaseDetails'].get('purchaseLocation', ''),
+                condition=data['purchaseDetails'].get('condition', ''),
+                notes=data['purchaseDetails'].get('notes', ''),
+                order_id=data['purchaseDetails'].get('orderID', ''),
+                tax_type=data['purchaseDetails'].get('taxType', ''),
+                vat_percentage=float(data['purchaseDetails'].get('vatPercentage', 0)),
+                sales_tax_percentage=float(data['purchaseDetails'].get('salesTaxPercentage', 0))
             )
             
+            # Handle sizes and quantities
+            for size_entry in data['sizesQuantity']['selectedSizes']:
+                size = Size(
+                    system=data['sizesQuantity']['sizeSystem'],
+                    size=size_entry['size'],
+                    quantity=int(size_entry['quantity'])
+                )
+                new_item.sizes.append(size)
+
             db.session.add(new_item)
             db.session.commit()
             
-            logger.info("Item added successfully")
+            logger.info(f"Item added successfully with id: {new_item.id}")
             return jsonify({'message': 'Item added successfully', 'id': new_item.id}), 201
             
         except Exception as e:
@@ -104,10 +113,12 @@ def create_app():
             item_id = request.form.get('item_id')
             
             if not item_id:
+                logger.error("Missing item_id in form data")
                 return jsonify({'error': 'Missing item_id'}), 400
                 
             item = Item.query.get(item_id)
             if not item:
+                logger.error(f"Item with id {item_id} not found")
                 return jsonify({'error': 'Item not found'}), 404
 
             uploaded_files = []
@@ -124,8 +135,11 @@ def create_app():
                     )
                     db.session.add(new_image)
                     uploaded_files.append(filename)
-                    
+                else:
+                    logger.warning(f"Skipped file: {file.filename} (not allowed)")
+            
             db.session.commit()
+            logger.info(f"Successfully uploaded {len(uploaded_files)} images for item {item_id}")
             return jsonify({'uploaded_files': uploaded_files}), 200
             
         except Exception as e:
@@ -141,6 +155,10 @@ def create_app():
         except Exception as e:
             logger.error(f"Error fetching items: {str(e)}")
             return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/uploads/<filename>')
+    def serve_image(filename):
+        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
     @app.before_request
     def log_request_info():

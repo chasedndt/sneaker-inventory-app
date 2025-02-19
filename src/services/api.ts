@@ -1,67 +1,36 @@
 // src/services/api.ts
-import { CategoryType } from '../components/AddItem/SizesQuantityForm';
-import { Dayjs } from 'dayjs';
+import type { Dayjs } from 'dayjs';
+import {
+  AddItemPayload,
+  ProductDetailsFormData,
+  SizesQuantityData,
+  PurchaseDetailsData,
+  ImageFile
+} from '../types/types';
+import dayjs from 'dayjs';
 
-interface ImageFile extends File {
-  preview?: string;
-  id?: string;
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
+
+interface ApiItemPayload extends Omit<AddItemPayload, 'purchaseDetails'> {
+  purchaseDetails: Omit<PurchaseDetailsData, 'purchaseDate'> & {
+    purchaseDate: string | null;
+  };
 }
 
-interface ProductDetailsFormData {
-  category: CategoryType;
-  productName: string;
-  reference: string;
-  colorway: string;
-  brand: string;
+interface ApiPurchaseDetails extends Omit<PurchaseDetailsData, 'purchaseDate'> {
+  purchaseDate: string | null;
 }
 
-interface SizeEntry {
-  system: string;
-  size: string;
-  quantity: string;
-}
-
-interface SizesQuantityData {
-  sizeSystem: string;
-  selectedSizes: SizeEntry[];
-}
-
-interface PurchaseDetailsData {
-  purchasePrice: string;
-  purchaseCurrency: string;
-  shippingPrice: string;
-  shippingCurrency: string;
-  marketPrice: string;
-  purchaseDate: string | null;  // Updated type
-  purchaseLocation: string;
-  condition: string;
-  notes: string;
-  orderID: string;
-  tags: string[];
-  taxType: 'none' | 'vat' | 'salesTax';
-  vatPercentage: string;
-  salesTaxPercentage: string;
-}
-
-interface AddItemPayload {
-  productDetails: ProductDetailsFormData;
-  sizesQuantity: SizesQuantityData;
-  purchaseDetails: PurchaseDetailsData;
-  images: any[];
-}
-
-// New interface for items received from backend
 export interface Item {
   id: number;
   category: string;
   productName: string;
   brand: string;
   purchasePrice: number;
-  purchaseDate: string;
+  purchaseDate: Dayjs | null;
   images?: string[];
+  sizesQuantity?: Array<{ size: string; quantity: number }>;
 }
-
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 export const api = {
   testConnection: async () => {
@@ -77,7 +46,9 @@ export const api = {
     }
   },
 
-  addItem: async (payload: AddItemPayload) => {
+  addItem: async (payload: Omit<AddItemPayload, 'purchaseDetails'> & {
+    purchaseDetails: ApiPurchaseDetails
+  }): Promise<{ id: string }> => {
     try {
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'POST',
@@ -86,58 +57,69 @@ export const api = {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         console.error('Error response data:', errorData);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorMsg = errorData?.error || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMsg);
       }
-      
-      return await response.json();
+
+      const data = await response.json();
+      return { id: data.id };
     } catch (error) {
       console.error('Error in addItem:', error);
       throw error;
     }
   },
 
-  uploadImages: async (files: File[]) => {
+  uploadImages: async (itemId: string, files: File[]): Promise<string[]> => {
     try {
+      if (files.length === 0) {
+        console.log('No images to upload.');
+        return [];
+      }
+
       const formData = new FormData();
-      files.forEach((file, index) => {
+      files.forEach((file) => {
         formData.append('images', file);
       });
+
+      formData.append('item_id', itemId);
 
       const response = await fetch(`${API_BASE_URL}/upload`, {
         method: 'POST',
         credentials: 'include',
-        body: formData
+        body: formData,
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        console.error('Error response data:', errorData);
+        const errorMsg = errorData?.error || `HTTP error! status: ${response.status}`;
+        throw new Error(errorMsg);
       }
 
-      return await response.json();
+      const data = await response.json();
+      return data.uploaded_files;
     } catch (error) {
       console.error('Error in uploadImages:', error);
       throw error;
     }
   },
 
-  getItems: async () => {
+  getItems: async (): Promise<Item[]> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/items`, {
-        method: 'GET',
-        credentials: 'include',
-      });
+      const response = await fetch(`${API_BASE_URL}/items`);
+      const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      return await response.json();
+      // Convert date strings to Dayjs objects
+      return data.map((item: any) => ({
+        ...item,
+        purchaseDate: item.purchaseDate ? dayjs(item.purchaseDate) : null
+      }));
     } catch (error) {
       console.error('Error in getItems:', error);
       throw error;
@@ -145,15 +127,9 @@ export const api = {
   },
 
   getItemImage: (filename: string) => {
-    return `${API_BASE_URL}/uploads/${filename}`;
-  }
-};
-
-export type {
-  AddItemPayload,
-  ProductDetailsFormData,
-  SizesQuantityData,
-  PurchaseDetailsData,
-  ImageFile,
-  SizeEntry,
+    console.log('Constructing image URL for:', filename);
+    const url = `${API_BASE_URL}/uploads/${filename}`;
+    console.log('Final URL:', url);
+    return url;
+  },
 };

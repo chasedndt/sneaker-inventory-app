@@ -1,25 +1,26 @@
 // src/pages/Dashboard.tsx
 import React, { useEffect, useState } from 'react';
 import Grid from '@mui/material/Grid';
-import { 
-  Paper, 
-  Typography, 
+import {
+  Paper,
+  Typography,
   Box,
   ButtonGroup,
   Button,
   CircularProgress,
-  Fab
+  Fab,
+  Stack
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { Dayjs } from 'dayjs';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   Legend
 } from 'recharts';
@@ -29,6 +30,11 @@ import InventorySection from '../components/InventorySection';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
+
+interface MonthlyData {
+  profit: number;
+  expenses: number;
+}
 
 const Dashboard: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
@@ -73,16 +79,17 @@ const Dashboard: React.FC = () => {
 
   // Calculate profit data from real items
   const calculateProfitData = (items: Item[]) => {
-    // Group items by month and calculate profits
     const monthlyData = items.reduce((acc, item) => {
-      const month = new Date(item.purchaseDate).toLocaleString('default', { month: 'short' });
+      if (!item.purchaseDate) return acc;  // Skip if no date
+      
+      const month = item.purchaseDate.format('MMM');  // Use dayjs format
       if (!acc[month]) {
         acc[month] = { profit: 0, expenses: item.purchasePrice };
       } else {
         acc[month].expenses += item.purchasePrice;
       }
       return acc;
-    }, {} as Record<string, { profit: number; expenses: number }>);
+    }, {} as Record<string, MonthlyData>);
 
     return Object.entries(monthlyData).map(([name, data]) => ({
       name,
@@ -113,58 +120,80 @@ const Dashboard: React.FC = () => {
 
   return (
     <Box sx={{ 
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '24px',
-      maxWidth: '1600px',
-      width: '100%'
+      display: 'flex', 
+      gap: 3, 
+      height: '100vh',
+      overflow: 'hidden'
     }}>
-      <Paper sx={{ p: '16px 24px', borderRadius: 2, bgcolor: '#fff' }}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <DatePicker
-              label="Start Date"
-              value={startDate}
-              onChange={(newValue) => setStartDate(newValue)}
-            />
-            <DatePicker
-              label="End Date"
-              value={endDate}
-              onChange={(newValue) => setEndDate(newValue)}
-            />
-          </Box>
-        </LocalizationProvider>
-      </Paper>
+      {/* Main Content */}
+      <Box sx={{ 
+        flex: 1,
+        overflow: 'auto',
+        p: 3
+      }}>
+        <Stack spacing={3}>
+          {/* Date Picker Section */}
+          <Paper sx={{ p: 3, borderRadius: 2 }}>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <DatePicker
+                  label="Start Date"
+                  value={startDate}
+                  onChange={(newValue) => setStartDate(newValue)}
+                />
+                <DatePicker
+                  label="End Date"
+                  value={endDate}
+                  onChange={(newValue) => setEndDate(newValue)}
+                />
+              </Box>
+            </LocalizationProvider>
+          </Paper>
 
-      <PortfolioValue 
-        currentValue={portfolioStats.currentValue}
-        valueChange={portfolioStats.valueChange}
-        percentageChange={portfolioStats.percentageChange}
-      />
+          {/* Portfolio Value Section */}
+          <PortfolioValue 
+            currentValue={portfolioStats.currentValue}
+            valueChange={portfolioStats.valueChange}
+            percentageChange={portfolioStats.percentageChange}
+          />
 
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart 
-            data={profitData}
-            margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="expenses" fill="#8884d8" name="Expenses" />
-            <Bar dataKey="profit" fill="#82ca9d" name="Profit" />
-            <Bar dataKey="net" fill="#ffc658" name="Net" />
-          </BarChart>
-        </ResponsiveContainer>
-      </Paper>
+          {/* Charts Section */}
+          <Paper sx={{ p: 3, borderRadius: 2 }}>
+            <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart 
+                data={profitData}
+                margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Legend />
+                <Bar dataKey="expenses" fill="#8884d8" name="Expenses" />
+                <Bar dataKey="profit" fill="#82ca9d" name="Profit" />
+                <Bar dataKey="net" fill="#ffc658" name="Net" />
+              </BarChart>
+            </ResponsiveContainer>
+          </Paper>
 
-      <ReportsSection />
+          {/* Reports Section */}
+          <ReportsSection />
+        </Stack>
+      </Box>
 
-      <InventorySection items={items} />
+      {/* Inventory Section */}
+      <Box sx={{
+        width: '360px',
+        height: '100vh',
+        borderLeft: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'background.default'
+      }}>
+        <InventorySection items={items} />
+      </Box>
 
+      {/* Add Item FAB */}
       <Fab 
         color="primary" 
         aria-label="add item"
@@ -172,16 +201,17 @@ const Dashboard: React.FC = () => {
         sx={{
           position: 'fixed',
           bottom: 32,
-          right: 32,
-          bgcolor: '#8884d8',
+          right: 392,
+          bgcolor: 'primary.main',
           '&:hover': {
-            bgcolor: '#7773c7'
+            bgcolor: 'primary.dark'
           }
         }}
       >
         <AddIcon />
       </Fab>
 
+      {/* Add Item Modal */}
       <AddItemModal 
         open={isAddItemModalOpen}
         onClose={() => setIsAddItemModalOpen(false)}

@@ -1,5 +1,5 @@
 // src/components/AddItem/PurchaseDetailsForm.tsx
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   Box,
   TextField,
@@ -16,29 +16,13 @@ import {
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { Dayjs } from 'dayjs';
+import { PurchaseDetailsData } from '../../types/types';
 
-interface PurchaseDetailsFormData {
-  purchasePrice: string;
-  purchaseCurrency: string;
-  shippingPrice: string;
-  shippingCurrency: string;
-  marketPrice: string;
-  purchaseDate: Dayjs | null;
-  purchaseLocation: string;
-  condition: string;
-  notes: string;
-  orderID: string;
-  tags: string[];
-  taxType: 'none' | 'vat' | 'salesTax';
-  vatPercentage: string;
-  salesTaxPercentage: string;
-}
 
 interface PurchaseDetailsFormProps {
-  formData: PurchaseDetailsFormData;
-  onChange: (field: keyof PurchaseDetailsFormData, value: any) => void;
-  errors: Partial<Record<keyof PurchaseDetailsFormData, string>>;
+  formData: PurchaseDetailsData;
+  onChange: (field: keyof PurchaseDetailsData, value: any) => void;
+  errors: Partial<Record<keyof PurchaseDetailsData, string>>;
 }
 
 const currencies = ['£', '$', '€', '¥'];
@@ -66,16 +50,16 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
   };
 
   const calculateTax = () => {
-    if (!formData.purchasePrice) return 'NaN';
-    const price = parseFloat(formData.purchasePrice);
+    if (formData.purchasePrice === undefined) return 'NaN';
+    const price = formData.purchasePrice;
     
-    if (formData.taxType === 'vat' && formData.vatPercentage) {
-      const vat = parseFloat(formData.vatPercentage);
+    if (formData.taxType === 'vat' && formData.vatPercentage !== undefined) {
+      const vat = formData.vatPercentage;
       return ((price * vat) / 100).toFixed(2);
     }
     
-    if (formData.taxType === 'salesTax' && formData.salesTaxPercentage) {
-      const salesTax = parseFloat(formData.salesTaxPercentage);
+    if (formData.taxType === 'salesTax' && formData.salesTaxPercentage !== undefined) {
+      const salesTax = formData.salesTaxPercentage;
       return ((price * salesTax) / 100).toFixed(2);
     }
 
@@ -87,12 +71,12 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
       onChange('taxType', type);
       // Reset the percentages when switching tax types
       if (type === 'vat') {
-        onChange('salesTaxPercentage', '');
+        onChange('salesTaxPercentage', 0);
       } else if (type === 'salesTax') {
-        onChange('vatPercentage', '');
+        onChange('vatPercentage', 0);
       } else {
-        onChange('vatPercentage', '');
-        onChange('salesTaxPercentage', '');
+        onChange('vatPercentage', 0);
+        onChange('salesTaxPercentage', 0);
       }
     };
 
@@ -119,7 +103,7 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
             label="VAT (%)"
             type="number"
             value={formData.vatPercentage}
-            onChange={(e) => onChange('vatPercentage', e.target.value)}
+            onChange={(e) => onChange('vatPercentage', parseFloat((e.target as HTMLInputElement).value))}
             error={!!errors.vatPercentage}
             helperText={errors.vatPercentage}
             InputProps={{
@@ -140,7 +124,7 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
             label="Sales Tax (%)"
             type="number"
             value={formData.salesTaxPercentage}
-            onChange={(e) => onChange('salesTaxPercentage', e.target.value)}
+            onChange={(e) => onChange('salesTaxPercentage', parseFloat((e.target as HTMLInputElement).value))}
             error={!!errors.salesTaxPercentage}
             helperText={errors.salesTaxPercentage}
             InputProps={{
@@ -193,7 +177,7 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
               label="Purchase Price *"
               type="number"
               value={formData.purchasePrice}
-              onChange={(e) => onChange('purchasePrice', e.target.value)}
+              onChange={(e) => onChange('purchasePrice', parseFloat((e.target as HTMLInputElement).value))}
               error={!!errors.purchasePrice}
               helperText={errors.purchasePrice}
             />
@@ -220,7 +204,7 @@ const PurchaseDetailsForm: React.FC<PurchaseDetailsFormProps> = ({
               label="Shipping Price"
               type="number"
               value={formData.shippingPrice}
-              onChange={(e) => onChange('shippingPrice', e.target.value)}
+              onChange={(e) => onChange('shippingPrice', parseFloat((e.target as HTMLInputElement).value))}
               error={!!errors.shippingPrice}
               helperText={errors.shippingPrice}
             />

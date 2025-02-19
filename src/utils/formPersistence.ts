@@ -1,57 +1,37 @@
 // src/utils/formPersistence.ts
-import { Dayjs } from 'dayjs';
-import { CategoryType } from '../components/AddItem/SizesQuantityForm';
+import dayjs from 'dayjs'; // Import dayjs for conversion
+import {
+  ProductDetailsFormData,
+  SizesQuantityData,
+  PurchaseDetailsData,
+  ImageFile,
+  SizeEntry,
+  AddItemPayload,
+  Item,
+  CategoryType
+} from '../types/types';
 
 interface FormState {
   activeStep: number;
-  productDetails: {
-    category: CategoryType;
-    productName: string;
-    reference: string;
-    colorway: string;
-    brand: string;
-  };
-  sizesQuantity: {
-    sizeSystem: string;
-    selectedSizes: Array<{
-      system: string;
-      size: string;
-      quantity: string;
-    }>;
-  };
-  purchaseDetails: {
-    purchasePrice: string;
-    purchaseCurrency: string;
-    shippingPrice: string;
-    shippingCurrency: string;
-    marketPrice: string;
-    purchaseDate: string | null; // We'll store date as ISO string
-    purchaseLocation: string;
-    condition: string;
-    notes: string;
-    orderID: string;
-    tags: string[];
-    taxType: 'none' | 'vat' | 'salesTax';
-    vatPercentage: string;
-    salesTaxPercentage: string;
+  productDetails: ProductDetailsFormData;
+  sizesQuantity: SizesQuantityData;
+  purchaseDetails: PurchaseDetailsData;
+}
+
+interface StorageFormState {
+  activeStep: number;
+  productDetails: ProductDetailsFormData;
+  sizesQuantity: SizesQuantityData;
+  purchaseDetails: Omit<PurchaseDetailsData, 'purchaseDate'> & {
+    purchaseDate: string | null;
   };
 }
 
 const FORM_STORAGE_KEY = 'addItemFormData';
 
-export const saveFormData = (formData: FormState) => {
+export const saveFormData = (formData: StorageFormState) => {
   try {
-    // Validate date before saving
-    const validatedData = {
-      ...formData,
-      purchaseDetails: {
-        ...formData.purchaseDetails,
-        purchaseDate: formData.purchaseDetails.purchaseDate || null
-      }
-    };
-    
-    const serializedData = JSON.stringify(validatedData);
-    localStorage.setItem(FORM_STORAGE_KEY, serializedData);
+    localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(formData));
   } catch (error) {
     console.error('Error saving form data:', error);
   }
@@ -59,23 +39,17 @@ export const saveFormData = (formData: FormState) => {
 
 export const loadFormData = (): FormState | null => {
   try {
-    const serializedData = localStorage.getItem(FORM_STORAGE_KEY);
-    if (!serializedData) return null;
+    const data = localStorage.getItem(FORM_STORAGE_KEY);
+    if (!data) return null;
+    const parsed: StorageFormState = JSON.parse(data);
     
-    const parsedData = JSON.parse(serializedData);
-    
-    // Ensure date is properly handled
-    if (parsedData.purchaseDetails && parsedData.purchaseDetails.purchaseDate) {
-      try {
-        // Validate the date string
-        new Date(parsedData.purchaseDetails.purchaseDate).toISOString();
-      } catch (error) {
-        console.error('Invalid date found in stored data');
-        parsedData.purchaseDetails.purchaseDate = null;
+    return {
+      ...parsed,
+      purchaseDetails: {
+        ...parsed.purchaseDetails,
+        purchaseDate: parsed.purchaseDetails.purchaseDate ? dayjs(parsed.purchaseDetails.purchaseDate) : null
       }
-    }
-    
-    return parsedData;
+    } as FormState;
   } catch (error) {
     console.error('Error loading form data:', error);
     return null;

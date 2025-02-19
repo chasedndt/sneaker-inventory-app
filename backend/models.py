@@ -42,7 +42,8 @@ class Item(db.Model):
             'productName': self.product_name,
             'brand': self.brand,
             'purchasePrice': self.purchase_price,
-            'purchaseDate': self.purchase_date.isoformat() if self.purchase_date else None
+            'purchaseDate': self.purchase_date.isoformat() if self.purchase_date else None,
+            'images': [image.filename for image in self.images]
         }
 
 class Size(db.Model):

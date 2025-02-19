@@ -58,7 +58,7 @@ const Sidebar: React.FC = () => {
           <Avatar sx={{ mr: 2, bgcolor: '#1976d2' }}>T</Avatar>
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-              Hello Tranton
+              Hype List
             </Typography>
             <Typography variant="caption" color="primary">
               Your Plan: Professional

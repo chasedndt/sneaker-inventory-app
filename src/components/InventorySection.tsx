@@ -1,102 +1,172 @@
 import React from 'react';
 import { 
-  Paper, 
-  Typography, 
   Box, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow,
+  Card,
+  CardMedia,
+  CardContent,
+  Typography,
+  Chip,
+  Stack,
+  FormControl,
   Select,
   MenuItem,
-  FormControl,
   InputLabel,
-  CircularProgress
+  CircularProgress,
+  useTheme
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import { Item } from '../services/api';
+import { api, Item } from '../services/api';
 
-// Props interface: the InventorySection now receives real items as a prop.
 interface InventorySectionProps {
   items: Item[];
 }
 
-// Helper function to calculate percentage change
-const calculateChange = (purchasePrice: number, currentValue: number): number => {
-  return purchasePrice === 0 ? 0 : ((currentValue - purchasePrice) / purchasePrice) * 100;
-};
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2VlZSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIGZpbGw9IiM5OTkiIHRleHQ9ImFuY2hvciIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
 
 const InventorySection: React.FC<InventorySectionProps> = ({ items }) => {
-  // If there are no items yet, show a loader
+  const theme = useTheme();
+
+  console.log('All items:', items);  // Debug log
+
   if (items.length === 0) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Paper sx={{ p: 3, borderRadius: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ 
+      width: '100%',
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 2
+    }}>
+      {/* Header */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        p: 2
+      }}>
         <Typography variant="h6">Your Inventory</Typography>
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Sort by</InputLabel>
-          <Select defaultValue="quantity" label="Sort by">
-            <MenuItem value="quantity">Quantity</MenuItem>
-            <MenuItem value="value">Value</MenuItem>
-            <MenuItem value="change">Change</MenuItem>
+          <Select defaultValue="recent" label="Sort by">
+            <MenuItem value="recent">Most Recent</MenuItem>
+            <MenuItem value="value">Highest Value</MenuItem>
+            <MenuItem value="change">Biggest Change</MenuItem>
           </Select>
         </FormControl>
       </Box>
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Item</TableCell>
-              <TableCell>Brand</TableCell>
-              <TableCell align="right">Purchase Price</TableCell>
-              <TableCell align="right">Current Value</TableCell>
-              <TableCell align="right">Change</TableCell>
-              <TableCell>Purchase Date</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {items.map((item) => {
-              // For demonstration, we're using purchasePrice as the current value.
-              // You can later replace it with actual current market value.
-              const currentValue = item.purchasePrice;
-              const change = calculateChange(item.purchasePrice, currentValue);
-              return (
-                <TableRow key={item.id}>
-                  <TableCell>{item.productName}</TableCell>
-                  <TableCell>{item.brand}</TableCell>
-                  <TableCell align="right">${item.purchasePrice.toFixed(2)}</TableCell>
-                  <TableCell align="right">${currentValue.toFixed(2)}</TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      color: change >= 0 ? 'success.main' : 'error.main',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-end',
-                      gap: 0.5
-                    }}
-                  >
-                    {change >= 0 ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
-                    {change.toFixed(1)}%
-                  </TableCell>
-                  <TableCell>{new Date(item.purchaseDate).toLocaleDateString()}</TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Paper>
+
+      {/* Inventory Cards */}
+      <Stack spacing={2} sx={{ px: 2 }}>
+        {items.map((item) => {
+          console.log('Item data:', {
+            id: item.id,
+            images: item.images,
+            imageUrl: item.images?.[0] ? api.getItemImage(item.images[0]) : PLACEHOLDER_IMAGE
+          });
+
+          const totalValue = item.purchasePrice; // Replace with actual market value
+          const change = ((totalValue - item.purchasePrice) / item.purchasePrice) * 100;
+          const isPositive = change >= 0;
+
+          const imageUrl = item.images?.[0] ? api.getItemImage(item.images[0]) : PLACEHOLDER_IMAGE;
+          console.log('Image URL for item:', item.id, imageUrl);  // Debug log
+
+          return (
+            <Card 
+              key={item.id}
+              sx={{ 
+                display: 'flex',
+                flexDirection: 'column',
+                borderRadius: 2,
+                overflow: 'hidden',
+                boxShadow: theme.shadows[1]
+              }}
+            >
+              {/* Image Section */}
+              <CardMedia
+                component="img"
+                height="160"
+                image={imageUrl}
+                alt={item.productName}
+                sx={{ 
+                  objectFit: 'cover',
+                  bgcolor: 'grey.100'
+                }}
+              />
+
+              {/* Content Section */}
+              <CardContent sx={{ p: 2 }}>
+                <Stack spacing={1}>
+                  <Typography variant="subtitle1" fontWeight="bold" noWrap>
+                    {item.productName}
+                  </Typography>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {item.brand}
+                    </Typography>
+                    <Chip 
+                      size="small"
+                      label={item.sizesQuantity?.[0]?.size || 'N/A'}
+                      sx={{ bgcolor: 'grey.100' }}
+                    />
+                  </Box>
+
+                  <Box sx={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        Purchase Price
+                      </Typography>
+                      <Typography variant="subtitle2">
+                        ${item.purchasePrice.toFixed(2)}
+                      </Typography>
+                    </Stack>
+
+                    <Stack alignItems="flex-end">
+                      <Typography variant="caption" color="text.secondary">
+                        Current Value
+                      </Typography>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center',
+                        gap: 0.5,
+                        color: isPositive ? 'success.main' : 'error.main'
+                      }}>
+                        {isPositive ? 
+                          <TrendingUpIcon fontSize="small" /> : 
+                          <TrendingDownIcon fontSize="small" />
+                        }
+                        <Typography 
+                          variant="subtitle2"
+                          component="span"
+                          sx={{ 
+                            color: isPositive ? 'success.main' : 'error.main'
+                          }}
+                        >
+                          ${totalValue.toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </Stack>
+    </Box>
   );
 };
 
