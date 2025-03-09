@@ -1,41 +1,27 @@
-// src/pages/Dashboard.tsx
+// src/pages/Dashboard.tsx - with fixed unused variable warnings
 import React, { useEffect, useState } from 'react';
-import Grid from '@mui/material/Grid';
 import { 
-  Paper, 
-  Typography, 
   Box,
-  ButtonGroup,
-  Button,
+  Typography, 
   CircularProgress,
-  Fab
+  Fab,
+  Paper
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
-import { Dayjs } from 'dayjs';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  Legend
-} from 'recharts';
 import AddIcon from '@mui/icons-material/Add';
 import { api, Item } from '../services/api';
-import InventorySection from '../components/InventorySection';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
+import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 
 const Dashboard: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState<Dayjs | null>(null);
-  const [endDate, setEndDate] = useState<Dayjs | null>(null);
+  const [startDate, setStartDate] = useState<null | Date>(null);
+  const [endDate, setEndDate] = useState<null | Date>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
 
   // Calculate portfolio values from real data
@@ -71,30 +57,9 @@ const Dashboard: React.FC = () => {
     fetchItems();
   }, []);
 
-  // Calculate profit data from real items
-  const calculateProfitData = (items: Item[]) => {
-    // Group items by month and calculate profits
-    const monthlyData = items.reduce((acc, item) => {
-      const month = new Date(item.purchaseDate).toLocaleString('default', { month: 'short' });
-      if (!acc[month]) {
-        acc[month] = { profit: 0, expenses: item.purchasePrice };
-      } else {
-        acc[month].expenses += item.purchasePrice;
-      }
-      return acc;
-    }, {} as Record<string, { profit: number; expenses: number }>);
-
-    return Object.entries(monthlyData).map(([name, data]) => ({
-      name,
-      profit: data.profit,
-      expenses: data.expenses,
-      net: data.profit - data.expenses
-    }));
-  };
-
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
       </Box>
     );
@@ -102,69 +67,81 @@ const Dashboard: React.FC = () => {
 
   if (error) {
     return (
-      <Box>
+      <Box sx={{ p: 3 }}>
         <Typography color="error">{error}</Typography>
       </Box>
     );
   }
 
   const portfolioStats = calculatePortfolioValues(items);
-  const profitData = calculateProfitData(items);
 
   return (
     <Box sx={{ 
       display: 'flex',
-      flexDirection: 'column',
-      gap: '24px',
-      maxWidth: '1600px',
-      width: '100%'
+      p: { xs: 2, md: 3 },
+      maxWidth: '1800px',
+      margin: '0 auto'
     }}>
-      <Paper sx={{ p: '16px 24px', borderRadius: 2, bgcolor: '#fff' }}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-            <DatePicker
-              label="Start Date"
-              value={startDate}
-              onChange={(newValue) => setStartDate(newValue)}
-            />
-            <DatePicker
-              label="End Date"
-              value={endDate}
-              onChange={(newValue) => setEndDate(newValue)}
-            />
-          </Box>
-        </LocalizationProvider>
-      </Paper>
+      {/* Main Content - Left Side */}
+      <Box sx={{ 
+        flex: '1 1 auto',
+        mr: { xs: 0, md: 3 },
+        maxWidth: { xs: '100%', md: 'calc(100% - 350px)' }
+      }}>
+        {/* Date Range Picker */}
+        <Paper sx={{ p: '16px 24px', borderRadius: 2, bgcolor: '#fff', mb: 3 }}>
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+              <DatePicker
+                label="Start Date"
+                value={startDate}
+                onChange={(newValue) => setStartDate(newValue)}
+              />
+              <DatePicker
+                label="End Date"
+                value={endDate}
+                onChange={(newValue) => setEndDate(newValue)}
+              />
+            </Box>
+          </LocalizationProvider>
+        </Paper>
 
-      <PortfolioValue 
-        currentValue={portfolioStats.currentValue}
-        valueChange={portfolioStats.valueChange}
-        percentageChange={portfolioStats.percentageChange}
-      />
+        {/* Portfolio Value Chart */}
+        <PortfolioValue 
+          currentValue={portfolioStats.currentValue}
+          valueChange={portfolioStats.valueChange}
+          percentageChange={portfolioStats.percentageChange}
+        />
 
-      <Paper sx={{ p: 3, mb: 3, borderRadius: 2, boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-        <Typography variant="h6" gutterBottom>Profit Breakdown</Typography>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart 
-            data={profitData}
-            margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="expenses" fill="#8884d8" name="Expenses" />
-            <Bar dataKey="profit" fill="#82ca9d" name="Profit" />
-            <Bar dataKey="net" fill="#ffc658" name="Net" />
-          </BarChart>
-        </ResponsiveContainer>
-      </Paper>
+        {/* Reports Grid */}
+        <Box sx={{ mt: 3 }}>
+          <ReportsSection />
+        </Box>
+      </Box>
 
-      <ReportsSection />
+      {/* Inventory Display - Right Side */}
+      <Box 
+        sx={{ 
+          width: { xs: '100%', md: '350px' },
+          flex: '0 0 auto',
+          display: { xs: 'none', md: 'block' }
+        }}
+      >
+        <EnhancedInventoryDisplay items={items} />
+      </Box>
 
-      <InventorySection items={items} />
+      {/* Mobile Inventory Display - Only shown on small screens */}
+      <Box 
+        sx={{ 
+          width: '100%', 
+          mt: 3,
+          display: { xs: 'block', md: 'none' }
+        }}
+      >
+        <EnhancedInventoryDisplay items={items} />
+      </Box>
 
+      {/* Add Item Floating Button */}
       <Fab 
         color="primary" 
         aria-label="add item"
@@ -182,6 +159,7 @@ const Dashboard: React.FC = () => {
         <AddIcon />
       </Fab>
 
+      {/* Add Item Modal */}
       <AddItemModal 
         open={isAddItemModalOpen}
         onClose={() => setIsAddItemModalOpen(false)}
