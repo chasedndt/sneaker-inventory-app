@@ -4,3 +4,27 @@
 2025-03-11 20:47:45,318 - INFO - Serving image: 1_1741547127_Screenshot_440.png
 2025-03-11 20:50:20,450 - INFO - Image request for: 2_1741726220_Screenshot_440.png
 2025-03-11 20:50:20,451 - INFO - Serving image: 2_1741726220_Screenshot_440.png
+2025-03-11 21:12:40,644 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:12:40,645 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:12:40,657 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:12:40,658 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:12:40,681 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:12:40,682 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:12:40,689 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:12:40,690 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:30,090 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:17:30,090 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:30,100 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:17:30,100 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:31,957 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:17:31,957 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:31,964 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:17:31,964 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:34,158 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:17:34,158 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:34,165 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:17:34,166 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:35,310 - INFO - Image check request for: 2_1741726220_Screenshot_440.png
+2025-03-11 21:17:35,311 - INFO - Image check: 2_1741726220_Screenshot_440.png exists, size: 206325 bytes
+2025-03-11 21:17:35,327 - INFO - Image check request for: 1_1741547127_Screenshot_440.png
+2025-03-11 21:17:35,327 - INFO - Image check: 1_1741547127_Screenshot_440.png exists, size: 206325 bytes

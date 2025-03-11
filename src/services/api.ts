@@ -58,7 +58,7 @@ export interface Item {
   purchasePrice: number;
   purchaseDate: string;
   images?: string[]; // Array of image filenames
-  imageUrl?: string; // Convenience property for first image URL
+  imageUrl?: string; // Changed from string | null to string | undefined
 }
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';

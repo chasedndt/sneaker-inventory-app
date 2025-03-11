@@ -11,12 +11,12 @@ const API_BASE_URL = 'http://127.0.0.1:5000/api';
  * 
  * @param filename The filename of the image
  * @param itemId Optional item ID for logging purposes
- * @returns The full URL for the image, or null if no filename provided
+ * @returns The full URL for the image, or undefined if no filename provided
  */
-export const getImageUrl = (filename: string | undefined, itemId?: number): string | null => {
+export const getImageUrl = (filename: string | undefined, itemId?: number): string | undefined => {
   if (!filename) {
     console.log(`❌ No image filename provided${itemId ? ` for item ${itemId}` : ''}`);
-    return null;
+    return undefined; // Changed from null to undefined
   }
   
   return `${API_BASE_URL}/uploads/${filename}`;
@@ -28,7 +28,7 @@ export const getImageUrl = (filename: string | undefined, itemId?: number): stri
  * @param filename The filename to check
  * @returns Promise<boolean> indicating if the image exists
  */
-export const checkImageExists = async (filename: string): Promise<boolean> => {
+export const checkImageExists = async (filename: string | undefined): Promise<boolean> => {
   if (!filename) {
     console.error('❌ Empty filename provided to checkImageExists');
     return false;
