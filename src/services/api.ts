@@ -1,5 +1,6 @@
-// src/services/api.ts - with detailed error logging
+// src/services/api.ts
 import { CategoryType } from '../components/AddItem/SizesQuantityForm';
+import { getImageUrl, safeImageUrl } from '../utils/imageUtils';
 
 interface ImageFile extends File {
   preview?: string;
@@ -48,7 +49,7 @@ interface AddItemFormData {
   purchaseDetails: PurchaseDetailsData;
 }
 
-// New interface for items received from backend
+// Interface for items received from backend
 export interface Item {
   id: number;
   category: string;
@@ -57,53 +58,31 @@ export interface Item {
   purchasePrice: number;
   purchaseDate: string;
   images?: string[]; // Array of image filenames
+  imageUrl?: string; // Convenience property for first image URL
 }
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
-// Helper function to construct proper image URLs with enhanced logging
-export const getItemImageUrl = (filename: string | undefined, itemId?: number): string | null => {
-  if (!filename) {
-    console.log(`No image filename provided for item ${itemId || 'unknown'}`);
-    return null;
-  }
-  
-  // Try console logging the API endpoint to help debugging
-  const imageUrl = `${API_BASE_URL}/uploads/${filename}`;
-  console.log(`Item ${itemId || 'unknown'}: Constructed image URL: ${imageUrl} for filename: ${filename}`);
-  
-  // Try to fetch the image URL to see if it resolves
-  fetch(imageUrl, { method: 'HEAD' })
-    .then(response => {
-      console.log(`Image URL check for ${filename}: ${response.status} ${response.statusText}`);
-    })
-    .catch(error => {
-      console.error(`Image URL fetch error for ${filename}:`, error);
-    });
-  
-  return imageUrl;
-};
-
 export const api = {
   testConnection: async () => {
     try {
-      console.log('Testing connection to API endpoint...');
+      console.log('🔄 Testing connection to API endpoint...');
       const response = await fetch(`${API_BASE_URL}/test`);
       if (!response.ok) {
-        console.error(`API test connection failed with status: ${response.status}`);
+        console.error(`❌ API test connection failed with status: ${response.status}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      console.log('API connection test successful');
+      console.log('✅ API connection test successful');
       return await response.json();
     } catch (error) {
-      console.error('Connection test failed:', error);
+      console.error('💥 Connection test failed:', error);
       throw error;
     }
   },
 
   addItem: async (formData: AddItemFormData, images: ImageFile[]) => {
     try {
-      console.log('Preparing to add item...');
+      console.log('🔄 Preparing to add item...');
       // Create a FormData object for multipart request
       const multipartFormData = new FormData();
       
@@ -112,15 +91,15 @@ export const api = {
       
       // Add all image files
       images.forEach((file, index) => {
-        console.log(`Adding image ${index + 1}/${images.length} to form data:`, file.name);
+        console.log(`📸 Adding image ${index + 1}/${images.length} to form data:`, file.name);
         multipartFormData.append('images', file);
       });
       
-      console.log('Submitting form data:', formData);
-      console.log('Submitting images:', images.length);
+      console.log('📦 Submitting form data:', formData);
+      console.log(`📊 Submitting ${images.length} images`);
       
       // Make the request
-      console.log('Sending request to API...');
+      console.log('🚀 Sending request to API...');
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'POST',
         credentials: 'include',
@@ -129,84 +108,140 @@ export const api = {
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        console.error('Error response data:', errorData);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ Error response data:', errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('💥 Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
       }
       
       const responseData = await response.json();
-      console.log('Item added successfully:', responseData);
+      console.log('✅ Item added successfully:', responseData);
       return responseData;
     } catch (error) {
-      console.error('Error in addItem:', error);
+      console.error('💥 Error in addItem:', error);
       throw error;
     }
   },
 
   getItems: async () => {
     try {
-      console.log('Fetching items from API...');
+      console.log('🔄 Fetching items from API...');
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'GET',
         credentials: 'include',
       });
       
       if (!response.ok) {
-        console.error(`API getItems failed with status: ${response.status}`);
+        console.error(`❌ API getItems failed with status: ${response.status}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const items = await response.json();
-      console.log('Items received from API:', items.length);
+      console.log(`✅ Received ${items.length} items from API`);
       
-      // Log detailed information about the images in the response
-      items.forEach((item: any, index: number) => {
-        console.log(`Item ${index} (${item.id}): ${item.productName}`);
-        if (item.images && Array.isArray(item.images)) {
-          console.log(`  - Has ${item.images.length} images: ${JSON.stringify(item.images)}`);
-          item.images.forEach((img: string, imgIndex: number) => {
-            const imgUrl = `${API_BASE_URL}/uploads/${img}`;
-            console.log(`    Image ${imgIndex}: ${img} -> ${imgUrl}`);
-            
-            // Check if image URL is valid
-            fetch(imgUrl, { method: 'HEAD' })
-              .then(imgResponse => {
-                console.log(`    Image URL status: ${imgResponse.status} ${imgResponse.statusText}`);
-              })
-              .catch(imgError => {
-                console.error(`    Image URL error:`, imgError);
-              });
-          });
-        } else {
-          console.log(`  - No images or invalid image data: ${JSON.stringify(item.images)}`);
+      // Enhance items with image URLs for convenience
+      const itemsWithImageUrls = items.map((item: Item) => {
+        if (item.images && item.images.length > 0) {
+          const imageUrl = getImageUrl(item.images[0], item.id);
+          console.log(`🖼️ Item ${item.id}: Found image ${item.images[0]}, URL: ${imageUrl}`);
+          return {
+            ...item,
+            imageUrl
+          };
         }
+        console.log(`⚠️ Item ${item.id}: No images found`);
+        return item;
       });
       
-      return items;
+      return itemsWithImageUrls;
     } catch (error) {
-      console.error('Error in getItems:', error);
+      console.error('💥 Error in getItems:', error);
+      throw error;
+    }
+  },
+
+  // Get a specific item by ID
+  getItem: async (id: number) => {
+    try {
+      console.log(`🔄 Fetching item with ID ${id} from API...`);
+      const response = await fetch(`${API_BASE_URL}/items/${id}`, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ API getItem failed with status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const item = await response.json();
+      console.log(`✅ Retrieved item ${id} details:`, item);
+      
+      // Add convenience property for image URL
+      if (item.images && item.images.length > 0) {
+        item.imageUrl = getImageUrl(item.images[0], id);
+        console.log(`🖼️ Item ${id}: Primary image URL: ${item.imageUrl}`);
+      } else {
+        console.log(`⚠️ Item ${id}: No images available`);
+      }
+      
+      return item;
+    } catch (error) {
+      console.error(`💥 Error fetching item ${id}:`, error);
       throw error;
     }
   },
 
   getItemImage: (filename: string): string => {
-    // Log the image URL being requested
-    const imageUrl = `${API_BASE_URL}/uploads/${filename}`;
-    console.log(`getItemImage called for: ${filename}, URL: ${imageUrl}`);
+    if (!filename) {
+      console.error('❌ Empty filename provided to getItemImage');
+      return '/placeholder-image-svg.svg';
+    }
+    
+    const imageUrl = safeImageUrl(API_BASE_URL, filename);
+    console.log(`🖼️ getItemImage called for: ${filename}, URL: ${imageUrl}`);
     return imageUrl;
   },
   
   checkImageExists: async (filename: string): Promise<boolean> => {
     try {
-      console.log(`Checking if image exists: ${filename}`);
-      const response = await fetch(`${API_BASE_URL}/check-image/${filename}`);
-      const data = await response.json();
+      if (!filename) {
+        console.error('❌ Empty filename provided to checkImageExists');
+        return false;
+      }
       
-      console.log(`Image check result:`, data);
+      console.log(`🔍 Checking if image exists: ${filename}`);
+      const response = await fetch(`${API_BASE_URL}/check-image/${filename}`);
+      
+      if (!response.ok) {
+        console.error(`❌ Image check endpoint returned ${response.status} for ${filename}`);
+        return false;
+      }
+      
+      const data = await response.json();
+      console.log(`${data.exists ? '✅' : '❌'} Image check result for ${filename}:`, data);
       return data.exists || false;
     } catch (error) {
-      console.error(`Error checking image existence for ${filename}:`, error);
+      console.error(`💥 Error checking image existence for ${filename}:`, error);
       return false;
+    }
+  },
+  
+  // Refresh item data after changes
+  refreshItems: async () => {
+    try {
+      console.log('🔄 Refreshing items data...');
+      const items = await api.getItems();
+      console.log(`✅ Refreshed ${items.length} items`);
+      return items;
+    } catch (error) {
+      console.error('💥 Error refreshing items:', error);
+      throw error;
     }
   }
 };

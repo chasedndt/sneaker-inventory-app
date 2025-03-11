@@ -1,15 +1,19 @@
-// src/pages/Dashboard.tsx - with fixed unused variable warnings
-import React, { useEffect, useState } from 'react';
+// src/pages/Dashboard.tsx
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Box,
   Typography, 
   CircularProgress,
   Fab,
-  Paper
+  Paper,
+  Snackbar,
+  Alert,
+  Button
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import AddIcon from '@mui/icons-material/Add';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { api, Item } from '../services/api';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
@@ -19,56 +23,108 @@ import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 const Dashboard: React.FC = () => {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startDate, setStartDate] = useState<null | Date>(null);
   const [endDate, setEndDate] = useState<null | Date>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success' as 'success' | 'info' | 'warning' | 'error'
+  });
 
   // Calculate portfolio values from real data
   const calculatePortfolioValues = (items: Item[]) => {
+    console.log('📊 Calculating portfolio statistics...');
     const currentValue = items.reduce((sum, item) => sum + item.purchasePrice, 0);
-    const previousValue = currentValue * 0.8; // Example calculation
+    const previousValue = currentValue * 0.95; // Example calculation (5% growth assumed)
     const valueChange = currentValue - previousValue;
-    const percentageChange = (valueChange / previousValue) * 100;
+    const percentageChange = previousValue === 0 ? 0 : (valueChange / previousValue) * 100;
 
     return {
       currentValue,
       valueChange,
-      percentageChange
+      percentageChange: Number(percentageChange.toFixed(1))
     };
   };
 
-  // Fetch real data from API
-  useEffect(() => {
-    const fetchItems = async () => {
-      try {
+  // Fetch items from API
+  const fetchItems = useCallback(async (showRefreshing = false) => {
+    try {
+      if (showRefreshing) {
+        setRefreshing(true);
+      } else {
         setLoading(true);
-        const data = await api.getItems();
-        setItems(data);
-        setError(null);
-      } catch (err) {
-        console.error('Error fetching items:', err);
-        setError('Failed to load inventory data');
-      } finally {
-        setLoading(false);
       }
-    };
-
-    fetchItems();
+      
+      console.log('🔄 Fetching inventory items...');
+      const data = await api.getItems();
+      console.log(`✅ Received ${data.length} items from API`);
+      
+      setItems(data);
+      setError(null);
+      
+      // Show success message if refreshing
+      if (showRefreshing) {
+        setSnackbar({
+          open: true,
+          message: 'Inventory refreshed successfully',
+          severity: 'success'
+        });
+      }
+    } catch (err: any) {
+      console.error('💥 Error fetching items:', err);
+      setError(`Failed to load inventory data: ${err.message}`);
+      setSnackbar({
+        open: true,
+        message: `Error loading data: ${err.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
+
+  // Initial data load
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  // Handle refreshing data
+  const handleRefresh = () => {
+    fetchItems(true);
+  };
+
+  // Handle adding a new item
+  const handleAddItemModalClose = () => {
+    setIsAddItemModalOpen(false);
+    fetchItems();
+    setSnackbar({
+      open: true,
+      message: 'Item added successfully!',
+      severity: 'success'
+    });
+  };
+
+  // Close snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbar(prev => ({ ...prev, open: false }));
+  };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        gap: 2
+      }}>
         <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
+        <Typography color="text.secondary">Loading your inventory...</Typography>
       </Box>
     );
   }
@@ -78,6 +134,7 @@ const Dashboard: React.FC = () => {
   return (
     <Box sx={{ 
       display: 'flex',
+      flexDirection: { xs: 'column', md: 'row' },
       p: { xs: 2, md: 3 },
       maxWidth: '1800px',
       margin: '0 auto'
@@ -90,20 +147,36 @@ const Dashboard: React.FC = () => {
       }}>
         {/* Date Range Picker */}
         <Paper sx={{ p: '16px 24px', borderRadius: 2, bgcolor: '#fff', mb: 3 }}>
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-              <DatePicker
-                label="Start Date"
-                value={startDate}
-                onChange={(newValue) => setStartDate(newValue)}
-              />
-              <DatePicker
-                label="End Date"
-                value={endDate}
-                onChange={(newValue) => setEndDate(newValue)}
-              />
-            </Box>
-          </LocalizationProvider>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <DatePicker
+                  label="Start Date"
+                  value={startDate}
+                  onChange={(newValue) => setStartDate(newValue)}
+                />
+                <DatePicker
+                  label="End Date"
+                  value={endDate}
+                  onChange={(newValue) => setEndDate(newValue)}
+                />
+              </Box>
+            </LocalizationProvider>
+            
+            <Button
+              startIcon={<RefreshIcon />}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              variant="outlined"
+              sx={{ minWidth: 120 }}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </Button>
+          </Box>
         </Paper>
 
         {/* Portfolio Value Chart */}
@@ -162,8 +235,24 @@ const Dashboard: React.FC = () => {
       {/* Add Item Modal */}
       <AddItemModal 
         open={isAddItemModalOpen}
-        onClose={() => setIsAddItemModalOpen(false)}
+        onClose={handleAddItemModalClose}
       />
+
+      {/* Notification Snackbar */}
+      <Snackbar 
+        open={snackbar.open} 
+        autoHideDuration={6000} 
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={handleCloseSnackbar} 
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

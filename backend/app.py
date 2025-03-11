@@ -66,7 +66,7 @@ def create_app():
             
             if exists:
                 stats = os.stat(filepath)
-                image_logger.info(f"Image check: {filename} exists, size: {stats.st_size} bytes")
+                image_logger.info(f"✅ Image check: {filename} exists, size: {stats.st_size} bytes")
                 return jsonify({
                     'exists': True,
                     'filename': filename,
@@ -79,9 +79,9 @@ def create_app():
                 # Log the complete uploads directory to help troubleshoot
                 try:
                     files_in_directory = os.listdir(app.config['UPLOAD_FOLDER'])
-                    image_logger.warning(f"File not found: {filename}, available files: {files_in_directory}")
+                    image_logger.warning(f"❌ File not found: {filename}, available files: {files_in_directory}")
                 except Exception as dir_err:
-                    image_logger.error(f"Error listing directory: {str(dir_err)}")
+                    image_logger.error(f"🚫 Error listing directory: {str(dir_err)}")
                     files_in_directory = []
                 
                 return jsonify({
@@ -92,7 +92,7 @@ def create_app():
                     'files_in_directory': files_in_directory[:10]  # Limit to first 10 files
                 }), 404
         except Exception as e:
-            image_logger.error(f"Error checking image {filename}: {str(e)}")
+            image_logger.error(f"💥 Error checking image {filename}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/uploads/<filename>')
@@ -101,18 +101,46 @@ def create_app():
         Serve uploaded images with detailed logging
         """
         try:
-            image_logger.info(f"Image request for: {filename}")
+            image_logger.info(f"📷 Image request for: {filename}")
             # Check if file exists before serving
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             if not os.path.exists(filepath):
-                image_logger.warning(f"Requested image not found: {filename}")
+                image_logger.warning(f"🔍 Requested image not found: {filename}")
                 return jsonify({'error': 'Image not found'}), 404
                 
             # Log successful request
-            image_logger.info(f"Serving image: {filename}")
+            image_logger.info(f"✅ Serving image: {filename}")
             return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
         except Exception as e:
-            image_logger.error(f"Error serving image {filename}: {str(e)}")
+            image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/items/<int:item_id>', methods=['GET'])
+    def get_item(item_id):
+        """
+        Get a single item by ID with its images.
+        """
+        try:
+            item = Item.query.get(item_id)
+            if not item:
+                logger.warning(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': 'Item not found'}), 404
+            
+            logger.info(f"✅ Retrieved item {item_id} from database")
+            
+            # Get the item's images
+            images = Image.query.filter_by(item_id=item.id).all()
+            image_filenames = [img.filename for img in images]
+            
+            # Create a detailed response with images
+            item_data = item.to_dict()
+            item_data['images'] = image_filenames
+            
+            logger.info(f"📸 Item {item_id} has {len(image_filenames)} images: {image_filenames}")
+            
+            return jsonify(item_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/items', methods=['POST'])
@@ -125,15 +153,15 @@ def create_app():
         """
         try:
             # Get the form data and files from the multipart request
-            logger.info("Add item endpoint hit")
+            logger.info("📝 Add item endpoint hit")
             
             # Check if JSON data is provided in the 'data' field
             if 'data' not in request.form:
-                logger.error("No 'data' field in request.form")
+                logger.error("❌ No 'data' field in request.form")
                 return jsonify({'error': 'Missing item data'}), 400
                 
             data = json.loads(request.form['data'])
-            logger.info(f"Received data: {data}")
+            logger.info(f"📦 Received data: {data}")
             
             # Extract product details
             product_details = data.get('productDetails', {})
@@ -148,9 +176,9 @@ def create_app():
                 else:
                     purchase_date = datetime.now()
                     
-                logger.info(f"Converted purchase date: {purchase_date}")
+                logger.info(f"📅 Converted purchase date: {purchase_date}")
             except (ValueError, TypeError) as e:
-                logger.error(f"Purchase date error: {str(e)}")
+                logger.error(f"❌ Purchase date error: {str(e)}")
                 return jsonify({'error': 'Invalid purchase date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
             
             # Create new item
@@ -212,11 +240,12 @@ def create_app():
                         )
                         db.session.add(new_image)
                         uploaded_images.append(filename)
+                        logger.info(f"📸 Saved image: {filename} for item {new_item.id}")
             
             # Commit all changes to the database
             db.session.commit()
             
-            logger.info(f"Item added successfully with ID: {new_item.id}")
+            logger.info(f"✅ Item added successfully with ID: {new_item.id}")
             return jsonify({
                 'message': 'Item added successfully', 
                 'id': new_item.id,
@@ -226,28 +255,35 @@ def create_app():
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"Error processing request: {str(e)}")
+            logger.error(f"💥 Error processing request: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/items', methods=['GET'])
     def get_items():
         try:
             items = Item.query.all()
-            logger.info(f"Retrieved {len(items)} items from database")
+            logger.info(f"📋 Retrieved {len(items)} items from database")
             
-            # Log some detailed info about the first few items for debugging
-            for i, item in enumerate(items[:3]):
-                if i == 0:  # Only log details for the first item
-                    logger.info(f"Sample item: {item.to_dict()}")
-                    # Check if this item has images
-                    images = Image.query.filter_by(item_id=item.id).all()
-                    logger.info(f"Item {item.id} has {len(images)} images")
-                    for img in images:
-                        logger.info(f"  Image {img.id}: {img.filename} at {img.path}")
+            # Create response with all item data including images
+            item_list = []
+            for item in items:
+                item_data = item.to_dict()
                 
-            return jsonify([item.to_dict() for item in items]), 200
+                # Log info about the first few items
+                if len(item_list) < 3:
+                    logger.info(f"📦 Item {item.id} details: {item_data}")
+                    
+                    # Log image info
+                    if 'images' in item_data and item_data['images']:
+                        logger.info(f"📸 Item {item.id} has {len(item_data['images'])} images: {item_data['images']}")
+                    else:
+                        logger.info(f"🖼️ Item {item.id} has no images")
+                
+                item_list.append(item_data)
+                
+            return jsonify(item_list), 200
         except Exception as e:
-            logger.error(f"Error fetching items: {str(e)}")
+            logger.error(f"💥 Error fetching items: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.before_request
@@ -265,6 +301,6 @@ def make_shell_context():
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
-    logger.info(f"Starting Flask application on http://127.0.0.1:5000")
-    logger.info(f"Upload directory: {app.config['UPLOAD_FOLDER']}")
+    logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
+    logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
     app.run(debug=True, host='127.0.0.1', port=5000)

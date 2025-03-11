@@ -36,14 +36,41 @@ class Item(db.Model):
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
 
     def to_dict(self):
-        return {
-            'id': self.id,
-            'category': self.category,
-            'productName': self.product_name,
-            'brand': self.brand,
-            'purchasePrice': self.purchase_price,
-            'purchaseDate': self.purchase_date.isoformat() if self.purchase_date else None
-        }
+        """
+        Create a dictionary representation of the item for API responses.
+        Now includes image filenames when available.
+        """
+        try:
+            # Get image filenames for this item
+            image_files = [img.filename for img in self.images] if self.images else []
+            
+            return {
+                'id': self.id,
+                'category': self.category,
+                'productName': self.product_name,
+                'reference': self.reference,
+                'colorway': self.colorway,
+                'brand': self.brand,
+                'purchasePrice': self.purchase_price,
+                'purchaseCurrency': self.purchase_currency,
+                'shippingPrice': self.shipping_price,
+                'marketPrice': self.market_price,
+                'purchaseDate': self.purchase_date.isoformat() if self.purchase_date else None,
+                'purchaseLocation': self.purchase_location,
+                'condition': self.condition,
+                'images': image_files,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+        except Exception as e:
+            # Add emoji for error identification 🔍
+            print(f"🔍 Error in Item.to_dict(): {str(e)}")
+            # Return a minimal dict with error info
+            return {
+                'id': self.id if hasattr(self, 'id') else None,
+                'productName': self.product_name if hasattr(self, 'product_name') else 'Unknown Item',
+                'error': f"Failed to serialize item: {str(e)}"
+            }
 
 class Size(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -60,11 +87,20 @@ class Image(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
-        return {
-            'id': self.id,
-            'filename': self.filename,
-            'item_id': self.item_id
-        }
+        try:
+            return {
+                'id': self.id,
+                'filename': self.filename,
+                'item_id': self.item_id,
+                'created_at': self.created_at.isoformat() if self.created_at else None
+            }
+        except Exception as e:
+            # Add emoji for error identification 📸
+            print(f"📸 Error in Image.to_dict(): {str(e)}")
+            return {
+                'id': self.id if hasattr(self, 'id') else None,
+                'error': f"Failed to serialize image: {str(e)}"
+            }
 
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
