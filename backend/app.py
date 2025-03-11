@@ -163,3 +163,108 @@ def create_app():
                 purchase_price=float(purchase_details.get('purchasePrice', 0)),
                 purchase_currency=purchase_details.get('purchaseCurrency', ''),
                 shipping_price=float(purchase_details.get('shippingPrice', 0) or 0),
+                shipping_currency=purchase_details.get('shippingCurrency', ''),
+                market_price=float(purchase_details.get('marketPrice', 0) or 0),
+                purchase_date=purchase_date,
+                purchase_location=purchase_details.get('purchaseLocation', ''),
+                condition=purchase_details.get('condition', ''),
+                notes=purchase_details.get('notes', ''),
+                order_id=purchase_details.get('orderID', ''),
+                tax_type=purchase_details.get('taxType', ''),
+                vat_percentage=float(purchase_details.get('vatPercentage', 0) or 0),
+                sales_tax_percentage=float(purchase_details.get('salesTaxPercentage', 0) or 0)
+            )
+            
+            db.session.add(new_item)
+            db.session.flush()  # Get the ID without committing
+            
+            # Add sizes if provided
+            if sizes_quantity:
+                for size_entry in sizes_quantity.get('selectedSizes', []):
+                    size = Size(
+                        item_id=new_item.id,
+                        system=size_entry.get('system', ''),
+                        size=size_entry.get('size', ''),
+                        quantity=int(size_entry.get('quantity', 1))
+                    )
+                    db.session.add(size)
+            
+            # Process image files if they were included in the request
+            uploaded_images = []
+            if 'images' in request.files:
+                files = request.files.getlist('images')
+                
+                for file in files:
+                    if file and allowed_file(file.filename):
+                        # Generate unique filename to avoid collisions
+                        original_filename = secure_filename(file.filename)
+                        filename = f"{new_item.id}_{int(time.time())}_{original_filename}"
+                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        
+                        # Save the file to disk
+                        file.save(filepath)
+                        
+                        # Create image record
+                        new_image = Image(
+                            filename=filename,
+                            path=filepath,
+                            item_id=new_item.id
+                        )
+                        db.session.add(new_image)
+                        uploaded_images.append(filename)
+            
+            # Commit all changes to the database
+            db.session.commit()
+            
+            logger.info(f"Item added successfully with ID: {new_item.id}")
+            return jsonify({
+                'message': 'Item added successfully', 
+                'id': new_item.id,
+                'images': uploaded_images,
+                'item': new_item.to_dict()
+            }), 201
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error processing request: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/items', methods=['GET'])
+    def get_items():
+        try:
+            items = Item.query.all()
+            logger.info(f"Retrieved {len(items)} items from database")
+            
+            # Log some detailed info about the first few items for debugging
+            for i, item in enumerate(items[:3]):
+                if i == 0:  # Only log details for the first item
+                    logger.info(f"Sample item: {item.to_dict()}")
+                    # Check if this item has images
+                    images = Image.query.filter_by(item_id=item.id).all()
+                    logger.info(f"Item {item.id} has {len(images)} images")
+                    for img in images:
+                        logger.info(f"  Image {img.id}: {img.filename} at {img.path}")
+                
+            return jsonify([item.to_dict() for item in items]), 200
+        except Exception as e:
+            logger.error(f"Error fetching items: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.before_request
+    def log_request_info():
+        logger.debug('Headers: %s', request.headers)
+        logger.debug('Body: %s', request.get_data())
+
+    return app
+
+app = create_app()
+
+@app.shell_context_processor
+def make_shell_context():
+    return {'db': db, 'Item': Item, 'Size': Size, 'Image': Image, 'Tag': Tag}
+
+if __name__ == '__main__':
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting Flask application on http://127.0.0.1:5000")
+    logger.info(f"Upload directory: {app.config['UPLOAD_FOLDER']}")
+    app.run(debug=True, host='127.0.0.1', port=5000)
