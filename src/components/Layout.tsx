@@ -1,13 +1,16 @@
-// src/components/Layout.tsx
+// src/components/Layout.tsx (Updated)
 import React from 'react';
-import { Box } from '@mui/material';
+import { Box, useTheme } from '@mui/material';
 import Sidebar from './Sidebar';
 
 interface LayoutProps {
   children: React.ReactNode;
+  onNavigate: (page: string) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, onNavigate }) => {
+  const theme = useTheme();
+  
   return (
     <Box sx={{
       display: 'flex',
@@ -16,7 +19,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       margin: 0,
       padding: 0,
       overflow: 'hidden',
-      bgcolor: '#f8f9fa'
+      bgcolor: theme.palette.background.default
     }}>
       {/* Sidebar Container */}
       <Box sx={{
@@ -25,11 +28,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         position: 'fixed',
         left: 0,
         top: 0,
-        borderRight: '1px solid #e0e0e0',
-        bgcolor: '#fff',
+        borderRight: `1px solid ${theme.palette.divider}`,
+        bgcolor: theme.palette.background.paper,
         zIndex: 1200
       }}>
-        <Sidebar />
+        <Sidebar onNavigate={onNavigate} />
       </Box>
 
       {/* Main content */}

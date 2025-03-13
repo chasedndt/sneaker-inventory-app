@@ -1,5 +1,5 @@
-// src/components/Sidebar.tsx
-import React from 'react';
+// src/components/Sidebar.tsx (Updated)
+import React, { useState } from 'react';
 import {
   Drawer,
   List,
@@ -9,7 +9,8 @@ import {
   Typography,
   Box,
   Avatar,
-  Divider
+  Divider,
+  useTheme
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -22,40 +23,38 @@ import {
   Settings as SettingsIcon
 } from '@mui/icons-material';
 
-const drawerWidth = 240;
+interface SidebarProps {
+  onNavigate: (page: string) => void;
+}
 
-const Sidebar: React.FC = () => {
+const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
+  const theme = useTheme();
+  const [activePage, setActivePage] = useState<string>('inventory');
+  
   const mainMenuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-    { text: 'Activity', icon: <ActivityIcon />, path: '/activity' },
-    { text: 'Inventory', icon: <InventoryIcon />, path: '/inventory' },
-    { text: 'Sales', icon: <SalesIcon />, path: '/sales' },
-    { text: 'Coplists', icon: <CoplistsIcon />, path: '/coplists' },
-    { text: 'Releases', icon: <ReleasesIcon />, path: '/releases' },
-    { text: 'Expenses', icon: <ExpensesIcon />, path: '/expenses' }
+    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard' },
+    { text: 'Activity', icon: <ActivityIcon />, path: 'activity' },
+    { text: 'Inventory', icon: <InventoryIcon />, path: 'inventory' },
+    { text: 'Sales', icon: <SalesIcon />, path: 'sales' },
+    { text: 'Coplists', icon: <CoplistsIcon />, path: 'coplists' },
+    { text: 'Releases', icon: <ReleasesIcon />, path: 'releases' },
+    { text: 'Expenses', icon: <ExpensesIcon />, path: 'expenses' }
   ];
 
   const settingsMenuItems = [
-    { text: 'Settings', icon: <SettingsIcon />, path: '/settings' }
+    { text: 'Settings', icon: <SettingsIcon />, path: 'settings' }
   ];
+  
+  const handleNavigate = (path: string) => {
+    setActivePage(path);
+    onNavigate(path);
+  };
 
   return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: drawerWidth,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: drawerWidth,
-          boxSizing: 'border-box',
-          bgcolor: '#f5f5f5',
-          borderRight: '1px solid #e0e0e0'
-        },
-      }}
-    >
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar sx={{ mr: 2, bgcolor: '#1976d2' }}>T</Avatar>
+          <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>T</Avatar>
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
               Hello Tranton
@@ -67,44 +66,102 @@ const Sidebar: React.FC = () => {
         </Box>
       </Box>
       <Divider />
-      <List>
+      
+      <List sx={{ flexGrow: 1 }}>
         {mainMenuItems.map((item) => (
           <ListItem 
             key={item.text}
+            button
+            selected={activePage === item.path}
+            onClick={() => handleNavigate(item.path)}
             sx={{ 
+              borderRadius: 1,
+              mx: 1,
+              mb: 0.5,
               cursor: 'pointer',
+              '&.Mui-selected': {
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(136, 132, 216, 0.15)' 
+                  : 'rgba(25, 118, 210, 0.08)',
+                '&:hover': {
+                  bgcolor: theme.palette.mode === 'dark' 
+                    ? 'rgba(136, 132, 216, 0.25)' 
+                    : 'rgba(25, 118, 210, 0.12)',
+                }
+              },
               '&:hover': {
-                bgcolor: 'rgba(25, 118, 210, 0.08)'
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.04)',
               }
             }}
           >
-            <ListItemIcon sx={{ color: 'primary.main' }}>
+            <ListItemIcon sx={{ 
+              color: activePage === item.path 
+                ? theme.palette.primary.main 
+                : theme.palette.text.secondary 
+            }}>
               {item.icon}
             </ListItemIcon>
-            <ListItemText primary={item.text} />
+            <ListItemText 
+              primary={item.text} 
+              primaryTypographyProps={{
+                fontWeight: activePage === item.path ? 'bold' : 'normal',
+                color: activePage === item.path 
+                  ? theme.palette.primary.main 
+                  : theme.palette.text.primary
+              }}
+            />
           </ListItem>
         ))}
       </List>
+      
       <Divider />
+      
       <List>
         {settingsMenuItems.map((item) => (
           <ListItem 
             key={item.text}
+            button
+            selected={activePage === item.path}
+            onClick={() => handleNavigate(item.path)}
             sx={{ 
+              borderRadius: 1,
+              mx: 1,
+              mb: 0.5,
               cursor: 'pointer',
+              '&.Mui-selected': {
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(136, 132, 216, 0.15)' 
+                  : 'rgba(25, 118, 210, 0.08)',
+              },
               '&:hover': {
-                bgcolor: 'rgba(25, 118, 210, 0.08)'
+                bgcolor: theme.palette.mode === 'dark' 
+                  ? 'rgba(255, 255, 255, 0.05)' 
+                  : 'rgba(0, 0, 0, 0.04)',
               }
             }}
           >
-            <ListItemIcon sx={{ color: 'primary.main' }}>
+            <ListItemIcon sx={{ 
+              color: activePage === item.path 
+                ? theme.palette.primary.main 
+                : theme.palette.text.secondary 
+            }}>
               {item.icon}
             </ListItemIcon>
-            <ListItemText primary={item.text} />
+            <ListItemText 
+              primary={item.text}
+              primaryTypographyProps={{
+                fontWeight: activePage === item.path ? 'bold' : 'normal',
+                color: activePage === item.path 
+                  ? theme.palette.primary.main 
+                  : theme.palette.text.primary
+              }}
+            />
           </ListItem>
         ))}
       </List>
-    </Drawer>
+    </Box>
   );
 };
 
