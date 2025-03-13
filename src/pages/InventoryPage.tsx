@@ -1,5 +1,5 @@
 // src/pages/InventoryPage.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Box, 
   Paper, 
@@ -26,32 +26,33 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditIcon from '@mui/icons-material/Edit';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import dayjs from 'dayjs';
 
-import SearchBar from '../components/Inventory/SearchBar'; 
+import SearchBar from '../components/Inventory/SearchBar';
 import KPIMetrics from '../components/Inventory/KPIMetrics';
 import InventoryTable from '../components/Inventory/InventoryTable';
 import ColumnCustomizationMenu from '../components/Inventory/ColumnCustomizationMenu';
+import EditItemModal from '../components/EditItemModal';
 
 import { api, Item } from '../services/api';
 
 export interface InventoryItem extends Item {
-    marketPrice: number;
-    estimatedProfit: number;
-    roi: number;
-    daysInInventory: number;
-    status: 'in_stock' | 'listed' | 'sold';
-    // Add these missing properties
-    size?: string;           // Make it optional with '?'
-    reference?: string;      // Make it optional with '?'
-    shippingPrice?: number;  // Make it optional with '?'
-  }
+  marketPrice: number;
+  estimatedProfit: number;
+  roi: number;
+  daysInInventory: number;
+  status: 'unlisted' | 'listed' | 'sold'; // Changed 'in_stock' to 'unlisted'
+  size?: string;
+  reference?: string;
+  shippingPrice?: number;
+}
 
 const calculateDaysInInventory = (purchaseDate: string): number => {
   const purchaseTime = new Date(purchaseDate).getTime();
@@ -91,6 +92,10 @@ const InventoryPage: React.FC = () => {
     message: '',
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
+  
+  // Edit modal state
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [itemToEdit, setItemToEdit] = useState<InventoryItem | undefined>(undefined);
 
   // Fetch items from API
   useEffect(() => {
@@ -101,25 +106,25 @@ const InventoryPage: React.FC = () => {
         
         // Enhance items with additional calculated fields
         const enhancedItems = data.map((item: Item) => {
-            // For this prototype, generate random market price based on purchase price
-            const marketPrice = item.purchasePrice * (Math.random() * (1.5 - 0.8) + 0.8);
-            const estimatedProfit = marketPrice - item.purchasePrice;
-            const roi = (estimatedProfit / item.purchasePrice) * 100;
-            const daysInInventory = calculateDaysInInventory(item.purchaseDate);
-            
-            // Generate random status (in real app, this would come from backend)
-            const statuses: ('in_stock' | 'listed' | 'sold')[] = ['in_stock', 'listed', 'sold'];
-            const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-            
-            return {
-              ...item,
-              marketPrice: parseFloat(marketPrice.toFixed(2)),
-              estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
-              roi: parseFloat(roi.toFixed(2)),
-              daysInInventory,
-              status: randomStatus
-            };
-          });
+          // For market price, use the stored value if available or calculate a default
+          const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
+          const estimatedProfit = marketPrice - item.purchasePrice;
+          const roi = (estimatedProfit / item.purchasePrice) * 100;
+          const daysInInventory = calculateDaysInInventory(item.purchaseDate);
+          
+          // Generate or use status (prefer stored value)
+          // Change default status from 'in_stock' to 'unlisted'
+          const status = item.status || 'unlisted';
+          
+          return {
+            ...item,
+            marketPrice: parseFloat(marketPrice.toFixed(2)),
+            estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
+            roi: parseFloat(roi.toFixed(2)),
+            daysInInventory,
+            status: status as 'unlisted' | 'listed' | 'sold'
+          };
+        });
         
         setItems(enhancedItems);
         setError(null);
@@ -142,11 +147,12 @@ const InventoryPage: React.FC = () => {
       
       // Enhance items with additional calculated fields (similar to useEffect)
       const enhancedItems = data.map((item: Item) => {
-        // For each item, this prototype generates a random market price
-        const marketPrice = item.purchasePrice * (Math.random() * (1.5 - 0.8) + 0.8);
+        // Use stored values for marketPrice and status if available
+        const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
         const estimatedProfit = marketPrice - item.purchasePrice;
         const roi = (estimatedProfit / item.purchasePrice) * 100;
         const daysInInventory = calculateDaysInInventory(item.purchaseDate);
+        const status = item.status || 'unlisted';
         
         return {
           ...item,
@@ -154,7 +160,7 @@ const InventoryPage: React.FC = () => {
           estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
           roi: parseFloat(roi.toFixed(2)),
           daysInInventory,
-          status: 'in_stock' // Default status
+          status: status as 'unlisted' | 'listed' | 'sold'
         };
       });
       
@@ -180,23 +186,80 @@ const InventoryPage: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  const handleUpdateMarketPrice = (itemId: number, newPrice: number) => {
-    setItems(prevItems => 
-      prevItems.map(item => {
-        if (item.id === itemId) {
-          const estimatedProfit = newPrice - item.purchasePrice;
-          const roi = (estimatedProfit / item.purchasePrice) * 100;
-          
-          return {
-            ...item,
-            marketPrice: newPrice,
-            estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
-            roi: parseFloat(roi.toFixed(2))
-          };
-        }
-        return item;
-      })
-    );
+  const handleUpdateMarketPrice = async (itemId: number, newPrice: number) => {
+    try {
+      // First update UI for immediate feedback
+      setItems(prevItems => 
+        prevItems.map(item => {
+          if (item.id === itemId) {
+            const estimatedProfit = newPrice - item.purchasePrice;
+            const roi = (estimatedProfit / item.purchasePrice) * 100;
+            
+            return {
+              ...item,
+              marketPrice: newPrice,
+              estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
+              roi: parseFloat(roi.toFixed(2))
+            };
+          }
+          return item;
+        })
+      );
+      
+      // Then persist to backend
+      await api.updateItemField(itemId, 'marketPrice', newPrice);
+      
+      setSnackbar({
+        open: true,
+        message: 'Market price updated successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Error updating market price:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to update market price: ${error.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
+    try {
+      // First update UI for immediate feedback
+      setItems(prevItems => 
+        prevItems.map(item => {
+          if (itemIds.includes(item.id)) {
+            return {
+              ...item,
+              status: newStatus
+            };
+          }
+          return item;
+        })
+      );
+      
+      // Then persist to backend
+      for (const itemId of itemIds) {
+        await api.updateItemField(itemId, 'status', newStatus);
+      }
+      
+      setSnackbar({
+        open: true,
+        message: `${itemIds.length} item(s) marked as ${newStatus}`,
+        severity: 'success'
+      });
+      
+      // Clear selection after status update
+      setSelectedItems([]);
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to update status: ${error.message}`,
+        severity: 'error'
+      });
+    }
   };
 
   const handleSearchChange = (query: string) => {
@@ -244,6 +307,56 @@ const InventoryPage: React.FC = () => {
       [column]: !prev[column]
     }));
   };
+  
+  // Edit item handlers
+  const handleEditItem = () => {
+    if (selectedItems.length === 1) {
+      const itemToEdit = items.find(item => item.id === selectedItems[0]);
+      setItemToEdit(itemToEdit);
+      setIsEditModalOpen(true);
+    } else if (selectedItems.length > 1) {
+      // For bulk edit, we don't set a specific item
+      setItemToEdit(undefined);
+      setIsEditModalOpen(true);
+    }
+  };
+  
+  const handleEditModalClose = () => {
+    setIsEditModalOpen(false);
+    setItemToEdit(undefined);
+    // Refresh data after edit
+    handleRefresh();
+  };
+  
+  const handleDeleteItems = async () => {
+    if (selectedItems.length === 0) return;
+    
+    try {
+      // Delete items from backend
+      for (const itemId of selectedItems) {
+        await api.deleteItem(itemId);
+      }
+      
+      // Update UI
+      setItems(prevItems => prevItems.filter(item => !selectedItems.includes(item.id)));
+      
+      setSnackbar({
+        open: true,
+        message: `${selectedItems.length} item(s) deleted`,
+        severity: 'success'
+      });
+      
+      // Clear selection
+      setSelectedItems([]);
+    } catch (error: any) {
+      console.error('Error deleting items:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete items: ${error.message}`,
+        severity: 'error'
+      });
+    }
+  };
 
   // Filter items based on search query
   const filteredItems = useMemo(() => {
@@ -260,7 +373,7 @@ const InventoryPage: React.FC = () => {
   // Calculate KPI metrics
   const kpiMetrics = useMemo(() => {
     const totalItems = filteredItems.length;
-    const inStockItems = filteredItems.filter(item => item.status === 'in_stock').length;
+    const unlistedItems = filteredItems.filter(item => item.status === 'unlisted').length;
     const listedItems = filteredItems.filter(item => item.status === 'listed').length;
     const soldItems = filteredItems.filter(item => item.status === 'sold').length;
     
@@ -271,7 +384,7 @@ const InventoryPage: React.FC = () => {
     
     return {
       totalItems,
-      inStockItems,
+      unlistedItems, // Changed from inStockItems
       listedItems,
       soldItems,
       totalPurchaseValue,
@@ -329,7 +442,10 @@ const InventoryPage: React.FC = () => {
       </Box>
       
       {/* KPI Metrics Section */}
-      <KPIMetrics metrics={kpiMetrics} />
+      <KPIMetrics metrics={{
+        ...kpiMetrics,
+        inStockItems: kpiMetrics.unlistedItems // Keep the prop name for compatibility
+      }} />
       
       {/* Search and Actions Section */}
       <Paper 
@@ -397,10 +513,23 @@ const InventoryPage: React.FC = () => {
           {selectedItems.length > 0 && (
             <>
               <Grid item>
+                {/* Edit button - shows different text based on selection count */}
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  startIcon={<EditIcon />}
+                  onClick={handleEditItem}
+                >
+                  {selectedItems.length === 1 ? 'Edit Item' : 'Bulk Edit'}
+                </Button>
+              </Grid>
+              
+              <Grid item>
                 <Button 
                   variant="contained" 
                   size="small"
                   startIcon={<AttachMoneyIcon />}
+                  onClick={() => handleUpdateStatus(selectedItems, 'listed')}
                 >
                   Mark as Listed
                 </Button>
@@ -411,7 +540,7 @@ const InventoryPage: React.FC = () => {
                   variant="contained" 
                   color="success"
                   size="small"
-                  startIcon={<AttachMoneyIcon />}
+                  onClick={() => handleUpdateStatus(selectedItems, 'sold')}
                 >
                   Mark as Sold
                 </Button>
@@ -422,6 +551,7 @@ const InventoryPage: React.FC = () => {
                   variant="contained" 
                   color="error"
                   size="small"
+                  onClick={handleDeleteItems}
                 >
                   Delete
                 </Button>
@@ -469,6 +599,14 @@ const InventoryPage: React.FC = () => {
         onClose={handleColumnMenuClose}
         columns={visibleColumns}
         onToggleColumn={handleColumnToggle}
+      />
+      
+      {/* Edit Item Modal */}
+      <EditItemModal 
+        open={isEditModalOpen}
+        onClose={handleEditModalClose}
+        item={itemToEdit}
+        isMultiple={selectedItems.length > 1}
       />
       
       {/* Snackbar for notifications */}
