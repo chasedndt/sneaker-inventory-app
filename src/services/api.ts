@@ -2,7 +2,7 @@
 import { CategoryType } from '../components/AddItem/SizesQuantityForm';
 import { getImageUrl, safeImageUrl } from '../utils/imageUtils';
 
-interface ImageFile extends File {
+export interface ImageFile extends File {
   preview?: string;
   id?: string;
 }
@@ -59,6 +59,20 @@ export interface Item {
   purchaseDate: string;
   images?: string[]; // Array of image filenames
   imageUrl?: string; // Changed from string | null to string | undefined
+  
+  // Add all the missing properties
+  reference?: string;
+  colorway?: string;
+  size?: string;
+  sizeSystem?: string;
+  marketPrice?: number;
+  shippingPrice?: number;
+  purchaseLocation?: string;
+  condition?: string;
+  notes?: string;
+  orderID?: string;
+  tags?: string[];
+  status?: 'unlisted' | 'listed' | 'sold';
 }
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
@@ -128,6 +142,122 @@ export const api = {
     }
   },
 
+  // New method for updating an item
+  updateItem: async (formData: any, images: ImageFile[]) => {
+    try {
+      console.log('🔄 Preparing to update item...');
+      // Create a FormData object for multipart request
+      const multipartFormData = new FormData();
+      
+      // Add the JSON data as a string field named 'data'
+      multipartFormData.append('data', JSON.stringify(formData));
+      
+      // Add all image files if provided
+      if (images && images.length > 0) {
+        images.forEach((file, index) => {
+          console.log(`📸 Adding image ${index + 1}/${images.length} to form data:`, file.name);
+          multipartFormData.append('images', file);
+        });
+      }
+      
+      console.log('📦 Submitting update data:', formData);
+      console.log(`📊 Submitting ${images?.length || 0} images`);
+      
+      // Make the request
+      console.log('🚀 Sending update request to API...');
+      const response = await fetch(`${API_BASE_URL}/items/${formData.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        body: multipartFormData
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ Error response data:', errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('💥 Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const responseData = await response.json();
+      console.log('✅ Item updated successfully:', responseData);
+      return responseData;
+    } catch (error) {
+      console.error('💥 Error in updateItem:', error);
+      throw error;
+    }
+  },
+
+  // New method for updating a single field
+  updateItemField: async (itemId: number, field: string, value: any) => {
+    try {
+      console.log(`🔄 Updating ${field} for item ${itemId} to ${value}...`);
+      
+      const response = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ field, value })
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ Error response data:', errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('💥 Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const responseData = await response.json();
+      console.log(`✅ Updated ${field} for item ${itemId} successfully:`, responseData);
+      return responseData;
+    } catch (error) {
+      console.error(`💥 Error updating ${field} for item ${itemId}:`, error);
+      throw error;
+    }
+  },
+
+  // New method for deleting an item
+  deleteItem: async (itemId: number) => {
+    try {
+      console.log(`🔄 Deleting item ${itemId}...`);
+      
+      const response = await fetch(`${API_BASE_URL}/items/${itemId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const errorData = await response.json();
+          console.error('❌ Error response data:', errorData);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('💥 Failed to parse error response:', parseError);
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const responseData = await response.json();
+      console.log(`✅ Item ${itemId} deleted successfully:`, responseData);
+      return responseData;
+    } catch (error) {
+      console.error(`💥 Error deleting item ${itemId}:`, error);
+      throw error;
+    }
+  },
+
   getItems: async () => {
     try {
       console.log('🔄 Fetching items from API...');
@@ -165,7 +295,6 @@ export const api = {
     }
   },
 
-  // Get a specific item by ID
   getItem: async (id: number) => {
     try {
       console.log(`🔄 Fetching item with ID ${id} from API...`);
@@ -251,6 +380,5 @@ export type {
   ProductDetailsFormData,
   SizesQuantityData,
   PurchaseDetailsData,
-  ImageFile,
   SizeEntry,
 };

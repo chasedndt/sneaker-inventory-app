@@ -87,11 +87,12 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     setEditingMarketPrice(null);
   };
   
-  const getStatusIcon = (status: 'in_stock' | 'listed' | 'sold') => {
+  // Updated getStatusIcon function to handle 'unlisted' status
+  const getStatusIcon = (status: 'unlisted' | 'listed' | 'sold') => {
     switch (status) {
-      case 'in_stock':
+      case 'unlisted':
         return (
-          <Tooltip title="In Stock">
+          <Tooltip title="Unlisted">
             <FiberManualRecordIcon 
               sx={{ 
                 color: 'success.main', 
