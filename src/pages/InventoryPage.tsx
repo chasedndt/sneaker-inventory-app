@@ -370,7 +370,7 @@ const InventoryPage: React.FC = () => {
     );
   }, [items, searchQuery]);
 
-  // Calculate KPI metrics
+  // Calculate KPI metrics - UPDATED to use 'unlisted' instead of 'inStock'
   const kpiMetrics = useMemo(() => {
     const totalItems = filteredItems.length;
     const unlistedItems = filteredItems.filter(item => item.status === 'unlisted').length;
@@ -384,7 +384,7 @@ const InventoryPage: React.FC = () => {
     
     return {
       totalItems,
-      unlistedItems, // Changed from inStockItems
+      unlistedItems,  // New property
       listedItems,
       soldItems,
       totalPurchaseValue,
@@ -441,11 +441,8 @@ const InventoryPage: React.FC = () => {
         </Box>
       </Box>
       
-      {/* KPI Metrics Section */}
-      <KPIMetrics metrics={{
-        ...kpiMetrics,
-        inStockItems: kpiMetrics.unlistedItems // Keep the prop name for compatibility
-      }} />
+      {/* KPI Metrics Section - UPDATED to pass unlistedItems */}
+      <KPIMetrics metrics={kpiMetrics} />
       
       {/* Search and Actions Section */}
       <Paper 
