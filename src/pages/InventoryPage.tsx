@@ -48,8 +48,9 @@ export interface InventoryItem extends Item {
   estimatedProfit: number;
   roi: number;
   daysInInventory: number;
-  status: 'unlisted' | 'listed' | 'sold'; // Changed 'in_stock' to 'unlisted'
+  status: 'unlisted' | 'listed' | 'sold'; // Using 'unlisted' instead of 'in_stock'
   size?: string;
+  sizeSystem?: string;
   reference?: string;
   shippingPrice?: number;
 }
@@ -112,8 +113,7 @@ const InventoryPage: React.FC = () => {
           const roi = (estimatedProfit / item.purchasePrice) * 100;
           const daysInInventory = calculateDaysInInventory(item.purchaseDate);
           
-          // Generate or use status (prefer stored value)
-          // Change default status from 'in_stock' to 'unlisted'
+          // Use 'unlisted' as the default status if none is provided
           const status = item.status || 'unlisted';
           
           return {
@@ -122,7 +122,10 @@ const InventoryPage: React.FC = () => {
             estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
             roi: parseFloat(roi.toFixed(2)),
             daysInInventory,
-            status: status as 'unlisted' | 'listed' | 'sold'
+            status: status as 'unlisted' | 'listed' | 'sold',
+            // Make sure to include size and sizeSystem - may be undefined
+            size: item.size,
+            sizeSystem: item.sizeSystem
           };
         });
         
@@ -160,7 +163,9 @@ const InventoryPage: React.FC = () => {
           estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
           roi: parseFloat(roi.toFixed(2)),
           daysInInventory,
-          status: status as 'unlisted' | 'listed' | 'sold'
+          status: status as 'unlisted' | 'listed' | 'sold',
+          size: item.size,
+          sizeSystem: item.sizeSystem
         };
       });
       
@@ -366,11 +371,12 @@ const InventoryPage: React.FC = () => {
     return items.filter(item => 
       item.productName.toLowerCase().includes(lowerCaseQuery) ||
       item.category.toLowerCase().includes(lowerCaseQuery) ||
-      item.brand.toLowerCase().includes(lowerCaseQuery)
+      item.brand.toLowerCase().includes(lowerCaseQuery) ||
+      (item.reference && item.reference.toLowerCase().includes(lowerCaseQuery))
     );
   }, [items, searchQuery]);
 
-  // Calculate KPI metrics - UPDATED to use 'unlisted' instead of 'inStock'
+  // Calculate KPI metrics with 'unlisted' status
   const kpiMetrics = useMemo(() => {
     const totalItems = filteredItems.length;
     const unlistedItems = filteredItems.filter(item => item.status === 'unlisted').length;
@@ -384,7 +390,7 @@ const InventoryPage: React.FC = () => {
     
     return {
       totalItems,
-      unlistedItems,  // New property
+      unlistedItems,
       listedItems,
       soldItems,
       totalPurchaseValue,
@@ -441,7 +447,7 @@ const InventoryPage: React.FC = () => {
         </Box>
       </Box>
       
-      {/* KPI Metrics Section - UPDATED to pass unlistedItems */}
+      {/* KPI Metrics Section - using updated KPIMetrics component */}
       <KPIMetrics metrics={kpiMetrics} />
       
       {/* Search and Actions Section */}
@@ -576,7 +582,7 @@ const InventoryPage: React.FC = () => {
         </Grid>
       </Paper>
       
-      {/* Inventory Table */}
+      {/* Inventory Table - using updated InventoryTable component */}
       <InventoryTable 
         items={paginatedItems}
         visibleColumns={visibleColumns}
