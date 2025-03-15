@@ -123,6 +123,8 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   // Load item data when the modal opens
   useEffect(() => {
     if (open && item) {
+      console.log('Loading item data for editing:', item);
+      
       // Populate product details
       setProductDetails({
         category: item.category as CategoryType || 'Sneakers',
@@ -134,7 +136,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
 
       // Populate sizes quantity
       if (item.size) {
-        // Parse size information - this would need to be adjusted based on your data structure
+        // Parse size information
         const sizeSystem = item.sizeSystem || '';
         const selectedSizes = [{
           system: sizeSystem,
@@ -166,11 +168,12 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
         salesTaxPercentage: ''
       });
 
-      // Load images
+      // For existing images, we'd need to fetch them or use URLs as placeholders
       if (item.images && item.images.length > 0) {
-        // You'd need to convert URLs to File objects or handle this differently
-        // This is a placeholder - real implementation would depend on your image handling
-        setImages([]); // Start with empty array, then load actual images
+        console.log('Item has images:', item.images);
+        // This approach depends on your backend implementation
+        // For now, leaving images empty to avoid errors
+        setImages([]);
       }
     }
   }, [open, item]);
@@ -283,7 +286,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   };
 
   const validateImages = (): boolean => {
-    // For editing, we might not require new images if there are existing ones
+    // For editing, we don't require new images if there are existing ones
     return true;
   };
 
@@ -300,14 +303,16 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
         isValid = validatePurchaseDetails();
       } else if (activeStep === 3) {
         try {
+          // Test connection before submitting
           await api.testConnection();
           isValid = validateImages();
+          
           if (isValid) {
             setIsSubmitting(true);
             setIsUploading(true);
             setUploadProgress(25);
             
-            // Prepare form data for submission
+            // Prepare form data for submission - include the itemId for update
             const formData = {
               id: item?.id, // Include item ID for update
               productDetails,
@@ -315,21 +320,37 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               purchaseDetails: {
                 ...purchaseDetails,
                 purchaseDate: purchaseDetails.purchaseDate?.toISOString() || null
-              }
+              },
+              status: item?.status || 'unlisted' // Preserve the current status
             };
             
+            console.log('Submitting update data:', formData);
             setUploadProgress(50);
             
-            // Use update endpoint instead of add
-            const response = await api.updateItem(formData, images);
+            // Use update endpoint
+            let response;
+            if (isMultiple && selectedItems?.length > 1) {
+              // Bulk update logic would go here
+              response = await Promise.all(
+                selectedItems.map(itemId => 
+                  api.updateItem({...formData, id: itemId}, images)
+                )
+              );
+            } else {
+              // Single item update
+              response = await api.updateItem(formData, images);
+            }
             
             console.log('Form update response:', response);
             setUploadProgress(100);
-            handleClose();
+            handleClose(true); // Pass true to indicate successful update
           }
         } catch (error: any) {
           console.error('API call failed:', error);
           setSubmitError(`API Error: ${error.message || 'Failed to process request'}`);
+          setIsSubmitting(false);
+          setIsUploading(false);
+          setUploadProgress(0);
           return;
         }
       }
@@ -341,9 +362,11 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
       console.error('Form submission error:', error);
       setSubmitError(error.message || 'An unexpected error occurred');
     } finally {
-      setIsSubmitting(false);
-      setIsUploading(false);
-      setUploadProgress(0);
+      if (activeStep !== steps.length - 1) {
+        setIsSubmitting(false);
+        setIsUploading(false);
+        setUploadProgress(0);
+      }
     }
   };
 
@@ -352,23 +375,64 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
     setSubmitError(null);
   };
 
-  const handleClose = useCallback(() => {
+  // Access to selectedItems for bulk edit operations
+  const [selectedItems] = useState<number[]>([]);
+
+  const handleClose = useCallback((success = false) => {
+    // Clean up
     images.forEach(image => {
       if (image.preview) {
         URL.revokeObjectURL(image.preview);
       }
     });
+    
     setActiveStep(0);
     setSubmitError(null);
     setIsUploading(false);
+    setIsSubmitting(false);
     setUploadProgress(0);
+    
+    // Reset form data
+    setProductDetails({
+      category: 'Sneakers',
+      productName: '',
+      reference: '',
+      colorway: '',
+      brand: ''
+    });
+    
+    setSizesQuantity({
+      sizeSystem: '',
+      selectedSizes: []
+    });
+    
+    setPurchaseDetails({
+      purchasePrice: '',
+      purchaseCurrency: '£',
+      shippingPrice: '',
+      shippingCurrency: '£',
+      marketPrice: '',
+      purchaseDate: null,
+      purchaseLocation: '',
+      condition: '',
+      notes: '',
+      orderID: '',
+      tags: [],
+      taxType: 'none',
+      vatPercentage: '',
+      salesTaxPercentage: ''
+    });
+    
+    setImages([]);
+    setErrors({});
+    
     onClose();
   }, [images, onClose]);
 
   return (
     <Dialog 
       open={open} 
-      onClose={handleClose}
+      onClose={() => handleClose()}
       maxWidth="md"
       fullWidth
       PaperProps={{
@@ -390,7 +454,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
         </Typography>
         <IconButton
           aria-label="close"
-          onClick={handleClose}
+          onClick={() => handleClose()}
           sx={{ color: 'grey.500' }}
         >
           <CloseIcon />
@@ -466,13 +530,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
           Back
         </Button>
         <Button
-          onClick={async () => {
-            if (activeStep === steps.length - 1) {
-              await handleNext();
-            } else {
-              handleNext();
-            }
-          }}
+          onClick={handleNext}
           variant="contained"
           color="primary"
           disabled={isSubmitting}

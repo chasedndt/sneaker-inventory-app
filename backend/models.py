@@ -29,10 +29,13 @@ class Item(db.Model):
     tax_type = db.Column(db.String(20))
     vat_percentage = db.Column(db.Float)
     sales_tax_percentage = db.Column(db.Float)
+    
+    # Status - new field for tracking item status
+    status = db.Column(db.String(20), default='unlisted')  # 'unlisted', 'listed', or 'sold'
 
     # Relationships
-    sizes = db.relationship('Size', backref='item', lazy=True)
-    images = db.relationship('Image', backref='item', lazy=True)
+    sizes = db.relationship('Size', backref='item', lazy=True, cascade="all, delete-orphan")
+    images = db.relationship('Image', backref='item', lazy=True, cascade="all, delete-orphan")
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
 
     def to_dict(self):
@@ -43,6 +46,11 @@ class Item(db.Model):
         try:
             # Get image filenames for this item
             image_files = [img.filename for img in self.images] if self.images else []
+            
+            # Get the first size for this item
+            size_info = self.sizes[0] if self.sizes else None
+            size = size_info.size if size_info else None
+            size_system = size_info.system if size_info else None
             
             return {
                 'id': self.id,
@@ -59,6 +67,9 @@ class Item(db.Model):
                 'purchaseLocation': self.purchase_location,
                 'condition': self.condition,
                 'images': image_files,
+                'size': size,
+                'sizeSystem': size_system,
+                'status': self.status,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }

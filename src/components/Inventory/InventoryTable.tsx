@@ -28,6 +28,7 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import InventoryIcon from '@mui/icons-material/Inventory';
+import dayjs from 'dayjs';
 
 import { InventoryItem } from '../../pages/InventoryPage';
 
@@ -87,7 +88,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     setEditingMarketPrice(null);
   };
   
-  // Updated getStatusIcon function to handle 'unlisted' status
+  // Updated getStatusIcon function with gray color for unlisted items
   const getStatusIcon = (status: 'unlisted' | 'listed' | 'sold') => {
     switch (status) {
       case 'unlisted':
@@ -95,7 +96,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           <Tooltip title="Unlisted">
             <FiberManualRecordIcon 
               sx={{ 
-                color: 'success.main', 
+                color: 'text.disabled', // Changed from success.main to text.disabled for gray color
                 fontSize: 16
               }} 
             />
@@ -151,6 +152,12 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
         <InventoryIcon />
       </Avatar>
     );
+  };
+
+  // Format date for purchase date display
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
+    return dayjs(dateString).format('MMM D, YYYY');
   };
   
   return (
@@ -219,7 +226,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               )}
               
               {visibleColumns.reference && (
-                <TableCell sx={{ minWidth: 100 }}>Reference</TableCell>
+                <TableCell sx={{ minWidth: 100 }}>Purchase Date</TableCell>
               )}
               
               {visibleColumns.sku && (
@@ -418,7 +425,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     
                     {visibleColumns.size && (
                       <TableCell>
-                        {item.size}
+                        {item.size ? (
+                          item.sizeSystem ? `${item.sizeSystem} ${item.size}` : item.size
+                        ) : (
+                          <Typography color="text.disabled" variant="body2">-</Typography>
+                        )}
                       </TableCell>
                     )}
                     
@@ -430,17 +441,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     
                     {visibleColumns.reference && (
                       <TableCell>
-                        {item.reference || '-'}
+                        {formatDate(item.purchaseDate)}
                       </TableCell>
                     )}
                     
                     {visibleColumns.sku && (
                       <TableCell>
-                        <Tooltip title="Internal ID">
-                          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                            {item.id}
-                          </Typography>
-                        </Tooltip>
+                        {item.reference || '-'}
                       </TableCell>
                     )}
                     

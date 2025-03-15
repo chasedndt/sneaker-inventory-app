@@ -21,8 +21,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 interface KPIMetricsProps {
   metrics: {
     totalItems: number;
-    unlistedItems?: number; // Added as optional
-    inStockItems?: number;  // Keep for backward compatibility
+    unlistedItems: number; // Changed to use unlistedItems directly
     listedItems: number;
     soldItems: number;
     totalPurchaseValue: number;
@@ -34,9 +33,6 @@ interface KPIMetricsProps {
 
 const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
   const theme = useTheme();
-  
-  // Use unlistedItems as the primary property, falling back to inStockItems for backward compatibility
-  const unlistedCount = metrics.unlistedItems ?? metrics.inStockItems ?? 0;
   
   // Calculate average ROI
   const averageROI = metrics.totalItems > 0
@@ -79,9 +75,15 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <FiberManualRecordIcon sx={{ color: 'success.main', fontSize: 12, mr: 0.5 }} />
+                  <FiberManualRecordIcon 
+                    sx={{ 
+                      color: 'text.disabled', // Changed from success.main to text.disabled for gray
+                      fontSize: 12, 
+                      mr: 0.5 
+                    }} 
+                  />
                   <Typography variant="caption">
-                    {unlistedCount} Unlisted
+                    {metrics.unlistedItems} Unlisted
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
