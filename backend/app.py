@@ -7,7 +7,7 @@ import time
 from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
-from models import db, Item, Size, Image, Tag
+from models import db, Item, Size, Image, Tag, Sale
 from config import Config
 
 def create_app():
@@ -143,407 +143,345 @@ def create_app():
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/items/<int:item_id>', methods=['PUT'])
-    def update_item(item_id):
+    # Existing inventory endpoints here...
+
+    # SALES API ENDPOINTS
+    @app.route('/api/sales', methods=['GET'])
+    def get_sales():
         """
-        Update an existing inventory item with new data and possibly new images.
+        Get all sales with associated item details.
         """
         try:
-            logger.info(f"📝 Update item endpoint hit for item {item_id}")
+            logger.info("📊 Fetching all sales")
+            sales = Sale.query.all()
             
-            # Check if the item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found for update")
-                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            # Convert sales to dictionary format with item details
+            sales_data = []
+            for sale in sales:
+                sale_dict = sale.to_dict()
                 
-            # Check if JSON data is provided in the 'data' field
-            if 'data' not in request.form:
-                logger.error("❌ No 'data' field in request.form for update")
-                return jsonify({'error': 'Missing item data'}), 400
-                
-            data = json.loads(request.form['data'])
-            logger.info(f"📦 Received update data: {data}")
-            
-            # Extract updated details
-            product_details = data.get('productDetails', {})
-            purchase_details = data.get('purchaseDetails', {})
-            sizes_quantity = data.get('sizesQuantity', {})
-            status = data.get('status')
-            
-            try:
-                # Convert date string to datetime object if provided
-                purchase_date_str = purchase_details.get('purchaseDate')
-                if purchase_date_str:
-                    purchase_date = datetime.fromisoformat(purchase_date_str.replace('Z', '+00:00'))
-                    logger.info(f"📅 Converted purchase date: {purchase_date}")
-                else:
-                    purchase_date = item.purchase_date  # Keep existing date
-            except (ValueError, TypeError) as e:
-                logger.error(f"❌ Purchase date error: {str(e)}")
-                return jsonify({'error': 'Invalid purchase date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
-            
-            # Update item fields
-            item.category = product_details.get('category', item.category)
-            item.product_name = product_details.get('productName', item.product_name)
-            item.reference = product_details.get('reference', item.reference)
-            item.colorway = product_details.get('colorway', item.colorway)
-            item.brand = product_details.get('brand', item.brand)
-            
-            # Update purchase details
-            if purchase_details.get('purchasePrice'):
-                item.purchase_price = float(purchase_details.get('purchasePrice', item.purchase_price))
-            if purchase_details.get('purchaseCurrency'):
-                item.purchase_currency = purchase_details.get('purchaseCurrency', item.purchase_currency)
-            if purchase_details.get('shippingPrice'):
-                item.shipping_price = float(purchase_details.get('shippingPrice', item.shipping_price or 0))
-            if purchase_details.get('shippingCurrency'):
-                item.shipping_currency = purchase_details.get('shippingCurrency', item.shipping_currency)
-            if purchase_details.get('marketPrice'):
-                item.market_price = float(purchase_details.get('marketPrice', item.market_price or 0))
-            
-            item.purchase_date = purchase_date
-            item.purchase_location = purchase_details.get('purchaseLocation', item.purchase_location)
-            item.condition = purchase_details.get('condition', item.condition)
-            item.notes = purchase_details.get('notes', item.notes)
-            item.order_id = purchase_details.get('orderID', item.order_id)
-            
-            # Update tax information if provided
-            if 'taxType' in purchase_details:
-                item.tax_type = purchase_details.get('taxType')
-                if item.tax_type == 'vat' and 'vatPercentage' in purchase_details:
-                    item.vat_percentage = float(purchase_details.get('vatPercentage', 0))
-                elif item.tax_type == 'salesTax' and 'salesTaxPercentage' in purchase_details:
-                    item.sales_tax_percentage = float(purchase_details.get('salesTaxPercentage', 0))
-            
-            # Update item status if provided
-            if status:
-                logger.info(f"🔄 Updating item status to: {status}")
-                item.status = status
-            
-            # Handle sizes update
-            if sizes_quantity and 'selectedSizes' in sizes_quantity:
-                # Remove existing sizes
-                Size.query.filter_by(item_id=item.id).delete()
-                
-                # Add updated sizes
-                for size_entry in sizes_quantity.get('selectedSizes', []):
-                    size = Size(
-                        item_id=item.id,
-                        system=size_entry.get('system', ''),
-                        size=size_entry.get('size', ''),
-                        quantity=int(size_entry.get('quantity', 1))
-                    )
-                    db.session.add(size)
-            
-            # Process new image files if they were included in the request
-            uploaded_images = []
-            if 'images' in request.files:
-                files = request.files.getlist('images')
-                
-                if files and len(files) > 0 and files[0].filename:
-                    logger.info(f"📸 Processing {len(files)} new images for item {item.id}")
+                # Get associated item for additional info
+                item = Item.query.get(sale.item_id)
+                if item:
+                    # Add item details that would be useful for the sales display
+                    images = Image.query.filter_by(item_id=item.id).all()
+                    image_filenames = [img.filename for img in images]
                     
-                    # Consider removing old images if requested
-                    # Image.query.filter_by(item_id=item.id).delete()
+                    # Get size information
+                    size_info = Size.query.filter_by(item_id=item.id).first()
+                    size = size_info.size if size_info else None
+                    size_system = size_info.system if size_info else None
                     
-                    for file in files:
-                        if file and allowed_file(file.filename):
-                            # Generate unique filename to avoid collisions
-                            original_filename = secure_filename(file.filename)
-                            filename = f"{item.id}_{int(time.time())}_{original_filename}"
-                            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                            
-                            # Save the file to disk
-                            file.save(filepath)
-                            
-                            # Create image record
-                            new_image = Image(
-                                filename=filename,
-                                path=filepath,
-                                item_id=item.id
-                            )
-                            db.session.add(new_image)
-                            uploaded_images.append(filename)
-                            logger.info(f"📸 Saved new image: {filename} for item {item.id}")
+                    # Add item details to sale data
+                    sale_dict.update({
+                        'itemName': item.product_name,
+                        'brand': item.brand,
+                        'category': item.category,
+                        'purchasePrice': item.purchase_price,
+                        'purchaseDate': item.purchase_date.isoformat() if item.purchase_date else None,
+                        'images': image_filenames,
+                        'size': size,
+                        'sizeSystem': size_system
+                    })
+                
+                sales_data.append(sale_dict)
             
-            # Commit all changes to the database
-            db.session.commit()
-            
-            # Return the updated item
-            updated_item = item.to_dict()
-            # Add images to the response
-            images = Image.query.filter_by(item_id=item.id).all()
-            updated_item['images'] = [img.filename for img in images]
-            
-            logger.info(f"✅ Item {item_id} updated successfully")
-            return jsonify({
-                'message': 'Item updated successfully', 
-                'id': item.id,
-                'new_images': uploaded_images,
-                'item': updated_item
-            }), 200
-            
+            logger.info(f"✅ Retrieved {len(sales_data)} sales")
+            return jsonify(sales_data), 200
         except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error updating item {item_id}: {str(e)}")
+            logger.error(f"💥 Error fetching sales: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/items/<int:item_id>/field', methods=['PATCH'])
-    def update_item_field(item_id):
+    @app.route('/api/sales/<int:sale_id>', methods=['GET'])
+    def get_sale(sale_id):
         """
-        Update a single field of an item (e.g., marketPrice, status).
+        Get a single sale by ID with associated item details.
         """
         try:
-            logger.info(f"🔄 Update field endpoint hit for item {item_id}")
+            logger.info(f"🔍 Fetching sale {sale_id}")
+            sale = Sale.query.get(sale_id)
             
-            # Check if the item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found for field update")
-                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            if not sale:
+                logger.warning(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': 'Sale not found'}), 404
             
-            # Parse the request data
+            # Convert sale to dictionary
+            sale_dict = sale.to_dict()
+            
+            # Get associated item for additional info
+            item = Item.query.get(sale.item_id)
+            if item:
+                # Add item details
+                images = Image.query.filter_by(item_id=item.id).all()
+                image_filenames = [img.filename for img in images]
+                
+                # Get size information
+                size_info = Size.query.filter_by(item_id=item.id).first()
+                size = size_info.size if size_info else None
+                size_system = size_info.system if size_info else None
+                
+                # Add item details to sale data
+                sale_dict.update({
+                    'itemName': item.product_name,
+                    'brand': item.brand,
+                    'category': item.category,
+                    'purchasePrice': item.purchase_price,
+                    'purchaseDate': item.purchase_date.isoformat() if item.purchase_date else None,
+                    'images': image_filenames,
+                    'size': size,
+                    'sizeSystem': size_system
+                })
+            
+            logger.info(f"✅ Retrieved sale {sale_id}")
+            return jsonify(sale_dict), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching sale {sale_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/sales', methods=['POST'])
+    def create_sale():
+        """
+        Create a new sale record and update item status to 'sold'.
+        """
+        try:
+            logger.info("📝 Creating new sale record")
             data = request.json
-            if not data or 'field' not in data or 'value' not in data:
-                logger.error("❌ Missing required fields in request")
+            
+            # Validate required fields
+            required_fields = ['itemId', 'platform', 'saleDate', 'salePrice', 'status']
+            for field in required_fields:
+                if field not in data:
+                    logger.error(f"❌ Missing required field: {field}")
+                    return jsonify({'error': f'Missing required field: {field}'}), 400
+            
+            # Check if item exists
+            item = Item.query.get(data['itemId'])
+            if not item:
+                logger.error(f"❌ Item with ID {data['itemId']} not found")
+                return jsonify({'error': f'Item with ID {data["itemId"]} not found'}), 404
+            
+            # Parse the date string
+            try:
+                sale_date = datetime.fromisoformat(data['saleDate'].replace('Z', '+00:00'))
+            except (ValueError, TypeError) as e:
+                logger.error(f"❌ Invalid date format: {data['saleDate']}")
+                return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            
+            # Create new sale record
+            new_sale = Sale(
+                item_id=data['itemId'],
+                platform=data['platform'],
+                sale_date=sale_date,
+                sale_price=float(data['salePrice']),
+                currency=data.get('currency', '$'),
+                sales_tax=float(data.get('salesTax', 0) or 0),
+                platform_fees=float(data.get('platformFees', 0) or 0),
+                status=data['status'],
+                sale_id=data.get('saleId', '')
+            )
+            
+            db.session.add(new_sale)
+            
+            # Update item status to 'sold'
+            item.status = 'sold'
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.info(f"✅ Created new sale record with ID {new_sale.id}")
+            
+            # Return the created sale with item details
+            sale_dict = new_sale.to_dict()
+            sale_dict.update({
+                'itemName': item.product_name,
+                'brand': item.brand,
+                'category': item.category,
+                'purchasePrice': item.purchase_price
+            })
+            
+            return jsonify(sale_dict), 201
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error creating sale: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/sales/<int:sale_id>', methods=['PUT'])
+    def update_sale(sale_id):
+        """
+        Update an existing sale record.
+        """
+        try:
+            logger.info(f"📝 Updating sale {sale_id}")
+            data = request.json
+            
+            # Check if sale exists
+            sale = Sale.query.get(sale_id)
+            if not sale:
+                logger.error(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # Update sale fields if provided
+            if 'platform' in data:
+                sale.platform = data['platform']
+            
+            if 'saleDate' in data:
+                try:
+                    sale_date = datetime.fromisoformat(data['saleDate'].replace('Z', '+00:00'))
+                    sale.sale_date = sale_date
+                except (ValueError, TypeError) as e:
+                    logger.error(f"❌ Invalid date format: {data['saleDate']}")
+                    return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            
+            if 'salePrice' in data:
+                sale.sale_price = float(data['salePrice'])
+            
+            if 'currency' in data:
+                sale.currency = data['currency']
+            
+            if 'salesTax' in data:
+                sale.sales_tax = float(data['salesTax'] or 0)
+            
+            if 'platformFees' in data:
+                sale.platform_fees = float(data['platformFees'] or 0)
+            
+            if 'status' in data:
+                sale.status = data['status']
+            
+            if 'saleId' in data:
+                sale.sale_id = data['saleId']
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.info(f"✅ Updated sale {sale_id}")
+            
+            # Return the updated sale
+            return jsonify(sale.to_dict()), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating sale {sale_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/sales/<int:sale_id>/field', methods=['PATCH'])
+    def update_sale_field(sale_id):
+        """
+        Update a specific field of a sale.
+        """
+        try:
+            logger.info(f"🔄 Updating field for sale {sale_id}")
+            data = request.json
+            
+            # Validate request
+            if 'field' not in data or 'value' not in data:
+                logger.error("❌ Missing required fields: field and value")
                 return jsonify({'error': 'Missing required fields: field and value'}), 400
             
             field = data['field']
             value = data['value']
             
-            logger.info(f"📝 Updating field '{field}' to value '{value}' for item {item_id}")
+            # Check if sale exists
+            sale = Sale.query.get(sale_id)
+            if not sale:
+                logger.error(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
             
-            # Handle different field types
-            try:
-                if field == 'marketPrice':
-                    item.market_price = float(value)
-                elif field == 'status':
-                    valid_statuses = ['unlisted', 'listed', 'sold']
-                    if value not in valid_statuses:
-                        return jsonify({'error': f'Invalid status value. Must be one of: {", ".join(valid_statuses)}'}), 400
-                    item.status = value
-                else:
-                    # For other fields, use dynamic attribute setting
-                    snake_case_field = ''.join(['_' + c.lower() if c.isupper() else c for c in field]).lstrip('_')
-                    if hasattr(item, snake_case_field):
-                        setattr(item, snake_case_field, value)
-                    else:
-                        logger.error(f"❌ Invalid field name: {field}")
-                        return jsonify({'error': f'Invalid field name: {field}'}), 400
-                
-                db.session.commit()
-                logger.info(f"✅ Successfully updated {field} for item {item_id}")
-                
-                # Return the updated item
-                return jsonify({
-                    'message': f'Field {field} updated successfully',
-                    'id': item.id,
-                    'field': field,
-                    'value': value
-                }), 200
-            except ValueError as e:
-                logger.error(f"❌ Value error: {str(e)}")
-                return jsonify({'error': f'Invalid value for field {field}: {str(e)}'}), 400
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error updating field for item {item_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/items/<int:item_id>', methods=['DELETE'])
-    def delete_item(item_id):
-        """
-        Delete an item and its associated data (sizes, images).
-        """
-        try:
-            logger.info(f"🔄 Delete item endpoint hit for item {item_id}")
+            # Update the specific field
+            if field == 'status':
+                # Validate status
+                valid_statuses = ['pending', 'needsShipping', 'completed']
+                if value not in valid_statuses:
+                    logger.error(f"❌ Invalid status value: {value}")
+                    return jsonify({'error': f'Invalid status value. Must be one of: {", ".join(valid_statuses)}'}), 400
+                sale.status = value
+            elif field == 'platform':
+                sale.platform = value
+            elif field == 'salePrice':
+                try:
+                    sale.sale_price = float(value)
+                except ValueError:
+                    return jsonify({'error': 'Invalid sale price value'}), 400
+            elif field == 'currency':
+                sale.currency = value
+            elif field == 'salesTax':
+                try:
+                    sale.sales_tax = float(value or 0)
+                except ValueError:
+                    return jsonify({'error': 'Invalid sales tax value'}), 400
+            elif field == 'platformFees':
+                try:
+                    sale.platform_fees = float(value or 0)
+                except ValueError:
+                    return jsonify({'error': 'Invalid platform fees value'}), 400
+            elif field == 'saleId':
+                sale.sale_id = value
+            elif field == 'saleDate':
+                try:
+                    sale_date = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    sale.sale_date = sale_date
+                except (ValueError, TypeError):
+                    return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            else:
+                logger.error(f"❌ Invalid field name: {field}")
+                return jsonify({'error': f'Invalid field name: {field}'}), 400
             
-            # Check if the item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found for deletion")
-                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
-            
-            # Get associated images to delete files
-            images = Image.query.filter_by(item_id=item.id).all()
-            
-            # Delete the item (cascade will handle related records)
-            db.session.delete(item)
+            # Commit changes
             db.session.commit()
             
-            # Delete image files from disk
-            for image in images:
-                try:
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
-                    if os.path.exists(filepath):
-                        os.remove(filepath)
-                        logger.info(f"🗑️ Deleted image file: {filepath}")
-                except Exception as e:
-                    logger.error(f"❌ Error deleting image file {image.filename}: {str(e)}")
+            logger.info(f"✅ Updated {field} for sale {sale_id}")
             
-            logger.info(f"✅ Item {item_id} deleted successfully")
+            # Return success message
             return jsonify({
-                'message': f'Item {item_id} deleted successfully'
+                'message': f'Field {field} updated successfully',
+                'id': sale_id,
+                'field': field,
+                'value': value
             }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error deleting item {item_id}: {str(e)}")
+            logger.error(f"💥 Error updating field for sale {sale_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/items', methods=['POST'])
-    def add_item():
+    @app.route('/api/sales/<int:sale_id>', methods=['DELETE'])
+    def delete_sale(sale_id):
         """
-        Create a new inventory item and save its associated images.
-        
-        This updated function now handles both item creation and image association in a single step.
-        It first creates the item record, then processes any images included in the multipart form.
+        Delete a sale record.
         """
         try:
-            # Get the form data and files from the multipart request
-            logger.info("📝 Add item endpoint hit")
+            logger.info(f"🗑️ Deleting sale {sale_id}")
             
-            # Check if JSON data is provided in the 'data' field
-            if 'data' not in request.form:
-                logger.error("❌ No 'data' field in request.form")
-                return jsonify({'error': 'Missing item data'}), 400
-                
-            data = json.loads(request.form['data'])
-            logger.info(f"📦 Received data: {data}")
+            # Check if sale exists
+            sale = Sale.query.get(sale_id)
+            if not sale:
+                logger.error(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
             
-            # Extract product details
-            product_details = data.get('productDetails', {})
-            purchase_details = data.get('purchaseDetails', {})
-            sizes_quantity = data.get('sizesQuantity', {})
+            # Get the item ID for potential status update
+            item_id = sale.item_id
             
-            try:
-                # Convert date string to datetime object
-                purchase_date_str = purchase_details.get('purchaseDate')
-                if purchase_date_str:
-                    purchase_date = datetime.fromisoformat(purchase_date_str.replace('Z', '+00:00'))
-                else:
-                    purchase_date = datetime.now()
-                    
-                logger.info(f"📅 Converted purchase date: {purchase_date}")
-            except (ValueError, TypeError) as e:
-                logger.error(f"❌ Purchase date error: {str(e)}")
-                return jsonify({'error': 'Invalid purchase date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            # Delete the sale
+            db.session.delete(sale)
             
-            # Create new item with default status 'unlisted'
-            new_item = Item(
-                category=product_details.get('category', ''),
-                product_name=product_details.get('productName', ''),
-                reference=product_details.get('reference', ''),
-                colorway=product_details.get('colorway', ''),
-                brand=product_details.get('brand', ''),
-                purchase_price=float(purchase_details.get('purchasePrice', 0)),
-                purchase_currency=purchase_details.get('purchaseCurrency', ''),
-                shipping_price=float(purchase_details.get('shippingPrice', 0) or 0),
-                shipping_currency=purchase_details.get('shippingCurrency', ''),
-                market_price=float(purchase_details.get('marketPrice', 0) or 0),
-                purchase_date=purchase_date,
-                purchase_location=purchase_details.get('purchaseLocation', ''),
-                condition=purchase_details.get('condition', ''),
-                notes=purchase_details.get('notes', ''),
-                order_id=purchase_details.get('orderID', ''),
-                tax_type=purchase_details.get('taxType', ''),
-                vat_percentage=float(purchase_details.get('vatPercentage', 0) or 0),
-                sales_tax_percentage=float(purchase_details.get('salesTaxPercentage', 0) or 0),
-                status='unlisted'  # Default status
-            )
+            # Check if this was the only sale for the item
+            remaining_sales = Sale.query.filter_by(item_id=item_id).count()
             
-            db.session.add(new_item)
-            db.session.flush()  # Get the ID without committing
+            # If no other sales for this item, update item status back to 'unlisted'
+            if remaining_sales == 0:
+                item = Item.query.get(item_id)
+                if item and item.status == 'sold':
+                    item.status = 'unlisted'
             
-            # Add sizes if provided
-            if sizes_quantity:
-                for size_entry in sizes_quantity.get('selectedSizes', []):
-                    size = Size(
-                        item_id=new_item.id,
-                        system=size_entry.get('system', ''),
-                        size=size_entry.get('size', ''),
-                        quantity=int(size_entry.get('quantity', 1))
-                    )
-                    db.session.add(size)
-            
-            # Process image files if they were included in the request
-            uploaded_images = []
-            if 'images' in request.files:
-                files = request.files.getlist('images')
-                
-                for file in files:
-                    if file and allowed_file(file.filename):
-                        # Generate unique filename to avoid collisions
-                        original_filename = secure_filename(file.filename)
-                        filename = f"{new_item.id}_{int(time.time())}_{original_filename}"
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                        
-                        # Save the file to disk
-                        file.save(filepath)
-                        
-                        # Create image record
-                        new_image = Image(
-                            filename=filename,
-                            path=filepath,
-                            item_id=new_item.id
-                        )
-                        db.session.add(new_image)
-                        uploaded_images.append(filename)
-                        logger.info(f"📸 Saved image: {filename} for item {new_item.id}")
-            
-            # Commit all changes to the database
+            # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Item added successfully with ID: {new_item.id}")
-            return jsonify({
-                'message': 'Item added successfully', 
-                'id': new_item.id,
-                'images': uploaded_images,
-                'item': new_item.to_dict()
-            }), 201
+            logger.info(f"✅ Deleted sale {sale_id}")
             
+            return jsonify({
+                'message': f'Sale {sale_id} deleted successfully',
+                'item_id': item_id
+            }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error processing request: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/items', methods=['GET'])
-    def get_items():
-        try:
-            items = Item.query.all()
-            logger.info(f"📋 Retrieved {len(items)} items from database")
-            
-            # Create response with all item data including images
-            item_list = []
-            for item in items:
-                item_data = item.to_dict()
-                
-                # Include size information
-                sizes = Size.query.filter_by(item_id=item.id).all()
-                if sizes:
-                    # Just using the first size for now - could be expanded to include all sizes
-                    first_size = sizes[0]
-                    item_data['size'] = first_size.size
-                    item_data['sizeSystem'] = first_size.system
-                
-                # Get the item's images
-                images = Image.query.filter_by(item_id=item.id).all()
-                item_data['images'] = [img.filename for img in images]
-                
-                # Log info about the first few items
-                if len(item_list) < 3:
-                    logger.info(f"📦 Item {item.id} details: {item_data}")
-                    
-                    # Log image info
-                    if 'images' in item_data and item_data['images']:
-                        logger.info(f"📸 Item {item.id} has {len(item_data['images'])} images: {item_data['images']}")
-                    else:
-                        logger.info(f"🖼️ Item {item.id} has no images")
-                
-                item_list.append(item_data)
-                
-            return jsonify(item_list), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching items: {str(e)}")
+            logger.error(f"💥 Error deleting sale {sale_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.before_request
@@ -557,7 +495,7 @@ app = create_app()
 
 @app.shell_context_processor
 def make_shell_context():
-    return {'db': db, 'Item': Item, 'Size': Size, 'Image': Image, 'Tag': Tag}
+    return {'db': db, 'Item': Item, 'Size': Size, 'Image': Image, 'Tag': Tag, 'Sale': Sale}
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)

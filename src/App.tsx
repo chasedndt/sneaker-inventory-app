@@ -6,6 +6,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import InventoryPage from './pages/InventoryPage';
+import SalesPage from './pages/SalesPage';
 
 // Create a theme instance
 const theme = createTheme({
@@ -60,14 +61,23 @@ const theme = createTheme({
 // In a real app, you'd use React Router for navigation between pages
 function App() {
   // State to handle which page is currently active
-  const [currentPage, setCurrentPage] = React.useState<'dashboard' | 'inventory'>('inventory');
+  const [currentPage, setCurrentPage] = React.useState<'dashboard' | 'inventory' | 'sales'>('inventory');
+
+  // Handle navigation between pages
+  const handleNavigate = (page: string) => {
+    if (page === 'dashboard' || page === 'inventory' || page === 'sales') {
+      setCurrentPage(page);
+    }
+  };
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <Layout onNavigate={(page) => setCurrentPage(page as 'dashboard' | 'inventory')}>
-          {currentPage === 'dashboard' ? <Dashboard /> : <InventoryPage />}
+        <Layout onNavigate={handleNavigate}>
+          {currentPage === 'dashboard' && <Dashboard />}
+          {currentPage === 'inventory' && <InventoryPage />}
+          {currentPage === 'sales' && <SalesPage />}
         </Layout>
       </LocalizationProvider>
     </ThemeProvider>

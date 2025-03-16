@@ -1,0 +1,448 @@
+// src/components/Sales/SalesTable.tsx
+import React from 'react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Checkbox,
+  TablePagination,
+  Typography,
+  Box,
+  Avatar,
+  Chip,
+  useTheme,
+  Tooltip
+} from '@mui/material';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
+import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import dayjs from 'dayjs';
+
+import { SalesItem } from '../../pages/SalesPage';
+
+interface SalesTableProps {
+  sales: SalesItem[];
+  visibleColumns: { [key: string]: boolean };
+  selectedSales: number[];
+  onSelectSale: (saleId: number, checked: boolean) => void;
+  page: number;
+  rowsPerPage: number;
+  totalSales: number;
+  onPageChange: (newPage: number) => void;
+}
+
+const SalesTable: React.FC<SalesTableProps> = ({
+  sales,
+  visibleColumns,
+  selectedSales,
+  onSelectSale,
+  page,
+  rowsPerPage,
+  totalSales,
+  onPageChange
+}) => {
+  const theme = useTheme();
+  
+  const handleChangePage = (event: unknown, newPage: number) => {
+    onPageChange(newPage);
+  };
+  
+  // Function to get platform icon
+  const getPlatformIcon = (platform: string) => {
+    switch (platform.toLowerCase()) {
+      case 'stockx':
+        return <StorefrontIcon sx={{ color: '#00FF00' }} />;
+      case 'goat':
+        return <ShoppingBasketIcon sx={{ color: '#FF5A5F' }} />;
+      case 'ebay':
+        return <ShoppingBagIcon sx={{ color: '#0064D2' }} />;
+      default:
+        return <StorefrontIcon sx={{ color: 'text.secondary' }} />;
+    }
+  };
+  
+  // Function to get status chip
+  const getStatusChip = (status: string) => {
+    let color = '';
+    let label = status;
+    
+    switch (status) {
+      case 'pending':
+        color = '#F59E0B'; // Yellow
+        label = 'Pending';
+        break;
+      case 'completed':
+        color = '#10B981'; // Green
+        label = 'Completed';
+        break;
+      case 'needsShipping':
+        color = '#F97316'; // Orange
+        label = 'Needs Shipping';
+        break;
+      default:
+        color = theme.palette.grey[500];
+        label = 'Unknown';
+    }
+    
+    return (
+      <Chip 
+        label={label} 
+        size="small"
+        sx={{ 
+          backgroundColor: color,
+          color: 'white',
+          fontWeight: 'medium',
+          fontSize: '0.75rem',
+          height: 24,
+          borderRadius: '12px'
+        }}
+      />
+    );
+  };
+
+  // Format date
+  const formatDate = (dateString: string) => {
+    try {
+      return dayjs(dateString).format('DD MMM YYYY');
+    } catch (error) {
+      return '-';
+    }
+  };
+  
+  // Render image avatar
+  const renderImage = (item: SalesItem) => {
+    if (item.imageUrl) {
+      return (
+        <Avatar 
+          src={item.imageUrl} 
+          alt={item.itemName}
+          variant="rounded"
+          sx={{ width: 48, height: 48 }}
+        />
+      );
+    }
+    return (
+      <Avatar 
+        variant="rounded"
+        sx={{ 
+          width: 48, 
+          height: 48, 
+          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+        }}
+      >
+        <InventoryIcon />
+      </Avatar>
+    );
+  };
+  
+  return (
+    <Paper 
+      sx={{ 
+        width: '100%', 
+        overflow: 'hidden',
+        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
+        borderRadius: 2
+      }}
+    >
+      <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
+        <Table stickyHeader size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox 
+                  indeterminate={selectedSales.length > 0 && selectedSales.length < sales.length}
+                  checked={sales.length > 0 && selectedSales.length === sales.length}
+                  onChange={(event) => {
+                    if (event.target.checked) {
+                      sales.forEach(sale => onSelectSale(sale.id, true));
+                    } else {
+                      sales.forEach(sale => onSelectSale(sale.id, false));
+                    }
+                  }}
+                  sx={{
+                    color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
+                    '&.Mui-checked': {
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                />
+              </TableCell>
+              
+              {visibleColumns.image && (
+                <TableCell sx={{ minWidth: 60 }}>Image</TableCell>
+              )}
+              
+              {visibleColumns.itemName && (
+                <TableCell sx={{ minWidth: 150 }}>Item Name</TableCell>
+              )}
+              
+              {visibleColumns.platform && (
+                <TableCell sx={{ minWidth: 120 }}>Platform</TableCell>
+              )}
+              
+              {visibleColumns.saleDate && (
+                <TableCell sx={{ minWidth: 110 }}>Sale Date</TableCell>
+              )}
+              
+              {visibleColumns.salePrice && (
+                <TableCell align="right" sx={{ minWidth: 100 }}>Sale Price</TableCell>
+              )}
+              
+              {visibleColumns.tax && (
+                <TableCell align="right" sx={{ minWidth: 80 }}>Tax</TableCell>
+              )}
+              
+              {visibleColumns.fees && (
+                <TableCell align="right" sx={{ minWidth: 80 }}>Fees</TableCell>
+              )}
+              
+              {visibleColumns.status && (
+                <TableCell sx={{ minWidth: 130 }}>Status</TableCell>
+              )}
+              
+              {visibleColumns.profit && (
+                <TableCell align="right" sx={{ minWidth: 100 }}>Profit</TableCell>
+              )}
+              
+              {visibleColumns.brand && (
+                <TableCell sx={{ minWidth: 100 }}>Brand</TableCell>
+              )}
+              
+              {visibleColumns.purchaseDate && (
+                <TableCell sx={{ minWidth: 110 }}>Purchase Date</TableCell>
+              )}
+              
+              {visibleColumns.purchasePrice && (
+                <TableCell align="right" sx={{ minWidth: 120 }}>Purchase Price</TableCell>
+              )}
+              
+              {visibleColumns.ROI && (
+                <TableCell align="right" sx={{ minWidth: 80 }}>ROI</TableCell>
+              )}
+              
+              {visibleColumns.daysToSell && (
+                <TableCell align="right" sx={{ minWidth: 100 }}>Days to Sell</TableCell>
+              )}
+              
+              {visibleColumns.size && (
+                <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
+              )}
+            </TableRow>
+          </TableHead>
+          
+          <TableBody>
+            {sales.length === 0 ? (
+              <TableRow>
+                <TableCell 
+                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 1} 
+                  align="center" 
+                  sx={{ py: 3 }}
+                >
+                  <Typography variant="body2" color="textSecondary">
+                    No sales found
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              sales.map((sale) => {
+                const isSelected = selectedSales.includes(sale.id);
+                
+                return (
+                  <TableRow
+                    hover
+                    key={sale.id}
+                    selected={isSelected}
+                    sx={{
+                      '&:hover': {
+                        backgroundColor: theme.palette.mode === 'dark' 
+                          ? 'rgba(255,255,255,0.05)' 
+                          : 'rgba(0,0,0,0.04)',
+                      },
+                      '&.Mui-selected': {
+                        backgroundColor: theme.palette.mode === 'dark' 
+                          ? 'rgba(66, 165, 245, 0.1)' 
+                          : 'rgba(25, 118, 210, 0.08)',
+                      },
+                    }}
+                  >
+                    <TableCell padding="checkbox">
+                      <Checkbox 
+                        checked={isSelected}
+                        onChange={(event) => onSelectSale(sale.id, event.target.checked)}
+                        sx={{
+                          color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
+                          '&.Mui-checked': {
+                            color: theme.palette.primary.main,
+                          },
+                        }}
+                      />
+                    </TableCell>
+                    
+                    {visibleColumns.image && (
+                      <TableCell>
+                        {renderImage(sale)}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.itemName && (
+                      <TableCell
+                        sx={{
+                          fontWeight: 'medium',
+                          color: theme.palette.primary.main,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {sale.itemName}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.platform && (
+                      <TableCell>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {getPlatformIcon(sale.platform)}
+                          <Typography variant="body2">
+                            {sale.platform}
+                          </Typography>
+                        </Box>
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.saleDate && (
+                      <TableCell>
+                        {formatDate(sale.saleDate)}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.salePrice && (
+                      <TableCell align="right">
+                        ${sale.salePrice.toFixed(2)}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.tax && (
+                      <TableCell align="right">
+                        {sale.salesTax 
+                          ? `$${sale.salesTax.toFixed(2)}` 
+                          : '$0.00'}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.fees && (
+                      <TableCell align="right">
+                        {sale.platformFees 
+                          ? `$${sale.platformFees.toFixed(2)}` 
+                          : '$0.00'}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.status && (
+                      <TableCell>
+                        {getStatusChip(sale.status)}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.profit && (
+                      <TableCell 
+                        align="right"
+                        sx={{
+                          color: sale.profit >= 0 
+                            ? theme.palette.success.main 
+                            : theme.palette.error.main,
+                          fontWeight: 'medium'
+                        }}
+                      >
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                          {sale.profit >= 0 ? (
+                            <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          ) : (
+                            <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
+                          )}
+                          ${Math.abs(sale.profit).toFixed(2)}
+                        </Box>
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.brand && (
+                      <TableCell>
+                        {sale.brand}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.purchaseDate && (
+                      <TableCell>
+                        {/* This would show the purchase date of the item */}
+                        <Typography variant="body2" color="text.secondary">
+                          {formatDate(new Date(Date.now() - (sale.daysToSell * 24 * 60 * 60 * 1000)).toISOString())}
+                        </Typography>
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.purchasePrice && (
+                      <TableCell align="right">
+                        ${sale.purchasePrice.toFixed(2)}
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.ROI && (
+                      <TableCell 
+                        align="right"
+                        sx={{
+                          color: sale.ROI >= 0 
+                            ? theme.palette.success.main 
+                            : theme.palette.error.main,
+                          fontWeight: 'medium'
+                        }}
+                      >
+                        {sale.ROI.toFixed(1)}%
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.daysToSell && (
+                      <TableCell align="right">
+                        {sale.daysToSell} days
+                      </TableCell>
+                    )}
+                    
+                    {visibleColumns.size && (
+                      <TableCell>
+                        {sale.size || '-'}
+                      </TableCell>
+                    )}
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      
+      <TablePagination
+        rowsPerPageOptions={[10, 25, 50]}
+        component="div"
+        count={totalSales}
+        rowsPerPage={rowsPerPage}
+        page={page}
+        onPageChange={handleChangePage}
+        onRowsPerPageChange={(e) => {
+          // This will be handled by the parent component
+        }}
+        sx={{
+          borderTop: `1px solid ${
+            theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.1)'
+              : theme.palette.divider
+          }`,
+        }}
+      />
+    </Paper>
+  );
+};
+
+export default SalesTable;

@@ -37,6 +37,7 @@ class Item(db.Model):
     sizes = db.relationship('Size', backref='item', lazy=True, cascade="all, delete-orphan")
     images = db.relationship('Image', backref='item', lazy=True, cascade="all, delete-orphan")
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
+    sales = db.relationship('Sale', backref='item', lazy=True)
 
     def to_dict(self):
         """
@@ -116,6 +117,50 @@ class Image(db.Model):
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
+
+class Sale(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Foreign key to item
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    
+    # Sale details
+    platform = db.Column(db.String(50), nullable=False)
+    sale_date = db.Column(db.DateTime, nullable=False)
+    sale_price = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), nullable=False, default='$')
+    sales_tax = db.Column(db.Float, default=0.0)
+    platform_fees = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(20), nullable=False, default='pending')  # 'pending', 'needsShipping', 'completed'
+    sale_id = db.Column(db.String(100))  # External sale ID/reference
+
+    def to_dict(self):
+        """
+        Create a dictionary representation of the sale for API responses.
+        """
+        try:
+            return {
+                'id': self.id,
+                'itemId': self.item_id,
+                'platform': self.platform,
+                'saleDate': self.sale_date.isoformat() if self.sale_date else None,
+                'salePrice': self.sale_price,
+                'currency': self.currency,
+                'salesTax': self.sales_tax,
+                'platformFees': self.platform_fees,
+                'status': self.status,
+                'saleId': self.sale_id,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+        except Exception as e:
+            print(f"💰 Error in Sale.to_dict(): {str(e)}")
+            return {
+                'id': self.id if hasattr(self, 'id') else None,
+                'error': f"Failed to serialize sale: {str(e)}"
+            }
 
 item_tags = db.Table('item_tags',
     db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True),
