@@ -301,11 +301,39 @@ export const api = {
     }
   },
 
-  // Method for deleting an item
+  // Enhanced Delete method for Issue 3.2
   deleteItem: async (itemId: number) => {
     try {
       console.log(`🔄 Deleting item ${itemId}...`);
       
+      // First check if this item has any associated sales
+      // If it does, we might need to delete those first or handle them differently
+      try {
+        const response = await fetch(`${API_BASE_URL}/items/${itemId}/sales`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+        
+        if (response.ok) {
+          const sales = await response.json();
+          
+          // If there are associated sales, delete them first
+          if (sales && sales.length > 0) {
+            console.log(`Found ${sales.length} sales for item ${itemId}, deleting them first...`);
+            
+            for (const sale of sales) {
+              await fetch(`${API_BASE_URL}/sales/${sale.id}`, {
+                method: 'DELETE',
+                credentials: 'include',
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ Error checking for associated sales, continuing with item deletion:', err);
+      }
+      
+      // Now proceed with deleting the item
       const response = await fetch(`${API_BASE_URL}/items/${itemId}`, {
         method: 'DELETE',
         credentials: 'include',

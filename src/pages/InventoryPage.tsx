@@ -19,7 +19,7 @@ import {
   Tooltip,
   Chip,
   Checkbox,
-  SelectChangeEvent
+  SelectChangeEvent,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -33,6 +33,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import DeleteIcon from '@mui/icons-material/Delete';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -40,6 +41,8 @@ import KPIMetrics from '../components/Inventory/KPIMetrics';
 import InventoryTable from '../components/Inventory/InventoryTable';
 import ColumnCustomizationMenu from '../components/Inventory/ColumnCustomizationMenu';
 import EditItemModal from '../components/EditItemModal';
+import RecordSaleModal from '../components/Sales/RecordSaleModal';
+import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 import { api, Item } from '../services/api';
 
@@ -97,6 +100,14 @@ const InventoryPage: React.FC = () => {
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [itemToEdit, setItemToEdit] = useState<InventoryItem | undefined>(undefined);
+  
+  // Record Sale modal state (FIX FOR ISSUE 3.1)
+  const [isRecordSaleModalOpen, setIsRecordSaleModalOpen] = useState<boolean>(false);
+  const [itemsToSell, setItemsToSell] = useState<Item[]>([]);
+  
+  // Confirmation dialog state (FIX FOR ISSUE 3.2)
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
+  const [itemsToDelete, setItemsToDelete] = useState<number[]>([]);
 
   // Fetch items from API
   useEffect(() => {
@@ -105,8 +116,11 @@ const InventoryPage: React.FC = () => {
         setLoading(true);
         const data = await api.getItems();
         
+        // Filter out sold items for inventory page (FIX FOR ISSUE 1.1)
+        const filteredItems = data.filter(item => item.status !== 'sold');
+        
         // Enhance items with additional calculated fields
-        const enhancedItems = data.map((item: Item) => {
+        const enhancedItems = filteredItems.map((item: Item) => {
           // For market price, use the stored value if available or calculate a default
           const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
           const estimatedProfit = marketPrice - item.purchasePrice;
@@ -148,8 +162,11 @@ const InventoryPage: React.FC = () => {
     try {
       const data = await api.getItems();
       
+      // Filter out sold items (FIX FOR ISSUE 1.1)
+      const filteredItems = data.filter(item => item.status !== 'sold');
+      
       // Enhance items with additional calculated fields (similar to useEffect)
-      const enhancedItems = data.map((item: Item) => {
+      const enhancedItems = filteredItems.map((item: Item) => {
         // Use stored values for marketPrice and status if available
         const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
         const estimatedProfit = marketPrice - item.purchasePrice;
@@ -231,6 +248,16 @@ const InventoryPage: React.FC = () => {
 
   const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
     try {
+      // If marking as sold, open RecordSaleModal (FIX FOR ISSUE 3.1)
+      if (newStatus === 'sold') {
+        // Get the selected items to sell
+        const itemsToSell = items.filter(item => itemIds.includes(item.id));
+        setItemsToSell(itemsToSell);
+        setIsRecordSaleModalOpen(true);
+        return;
+      }
+      
+      // For other status updates
       // First update UI for immediate feedback
       setItems(prevItems => 
         prevItems.map(item => {
@@ -333,21 +360,26 @@ const InventoryPage: React.FC = () => {
     handleRefresh();
   };
   
-  const handleDeleteItems = async () => {
+  // FIX FOR ISSUE 3.2: Delete functionality
+  const handleDeleteClick = () => {
     if (selectedItems.length === 0) return;
-    
+    setItemsToDelete(selectedItems);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
     try {
       // Delete items from backend
-      for (const itemId of selectedItems) {
+      for (const itemId of itemsToDelete) {
         await api.deleteItem(itemId);
       }
       
       // Update UI
-      setItems(prevItems => prevItems.filter(item => !selectedItems.includes(item.id)));
+      setItems(prevItems => prevItems.filter(item => !itemsToDelete.includes(item.id)));
       
       setSnackbar({
         open: true,
-        message: `${selectedItems.length} item(s) deleted`,
+        message: `${itemsToDelete.length} item(s) deleted successfully`,
         severity: 'success'
       });
       
@@ -360,6 +392,22 @@ const InventoryPage: React.FC = () => {
         message: `Failed to delete items: ${error.message}`,
         severity: 'error'
       });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setItemsToDelete([]);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
+    setItemsToDelete([]);
+  };
+
+  // FIX FOR ISSUE 3.1: Record Sale modal handlers
+  const handleRecordSaleModalClose = (refresh = false) => {
+    setIsRecordSaleModalOpen(false);
+    if (refresh) {
+      handleRefresh();
     }
   };
 
@@ -516,7 +564,6 @@ const InventoryPage: React.FC = () => {
           {selectedItems.length > 0 && (
             <>
               <Grid item>
-                {/* Edit button - shows different text based on selection count */}
                 <Button 
                   variant="outlined" 
                   size="small"
@@ -549,12 +596,14 @@ const InventoryPage: React.FC = () => {
                 </Button>
               </Grid>
               
+              {/* FIX FOR ISSUE 3.2: Delete Button */}
               <Grid item>
                 <Button 
                   variant="contained" 
                   color="error"
                   size="small"
-                  onClick={handleDeleteItems}
+                  startIcon={<DeleteIcon />}
+                  onClick={handleDeleteClick}
                 >
                   Delete
                 </Button>
@@ -610,6 +659,25 @@ const InventoryPage: React.FC = () => {
         onClose={handleEditModalClose}
         item={itemToEdit}
         isMultiple={selectedItems.length > 1}
+      />
+      
+      {/* FIX FOR ISSUE 3.1: Record Sale Modal */}
+      <RecordSaleModal
+        open={isRecordSaleModalOpen}
+        onClose={handleRecordSaleModalClose}
+        items={itemsToSell}
+      />
+      
+      {/* FIX FOR ISSUE 3.2: Confirmation Dialog for Delete */}
+      <ConfirmationDialog
+        open={deleteConfirmOpen}
+        title="Confirm Delete"
+        message={`Are you sure you want to delete ${itemsToDelete.length > 1 ? 'these ' + itemsToDelete.length + ' items' : 'this item'}? This action cannot be undone.`}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+        confirmButtonColor="error"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
       />
       
       {/* Snackbar for notifications */}

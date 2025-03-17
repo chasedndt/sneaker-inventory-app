@@ -1,8 +1,10 @@
+// src/components/MetricsCard.tsx
 import React from 'react';
 import { 
   Paper, 
   Typography, 
-  Box 
+  Box,
+  useTheme
 } from '@mui/material';
 import { 
   LineChart, 
@@ -29,12 +31,20 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   prefix = '$',
   suffix = ''
 }) => {
+  const theme = useTheme();
+  
   return (
-    <Paper sx={{ p: 2, height: '100%', borderRadius: 2 }}>
+    <Paper sx={{ 
+      p: 2, 
+      height: '100%', 
+      borderRadius: 2, 
+      bgcolor: theme.palette.background.paper,
+      color: theme.palette.text.primary
+    }}>
       <Typography 
         variant="subtitle2" 
         sx={{ 
-          color: 'text.secondary',
+          color: theme.palette.text.secondary,
           mb: 1,
           fontSize: '0.875rem'
         }}
@@ -47,7 +57,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
           variant="h6" 
           sx={{ 
             fontWeight: 600,
-            fontSize: '1.25rem'
+            fontSize: '1.25rem',
+            color: theme.palette.text.primary
           }}
         >
           {prefix}{value}{suffix}
@@ -55,7 +66,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         <Box sx={{ 
           display: 'flex', 
           alignItems: 'center',
-          color: change >= 0 ? 'success.main' : 'error.main',
+          color: change >= 0 ? theme.palette.success.main : theme.palette.error.main,
           fontSize: '0.875rem'
         }}>
           {change >= 0 ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
@@ -71,7 +82,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
             <Line 
               type="monotone"
               dataKey="value"
-              stroke={change >= 0 ? '#4CAF50' : '#f44336'}
+              stroke={change >= 0 ? theme.palette.success.main : theme.palette.error.main}
               strokeWidth={2}
               dot={false}
             />
