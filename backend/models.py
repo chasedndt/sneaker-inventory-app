@@ -30,19 +30,19 @@ class Item(db.Model):
     vat_percentage = db.Column(db.Float)
     sales_tax_percentage = db.Column(db.Float)
     
-    # Status - new field for tracking item status
+    # Status - field for tracking item status
     status = db.Column(db.String(20), default='unlisted')  # 'unlisted', 'listed', or 'sold'
 
     # Relationships
     sizes = db.relationship('Size', backref='item', lazy=True, cascade="all, delete-orphan")
     images = db.relationship('Image', backref='item', lazy=True, cascade="all, delete-orphan")
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
-    sales = db.relationship('Sale', backref='item', lazy=True)
+    sales = db.relationship('Sale', backref='item', lazy=True, cascade="all, delete-orphan")
 
     def to_dict(self):
         """
         Create a dictionary representation of the item for API responses.
-        Now includes image filenames when available.
+        Includes image filenames when available.
         """
         try:
             # Get image filenames for this item
@@ -162,6 +162,7 @@ class Sale(db.Model):
                 'error': f"Failed to serialize sale: {str(e)}"
             }
 
+# Association table for many-to-many relationship between items and tags
 item_tags = db.Table('item_tags',
     db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)

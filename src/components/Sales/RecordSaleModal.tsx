@@ -9,8 +9,7 @@ import {
   Box,
   Typography,
   TextField,
-  Select,
-  MenuItem,
+  Autocomplete,
   FormControl,
   InputLabel,
   Grid,
@@ -19,8 +18,11 @@ import {
   FormHelperText,
   Alert,
   CircularProgress,
+  Select,
   SelectChangeEvent,
-  Avatar
+  MenuItem,
+  Avatar,
+  useTheme
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -58,7 +60,8 @@ interface FormErrors {
   platformFees?: string;
 }
 
-const PLATFORMS = ['StockX', 'GOAT', 'eBay', 'Grailed', 'Depop', 'Stadium Goods', 'Other'];
+// FIX FOR ISSUE 4.1: Predefined platforms with option for custom input
+const PREDEFINED_PLATFORMS = ['StockX', 'GOAT', 'eBay', 'Grailed', 'Depop', 'Stadium Goods'];
 const CURRENCIES = ['$', '€', '£', '¥'];
 
 const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
@@ -66,6 +69,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   onClose,
   items
 }) => {
+  const theme = useTheme();
   const [formData, setFormData] = useState<FormData>({
     itemId: 0,
     platform: '',
@@ -82,6 +86,10 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  
+  // FIX FOR ISSUE 4.1: Custom platform state
+  const [customPlatforms, setCustomPlatforms] = useState<string[]>([]);
+  const [platformOptions, setPlatformOptions] = useState<string[]>(PREDEFINED_PLATFORMS);
   
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -103,6 +111,14 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       // Set selected item to first item if available
       if (items.length > 0) {
         setSelectedItem(items[0]);
+      }
+      
+      // Load any saved custom platforms from localStorage
+      const savedCustomPlatforms = localStorage.getItem('customPlatforms');
+      if (savedCustomPlatforms) {
+        const parsedPlatforms = JSON.parse(savedCustomPlatforms);
+        setCustomPlatforms(parsedPlatforms);
+        setPlatformOptions([...PREDEFINED_PLATFORMS, ...parsedPlatforms]);
       }
     }
   }, [open, items]);
@@ -126,6 +142,27 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
         [field]: undefined
       }));
     }
+  };
+  
+  // FIX FOR ISSUE 4.1: Handle platform change with custom input support
+  const handlePlatformChange = (event: React.SyntheticEvent, newValue: string | null) => {
+    if (!newValue) {
+      handleChange('platform', '');
+      return;
+    }
+    
+    // Handle custom platform
+    if (!PREDEFINED_PLATFORMS.includes(newValue) && !customPlatforms.includes(newValue)) {
+      // Add to custom platforms
+      const updatedCustomPlatforms = [...customPlatforms, newValue];
+      setCustomPlatforms(updatedCustomPlatforms);
+      setPlatformOptions([...PREDEFINED_PLATFORMS, ...updatedCustomPlatforms]);
+      
+      // Save to localStorage
+      localStorage.setItem('customPlatforms', JSON.stringify(updatedCustomPlatforms));
+    }
+    
+    handleChange('platform', newValue);
   };
   
   const validateForm = (): boolean => {
@@ -205,7 +242,8 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       fullWidth
       PaperProps={{
         sx: {
-          borderRadius: 2
+          borderRadius: 2,
+          bgcolor: theme.palette.background.paper
         }
       }}
     >
@@ -216,11 +254,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
         justifyContent: 'space-between', 
         alignItems: 'center'
       }}>
-        <Typography variant="h6">Record Sale</Typography>
+        <Typography variant="h6" color={theme.palette.text.primary}>Record Sale</Typography>
         <IconButton
           aria-label="close"
           onClick={() => onClose(false)}
-          sx={{ color: 'grey.500' }}
+          sx={{ color: theme.palette.text.secondary }}
         >
           <CloseIcon />
         </IconButton>
@@ -238,7 +276,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
               <Box sx={{ 
                 mb: 3, 
                 p: 2, 
-                bgcolor: 'background.default', 
+                bgcolor: theme.palette.background.default, 
                 borderRadius: 2,
                 display: 'flex',
                 alignItems: 'center',
@@ -251,13 +289,13 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                   sx={{ width: 64, height: 64 }}
                 />
                 <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.text.primary }}>
                     {selectedItem.productName}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" color={theme.palette.text.secondary}>
                     {selectedItem.brand} • {selectedItem.category} • {selectedItem.size || 'No size'}
                   </Typography>
-                  <Typography variant="body2" color="primary">
+                  <Typography variant="body2" color={theme.palette.primary.main}>
                     Purchase price: ${selectedItem.purchasePrice.toFixed(2)}
                   </Typography>
                 </Box>
@@ -275,6 +313,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       handleChange('itemId', e.target.value as number)
                     }
                     label="Select Item"
+                    sx={{ color: theme.palette.text.primary }}
                   >
                     {items.map((item) => (
                       <MenuItem key={item.id} value={item.id}>
@@ -286,23 +325,28 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                 </FormControl>
               </Grid>
               
-              {/* Platform */}
+              {/* Platform - FIX FOR ISSUE 4.1: Using Autocomplete instead of Select */}
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth error={!!errors.platform}>
-                  <InputLabel>Listing Platform</InputLabel>
-                  <Select
-                    value={formData.platform}
-                    onChange={(e) => handleChange('platform', e.target.value)}
-                    label="Listing Platform"
-                  >
-                    {PLATFORMS.map((platform) => (
-                      <MenuItem key={platform} value={platform}>
-                        {platform}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {errors.platform && <FormHelperText>{errors.platform}</FormHelperText>}
-                </FormControl>
+                <Autocomplete
+                  value={formData.platform}
+                  onChange={handlePlatformChange}
+                  options={platformOptions}
+                  freeSolo
+                  renderInput={(params) => (
+                    <TextField 
+                      {...params} 
+                      label="Listing Platform"
+                      error={!!errors.platform}
+                      helperText={errors.platform}
+                      fullWidth
+                    />
+                  )}
+                  sx={{ 
+                    '& .MuiOutlinedInput-root': {
+                      color: theme.palette.text.primary
+                    }
+                  }}
+                />
               </Grid>
               
               {/* Sale Date */}
@@ -316,7 +360,12 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       textField: {
                         fullWidth: true,
                         error: !!errors.saleDate,
-                        helperText: errors.saleDate
+                        helperText: errors.saleDate,
+                        sx: {
+                          '& .MuiInputBase-input': { 
+                            color: theme.palette.text.primary 
+                          }
+                        }
                       }
                     }}
                   />
@@ -351,6 +400,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       </InputAdornment>
                     )
                   }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { 
+                      color: theme.palette.text.primary 
+                    }
+                  }}
                 />
               </Grid>
               
@@ -370,6 +424,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                         {formData.currency}
                       </InputAdornment>
                     )
+                  }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { 
+                      color: theme.palette.text.primary 
+                    }
                   }}
                 />
               </Grid>
@@ -391,6 +450,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       </InputAdornment>
                     )
                   }}
+                  sx={{ 
+                    '& .MuiInputBase-input': { 
+                      color: theme.palette.text.primary 
+                    }
+                  }}
                 />
               </Grid>
               
@@ -402,6 +466,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                     value={formData.status}
                     onChange={(e) => handleChange('status', e.target.value)}
                     label="Status"
+                    sx={{ color: theme.palette.text.primary }}
                   >
                     <MenuItem value="pending">Pending</MenuItem>
                     <MenuItem value="needsShipping">Needs Shipping</MenuItem>
@@ -418,6 +483,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                   value={formData.saleId}
                   onChange={(e) => handleChange('saleId', e.target.value)}
                   placeholder="Order # or reference ID"
+                  sx={{ 
+                    '& .MuiInputBase-input': { 
+                      color: theme.palette.text.primary 
+                    }
+                  }}
                 />
               </Grid>
               
@@ -426,33 +496,33 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                 <Grid item xs={12}>
                   <Box sx={{ 
                     p: 2, 
-                    bgcolor: 'background.default', 
+                    bgcolor: theme.palette.background.default, 
                     borderRadius: 2,
                     mt: 2
                   }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1, color: theme.palette.text.primary }}>
                       Profit Preview
                     </Typography>
                     
                     <Grid container spacing={1}>
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color={theme.palette.text.secondary}>
                           Sale Price:
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" align="right">
+                        <Typography variant="body2" align="right" color={theme.palette.text.primary}>
                           {formData.currency}{formData.salePrice}
                         </Typography>
                       </Grid>
                       
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color={theme.palette.text.secondary}>
                           Purchase Price:
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" align="right">
+                        <Typography variant="body2" align="right" color={theme.palette.text.primary}>
                           -${selectedItem.purchasePrice.toFixed(2)}
                         </Typography>
                       </Grid>
@@ -460,12 +530,12 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       {formData.salesTax && parseFloat(formData.salesTax) > 0 && (
                         <>
                           <Grid item xs={6}>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" color={theme.palette.text.secondary}>
                               Sales Tax/VAT:
                             </Typography>
                           </Grid>
                           <Grid item xs={6}>
-                            <Typography variant="body2" align="right">
+                            <Typography variant="body2" align="right" color={theme.palette.text.primary}>
                               -{formData.currency}{parseFloat(formData.salesTax).toFixed(2)}
                             </Typography>
                           </Grid>
@@ -475,12 +545,12 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       {formData.platformFees && parseFloat(formData.platformFees) > 0 && (
                         <>
                           <Grid item xs={6}>
-                            <Typography variant="body2" color="text.secondary">
+                            <Typography variant="body2" color={theme.palette.text.secondary}>
                               Platform Fees:
                             </Typography>
                           </Grid>
                           <Grid item xs={6}>
-                            <Typography variant="body2" align="right">
+                            <Typography variant="body2" align="right" color={theme.palette.text.primary}>
                               -{formData.currency}{parseFloat(formData.platformFees).toFixed(2)}
                             </Typography>
                           </Grid>
@@ -492,7 +562,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       </Grid>
                       
                       <Grid item xs={6}>
-                        <Typography variant="subtitle2">
+                        <Typography variant="subtitle2" color={theme.palette.text.primary}>
                           Net Profit:
                         </Typography>
                       </Grid>
@@ -508,7 +578,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                             <Typography 
                               variant="subtitle2" 
                               align="right"
-                              color={profit >= 0 ? 'success.main' : 'error.main'}
+                              color={profit >= 0 ? theme.palette.success.main : theme.palette.error.main}
                             >
                               {formData.currency}{profit.toFixed(2)} ({roi.toFixed(1)}% ROI)
                             </Typography>
@@ -535,6 +605,10 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
           onClick={() => onClose(false)}
           variant="outlined"
           disabled={isSubmitting}
+          sx={{
+            borderColor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.2)' : undefined,
+            color: theme.palette.text.primary
+          }}
         >
           Cancel
         </Button>

@@ -15,7 +15,8 @@ import {
   Avatar,
   Chip,
   useTheme,
-  Tooltip
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -23,6 +24,9 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import dayjs from 'dayjs';
 
 import { SalesItem } from '../../pages/SalesPage';
@@ -36,6 +40,8 @@ interface SalesTableProps {
   rowsPerPage: number;
   totalSales: number;
   onPageChange: (newPage: number) => void;
+  onDeleteSale: (saleId: number) => void;
+  onRestoreToInventory: (saleId: number) => void;
 }
 
 const SalesTable: React.FC<SalesTableProps> = ({
@@ -46,7 +52,9 @@ const SalesTable: React.FC<SalesTableProps> = ({
   page,
   rowsPerPage,
   totalSales,
-  onPageChange
+  onPageChange,
+  onDeleteSale,
+  onRestoreToInventory
 }) => {
   const theme = useTheme();
   
@@ -64,7 +72,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
       case 'ebay':
         return <ShoppingBagIcon sx={{ color: '#0064D2' }} />;
       default:
-        return <StorefrontIcon sx={{ color: 'text.secondary' }} />;
+        return <StorefrontIcon sx={{ color: theme.palette.text.secondary }} />;
     }
   };
   
@@ -147,7 +155,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
       sx={{ 
         width: '100%', 
         overflow: 'hidden',
-        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
+        backgroundColor: theme.palette.background.paper,
         borderRadius: 2
       }}
     >
@@ -234,6 +242,9 @@ const SalesTable: React.FC<SalesTableProps> = ({
               {visibleColumns.size && (
                 <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
               )}
+              
+              {/* Actions Column - FIX FOR ISSUE 1.2: Added Delete and Return to Inventory */}
+              <TableCell sx={{ minWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           
@@ -241,11 +252,11 @@ const SalesTable: React.FC<SalesTableProps> = ({
             {sales.length === 0 ? (
               <TableRow>
                 <TableCell 
-                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 1} 
+                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} // +2 for checkbox and actions
                   align="center" 
                   sx={{ py: 3 }}
                 >
-                  <Typography variant="body2" color="textSecondary">
+                  <Typography variant="body2" color="text.secondary">
                     No sales found
                   </Typography>
                 </TableCell>
@@ -307,7 +318,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           {getPlatformIcon(sale.platform)}
-                          <Typography variant="body2">
+                          <Typography variant="body2" color={theme.palette.text.primary}>
                             {sale.platform}
                           </Typography>
                         </Box>
@@ -415,6 +426,43 @@ const SalesTable: React.FC<SalesTableProps> = ({
                         {sale.size || '-'}
                       </TableCell>
                     )}
+                    
+                    {/* Actions Column - FIX FOR ISSUE 1.2: Added Delete and Return to Inventory */}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Tooltip title="Restore to Inventory">
+                          <IconButton 
+                            size="small" 
+                            color="primary"
+                            onClick={() => onRestoreToInventory(sale.id)}
+                            sx={{ 
+                              bgcolor: 'rgba(25, 118, 210, 0.08)',
+                              '&:hover': {
+                                bgcolor: 'rgba(25, 118, 210, 0.15)'
+                              }
+                            }}
+                          >
+                            <KeyboardReturnIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        
+                        <Tooltip title="Delete Sale">
+                          <IconButton 
+                            size="small" 
+                            color="error"
+                            onClick={() => onDeleteSale(sale.id)}
+                            sx={{ 
+                              bgcolor: 'rgba(211, 47, 47, 0.08)',
+                              '&:hover': {
+                                bgcolor: 'rgba(211, 47, 47, 0.15)'
+                              }
+                            }}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -439,6 +487,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
               ? 'rgba(255, 255, 255, 0.1)'
               : theme.palette.divider
           }`,
+          color: theme.palette.text.primary
         }}
       />
     </Paper>
