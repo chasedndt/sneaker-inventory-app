@@ -53,8 +53,273 @@ def create_app():
     def test_connection():
         logger.info("Test endpoint hit")
         return jsonify({'status': 'connected'}), 200
+    
+    # NEW ENDPOINT: Get all items
+    @app.route('/api/items', methods=['GET'])
+    def get_items():
+        """
+        Get all items with their images.
+        """
+        try:
+            logger.info("📊 Fetching all items")
+            items = Item.query.all()
+            
+            # Convert items to dictionary format with image URLs
+            items_data = []
+            for item in items:
+                item_dict = item.to_dict()
+                items_data.append(item_dict)
+            
+            logger.info(f"✅ Retrieved {len(items_data)} items")
+            return jsonify(items_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching items: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/check-image/<filename>', methods=['GET'])
+    # Get a single item by ID
+    @app.route('/api/items/<int:item_id>', methods=['GET'])
+    def get_item(item_id):
+        """
+        Get a single item by ID with its images.
+        """
+        try:
+            item = Item.query.get(item_id)
+            if not item:
+                logger.warning(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': 'Item not found'}), 404
+            
+            logger.info(f"✅ Retrieved item {item_id} from database")
+            
+            # Get the item's images
+            images = Image.query.filter_by(item_id=item.id).all()
+            image_filenames = [img.filename for img in images]
+            
+            # Create a detailed response with images
+            item_data = item.to_dict()
+            item_data['images'] = image_filenames
+            
+            logger.info(f"📸 Item {item_id} has {len(image_filenames)} images: {image_filenames}")
+            
+            return jsonify(item_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Add a new item
+    @app.route('/api/items', methods=['POST'])
+    def add_item():
+        try:
+            logger.info("Receiving item creation request")
+            
+            # Check if the post request has the file part
+            if 'images' not in request.files and 'data' not in request.form:
+                logger.error("No images or data part in the request")
+                return jsonify({'error': 'No images or data part'}), 400
+            
+            # Parse the JSON data
+            form_data = json.loads(request.form.get('data'))
+            
+            # Extract data from the form
+            product_details = form_data.get('productDetails', {})
+            sizes_quantity = form_data.get('sizesQuantity', {})
+            purchase_details = form_data.get('purchaseDetails', {})
+            
+            # Create a new item
+            new_item = Item(
+                category=product_details.get('category', ''),
+                product_name=product_details.get('productName', ''),
+                reference=product_details.get('reference', ''),
+                colorway=product_details.get('colorway', ''),
+                brand=product_details.get('brand', ''),
+                purchase_price=float(purchase_details.get('purchasePrice', 0)),
+                purchase_currency=purchase_details.get('purchaseCurrency', '$'),
+                shipping_price=float(purchase_details.get('shippingPrice', 0) or 0),
+                shipping_currency=purchase_details.get('shippingCurrency', '$'),
+                market_price=float(purchase_details.get('marketPrice', 0) or 0),
+                purchase_date=datetime.fromisoformat(purchase_details.get('purchaseDate').replace('Z', '+00:00')) if purchase_details.get('purchaseDate') else datetime.utcnow(),
+                purchase_location=purchase_details.get('purchaseLocation', ''),
+                condition=purchase_details.get('condition', ''),
+                notes=purchase_details.get('notes', ''),
+                order_id=purchase_details.get('orderID', ''),
+                tax_type=purchase_details.get('taxType', 'none'),
+                vat_percentage=float(purchase_details.get('vatPercentage', 0) or 0),
+                sales_tax_percentage=float(purchase_details.get('salesTaxPercentage', 0) or 0),
+                status='unlisted'  # Default status for new items
+            )
+            
+            db.session.add(new_item)
+            db.session.flush()  # Get the item ID before committing
+            
+            # Add sizes
+            selected_sizes = sizes_quantity.get('selectedSizes', [])
+            for size_entry in selected_sizes:
+                new_size = Size(
+                    item_id=new_item.id,
+                    system=size_entry.get('system', ''),
+                    size=size_entry.get('size', ''),
+                    quantity=int(size_entry.get('quantity', 1))
+                )
+                db.session.add(new_size)
+            
+            # Add tags if provided
+            if purchase_details.get('tags'):
+                for tag_name in purchase_details.get('tags', []):
+                    # Check if tag already exists
+                    tag = Tag.query.filter_by(name=tag_name).first()
+                    if not tag:
+                        tag = Tag(name=tag_name)
+                        db.session.add(tag)
+                        db.session.flush()
+                    
+                    # Add tag to item's tags
+                    new_item.tags.append(tag)
+            
+            # Process and save images
+            files = request.files.getlist('images')
+            image_filenames = []
+            
+            for file in files:
+                if file and allowed_file(file.filename):
+                    # Generate a secure filename with timestamp to avoid duplicates
+                    filename = secure_filename(file.filename)
+                    filename_parts = filename.rsplit('.', 1)
+                    timestamped_filename = f"{filename_parts[0]}_{int(time.time())}.{filename_parts[1]}"
+                    
+                    # Save the file
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    file.save(file_path)
+                    
+                    # Create image record in database
+                    new_image = Image(
+                        item_id=new_item.id,
+                        filename=timestamped_filename,
+                        path=file_path
+                    )
+                    db.session.add(new_image)
+                    image_filenames.append(timestamped_filename)
+            
+            # Commit changes to database
+            db.session.commit()
+            
+            logger.info(f"✅ Item created with ID: {new_item.id}")
+            
+            # Return the created item with its images
+            return jsonify({
+                'message': 'Item created successfully',
+                'item': {
+                    'id': new_item.id,
+                    'productName': new_item.product_name,
+                    'category': new_item.category,
+                    'brand': new_item.brand,
+                    'images': image_filenames
+                }
+            }), 201
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error creating item: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Update an item field
+    @app.route('/api/items/<int:item_id>/field', methods=['PATCH'])
+    def update_item_field(item_id):
+        """
+        Update a specific field of an item.
+        """
+        try:
+            logger.info(f"🔄 Updating field for item {item_id}")
+            data = request.json
+            
+            # Validate request
+            if 'field' not in data or 'value' not in data:
+                logger.error("❌ Missing required fields: field and value")
+                return jsonify({'error': 'Missing required fields: field and value'}), 400
+            
+            field = data['field']
+            value = data['value']
+            
+            # Check if item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Update the specific field
+            if field == 'status':
+                # Validate status
+                valid_statuses = ['unlisted', 'listed', 'sold']
+                if value not in valid_statuses:
+                    logger.error(f"❌ Invalid status value: {value}")
+                    return jsonify({'error': f'Invalid status value. Must be one of: {", ".join(valid_statuses)}'}), 400
+                item.status = value
+            elif field == 'marketPrice':
+                try:
+                    item.market_price = float(value)
+                except ValueError:
+                    return jsonify({'error': 'Invalid market price value'}), 400
+            # Add other fields as needed
+            else:
+                logger.error(f"❌ Invalid field name: {field}")
+                return jsonify({'error': f'Invalid field name: {field}'}), 400
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.info(f"✅ Updated {field} for item {item_id}")
+            
+            # Return success message
+            return jsonify({
+                'message': f'Field {field} updated successfully',
+                'id': item_id,
+                'field': field,
+                'value': value
+            }), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating field for item {item_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Delete an item
+    @app.route('/api/items/<int:item_id>', methods=['DELETE'])
+    def delete_item(item_id):
+        """
+        Delete an item and its associated data.
+        """
+        try:
+            logger.info(f"🗑️ Deleting item {item_id}")
+            
+            # Check if item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Delete associated images from storage
+            images = Image.query.filter_by(item_id=item_id).all()
+            for image in images:
+                try:
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+                        logger.info(f"✅ Deleted image file: {file_path}")
+                except Exception as img_err:
+                    logger.error(f"❌ Failed to delete image file: {str(img_err)}")
+            
+            # Delete the item (cascade should handle associated records)
+            db.session.delete(item)
+            db.session.commit()
+            
+            logger.info(f"✅ Item {item_id} deleted successfully")
+            
+            return jsonify({
+                'message': f'Item {item_id} deleted successfully'
+            }), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error deleting item {item_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/check-image/<filename>')
     def check_image(filename):
         """
         Check if an image exists in the uploads directory and return metadata
@@ -114,36 +379,6 @@ def create_app():
         except Exception as e:
             image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
             return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/items/<int:item_id>', methods=['GET'])
-    def get_item(item_id):
-        """
-        Get a single item by ID with its images.
-        """
-        try:
-            item = Item.query.get(item_id)
-            if not item:
-                logger.warning(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': 'Item not found'}), 404
-            
-            logger.info(f"✅ Retrieved item {item_id} from database")
-            
-            # Get the item's images
-            images = Image.query.filter_by(item_id=item.id).all()
-            image_filenames = [img.filename for img in images]
-            
-            # Create a detailed response with images
-            item_data = item.to_dict()
-            item_data['images'] = image_filenames
-            
-            logger.info(f"📸 Item {item_id} has {len(image_filenames)} images: {image_filenames}")
-            
-            return jsonify(item_data), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    # Existing inventory endpoints here...
 
     # SALES API ENDPOINTS
     @app.route('/api/sales', methods=['GET'])
