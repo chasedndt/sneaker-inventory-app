@@ -1,3 +1,4 @@
+# backend/app.py
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_migrate import Migrate
@@ -220,6 +221,126 @@ def create_app():
             logger.error(f"💥 Error creating item: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # Update an existing item
+    @app.route('/api/items/<int:item_id>', methods=['PUT'])
+    def update_item(item_id):
+        """
+        Update an existing item.
+        """
+        try:
+            logger.info(f"🔄 Updating item {item_id}")
+            
+            # Check if item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Check if the request has data
+            if 'data' not in request.form:
+                logger.error("No data part in the request")
+                return jsonify({'error': 'No data provided'}), 400
+            
+            # Parse the JSON data
+            form_data = json.loads(request.form.get('data'))
+            
+            # Extract data from the form
+            product_details = form_data.get('productDetails', {})
+            sizes_quantity = form_data.get('sizesQuantity', {})
+            purchase_details = form_data.get('purchaseDetails', {})
+            status = form_data.get('status')  # Get status if provided
+            
+            # Update item fields
+            if product_details:
+                item.category = product_details.get('category', item.category)
+                item.product_name = product_details.get('productName', item.product_name)
+                item.reference = product_details.get('reference', item.reference)
+                item.colorway = product_details.get('colorway', item.colorway)
+                item.brand = product_details.get('brand', item.brand)
+            
+            if purchase_details:
+                item.purchase_price = float(purchase_details.get('purchasePrice', item.purchase_price))
+                item.purchase_currency = purchase_details.get('purchaseCurrency', item.purchase_currency)
+                item.shipping_price = float(purchase_details.get('shippingPrice', item.shipping_price or 0))
+                item.shipping_currency = purchase_details.get('shippingCurrency', item.shipping_currency)
+                item.market_price = float(purchase_details.get('marketPrice', item.market_price or 0))
+                
+                if purchase_details.get('purchaseDate'):
+                    try:
+                        item.purchase_date = datetime.fromisoformat(purchase_details.get('purchaseDate').replace('Z', '+00:00'))
+                    except ValueError:
+                        logger.warning(f"Invalid date format: {purchase_details.get('purchaseDate')}")
+                
+                item.purchase_location = purchase_details.get('purchaseLocation', item.purchase_location)
+                item.condition = purchase_details.get('condition', item.condition)
+                item.notes = purchase_details.get('notes', item.notes)
+                item.order_id = purchase_details.get('orderID', item.order_id)
+                item.tax_type = purchase_details.get('taxType', item.tax_type)
+                item.vat_percentage = float(purchase_details.get('vatPercentage', item.vat_percentage or 0))
+                item.sales_tax_percentage = float(purchase_details.get('salesTaxPercentage', item.sales_tax_percentage or 0))
+            
+            # Update status if provided
+            if status:
+                item.status = status
+            
+            # Update sizes if provided
+            if sizes_quantity and 'selectedSizes' in sizes_quantity:
+                # First, remove existing sizes
+                Size.query.filter_by(item_id=item.id).delete()
+                
+                # Then add new sizes
+                for size_entry in sizes_quantity.get('selectedSizes', []):
+                    new_size = Size(
+                        item_id=item.id,
+                        system=size_entry.get('system', ''),
+                        size=size_entry.get('size', ''),
+                        quantity=int(size_entry.get('quantity', 1))
+                    )
+                    db.session.add(new_size)
+            
+            # Process new images if provided
+            if 'images' in request.files:
+                files = request.files.getlist('images')
+                image_filenames = []
+                
+                for file in files:
+                    if file and allowed_file(file.filename):
+                        # Generate a secure filename with timestamp to avoid duplicates
+                        filename = secure_filename(file.filename)
+                        filename_parts = filename.rsplit('.', 1)
+                        timestamped_filename = f"{filename_parts[0]}_{int(time.time())}.{filename_parts[1]}"
+                        
+                        # Save the file
+                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                        file.save(file_path)
+                        
+                        # Create image record in database
+                        new_image = Image(
+                            item_id=item.id,
+                            filename=timestamped_filename,
+                            path=file_path
+                        )
+                        db.session.add(new_image)
+                        image_filenames.append(timestamped_filename)
+            
+            # Update the modified timestamp
+            item.updated_at = datetime.utcnow()
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.info(f"✅ Item {item_id} updated successfully")
+            
+            # Return the updated item
+            return jsonify({
+                'message': 'Item updated successfully',
+                'item': item.to_dict()
+            }), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating item {item_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
     # Update an item field
     @app.route('/api/items/<int:item_id>/field', methods=['PATCH'])
     def update_item_field(item_id):
@@ -293,6 +414,12 @@ def create_app():
             if not item:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Delete associated sales records
+            sales = Sale.query.filter_by(item_id=item_id).all()
+            for sale in sales:
+                db.session.delete(sale)
+                logger.info(f"🗑️ Deleted associated sale {sale.id} for item {item_id}")
             
             # Delete associated images from storage
             images = Image.query.filter_by(item_id=item_id).all()
@@ -717,6 +844,101 @@ def create_app():
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error deleting sale {sale_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Endpoint to get sales by item
+    @app.route('/api/items/<int:item_id>/sales', methods=['GET'])
+    def get_sales_by_item(item_id):
+        """
+        Get all sales for a specific item.
+        """
+        try:
+            logger.info(f"📊 Fetching sales for item {item_id}")
+            
+            # Check if the item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Get all sales for this item
+            sales = Sale.query.filter_by(item_id=item_id).all()
+            
+            # Convert to dictionary format
+            sales_data = [sale.to_dict() for sale in sales]
+            
+            logger.info(f"✅ Retrieved {len(sales_data)} sales for item {item_id}")
+            return jsonify(sales_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching sales for item {item_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Save custom platforms to database
+    @app.route('/api/platforms', methods=['GET'])
+    def get_platforms():
+        """
+        Get all custom platforms from the database.
+        """
+        try:
+            # In a real app, you would have a Platform model
+            # For now, we'll use a simple file-based approach
+            platforms_file = os.path.join(app.config['BASEDIR'], 'platforms.json')
+            
+            if os.path.exists(platforms_file):
+                with open(platforms_file, 'r') as f:
+                    try:
+                        platforms = json.load(f)
+                    except json.JSONDecodeError:
+                        platforms = {"platforms": []}
+            else:
+                platforms = {"platforms": []}
+            
+            return jsonify(platforms), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching platforms: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/platforms', methods=['POST'])
+    def add_platform():
+        """
+        Add a new custom platform.
+        """
+        try:
+            data = request.json
+            
+            if 'name' not in data:
+                return jsonify({'error': 'Platform name is required'}), 400
+            
+            platform_name = data['name']
+            
+            # In a real app, you would save this to a Platform model
+            # For now, we'll use a simple file-based approach
+            platforms_file = os.path.join(app.config['BASEDIR'], 'platforms.json')
+            
+            if os.path.exists(platforms_file):
+                with open(platforms_file, 'r') as f:
+                    try:
+                        platforms = json.load(f)
+                    except json.JSONDecodeError:
+                        platforms = {"platforms": []}
+            else:
+                platforms = {"platforms": []}
+            
+            # Add the new platform if it doesn't already exist
+            if platform_name not in platforms["platforms"]:
+                platforms["platforms"].append(platform_name)
+                
+                # Save the updated platforms
+                with open(platforms_file, 'w') as f:
+                    json.dump(platforms, f)
+                
+                logger.info(f"✅ Added new platform: {platform_name}")
+                return jsonify({'message': 'Platform added successfully'}), 201
+            else:
+                return jsonify({'message': 'Platform already exists'}), 200
+            
+        except Exception as e:
+            logger.error(f"💥 Error adding platform: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.before_request

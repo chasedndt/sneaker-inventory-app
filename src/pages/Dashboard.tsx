@@ -50,7 +50,7 @@ const Dashboard: React.FC = () => {
       const data = await api.getItems();
       
       // Filter out sold items - FIX FOR ISSUE 2.1
-      const activeItems = data.filter(item => item.status !== 'sold');
+      const activeItems = data.filter((item: Item) => item.status !== 'sold');
       console.log(`✅ Received ${activeItems.length} active items from API (filtered out sold items)`);
       
       setItems(activeItems);
