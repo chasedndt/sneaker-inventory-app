@@ -1,4 +1,5 @@
 // src/pages/InventoryPage.tsx
+// src/pages/InventoryPage.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Box, 
@@ -117,7 +118,7 @@ const InventoryPage: React.FC = () => {
         const data = await api.getItems();
         
         // Filter out sold items for inventory page (FIX FOR ISSUE 1.1)
-        const filteredItems = data.filter(item => item.status !== 'sold');
+        const filteredItems = data.filter((item: Item) => item.status !== 'sold');
         
         // Enhance items with additional calculated fields
         const enhancedItems = filteredItems.map((item: Item) => {
@@ -163,7 +164,7 @@ const InventoryPage: React.FC = () => {
       const data = await api.getItems();
       
       // Filter out sold items (FIX FOR ISSUE 1.1)
-      const filteredItems = data.filter(item => item.status !== 'sold');
+      const filteredItems = data.filter((item: Item) => item.status !== 'sold');
       
       // Enhance items with additional calculated fields (similar to useEffect)
       const enhancedItems = filteredItems.map((item: Item) => {

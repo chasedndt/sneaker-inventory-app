@@ -43,6 +43,7 @@ import SalesTable from '../components/Sales/SalesTable';
 import ColumnCustomizationMenu from '../components/Inventory/ColumnCustomizationMenu';
 import RecordSaleModal from '../components/Sales/RecordSaleModal';
 import BulkSaleModal from '../components/Sales/BulkSaleModal';
+import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 import { Item, api } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
@@ -97,6 +98,12 @@ const SalesPage: React.FC = () => {
   const [isRecordSaleModalOpen, setIsRecordSaleModalOpen] = useState<boolean>(false);
   const [isBulkSaleModalOpen, setIsBulkSaleModalOpen] = useState<boolean>(false);
   const [selectedItems, setSelectedItems] = useState<Item[]>([]);
+  
+  // Confirmation dialog state for delete/restore
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
+  const [salesToDelete, setSalesToDelete] = useState<number[]>([]);
+  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState<boolean>(false);
+  const [saleToRestore, setSaleToRestore] = useState<number | null>(null);
 
   // Fetch sales from API
   useEffect(() => {
@@ -393,6 +400,96 @@ const SalesPage: React.FC = () => {
     }
   };
 
+  // Handle Delete Sale
+  const handleDeleteSale = (saleId: number) => {
+    setSalesToDelete([saleId]);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    try {
+      // Delete sales on backend
+      for (const saleId of salesToDelete) {
+        await salesApi.deleteSale(saleId);
+      }
+      
+      // Update UI
+      setSales(prevSales => prevSales.filter(sale => !salesToDelete.includes(sale.id)));
+      
+      setSnackbar({
+        open: true,
+        message: `${salesToDelete.length} sale(s) deleted successfully`,
+        severity: 'success'
+      });
+      
+    } catch (error: any) {
+      console.error('Error deleting sales:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to delete sales: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setDeleteConfirmOpen(false);
+      setSalesToDelete([]);
+      // Clear selection
+      setSelectedSales([]);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteConfirmOpen(false);
+    setSalesToDelete([]);
+  };
+
+  // Handle Restore to Inventory
+  const handleRestoreToInventory = (saleId: number) => {
+    setSaleToRestore(saleId);
+    setRestoreConfirmOpen(true);
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (!saleToRestore) return;
+    
+    try {
+      const saleToRestoreData = sales.find(sale => sale.id === saleToRestore);
+      
+      if (!saleToRestoreData) {
+        throw new Error('Sale not found');
+      }
+      
+      // First update the item status back to unlisted
+      await api.updateItemField(saleToRestoreData.itemId, 'status', 'unlisted');
+      
+      // Then delete the sale record
+      await salesApi.deleteSale(saleToRestore);
+      
+      // Update UI
+      setSales(prevSales => prevSales.filter(sale => sale.id !== saleToRestore));
+      
+      setSnackbar({
+        open: true,
+        message: 'Item restored to inventory successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Error restoring item to inventory:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to restore item: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setRestoreConfirmOpen(false);
+      setSaleToRestore(null);
+    }
+  };
+
+  const handleRestoreCancel = () => {
+    setRestoreConfirmOpen(false);
+    setSaleToRestore(null);
+  };
+
   // Filter sales based on search query
   const filteredSales = useMemo(() => {
     if (!searchQuery) return sales;
@@ -606,7 +703,7 @@ const SalesPage: React.FC = () => {
         </Grid>
       </Paper>
       
-      {/* Sales Table */}
+      {/* Sales Table - FIX: Add missing required props */}
       <SalesTable 
         sales={paginatedSales}
         visibleColumns={visibleColumns}
@@ -616,6 +713,8 @@ const SalesPage: React.FC = () => {
         rowsPerPage={rowsPerPage}
         totalSales={filteredSales.length}
         onPageChange={handlePageChange}
+        onDeleteSale={handleDeleteSale}
+        onRestoreToInventory={handleRestoreToInventory}
       />
       
       {/* Column Customization Menu */}
@@ -639,6 +738,31 @@ const SalesPage: React.FC = () => {
         open={isBulkSaleModalOpen}
         onClose={handleBulkSaleModalClose}
         sales={selectedSales.map(id => sales.find(sale => sale.id === id)).filter(Boolean) as SalesItem[]}
+      />
+      
+      
+      {/* Delete Confirmation Dialog */}
+      <ConfirmationDialog
+        open={deleteConfirmOpen}
+        title="Confirm Delete"
+        message={`Are you sure you want to delete ${salesToDelete.length > 1 ? 'these ' + salesToDelete.length + ' sales' : 'this sale'}? This action cannot be undone.`}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+        confirmButtonColor="error"
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
+      
+      {/* Restore to Inventory Confirmation Dialog */}
+      <ConfirmationDialog
+        open={restoreConfirmOpen}
+        title="Restore to Inventory"
+        message="Are you sure you want to restore this item to your inventory? This will remove the sale record and mark the item as unlisted."
+        confirmButtonText="Restore"
+        cancelButtonText="Cancel"
+        confirmButtonColor="primary"
+        onConfirm={handleRestoreConfirm}
+        onCancel={handleRestoreCancel}
       />
       
       {/* Snackbar for notifications */}
