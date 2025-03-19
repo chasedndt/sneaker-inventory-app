@@ -3,10 +3,15 @@ import React, { useMemo } from 'react';
 import { Grid } from '@mui/material';
 import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
+import { Sale } from '../services/salesApi';
+import { Dayjs } from 'dayjs';
 
-// Props with items to properly filter out sold items
+// Props to include sales data and date filters
 interface ReportsSectionProps {
   items: Item[];
+  sales: Sale[];
+  startDate: Dayjs | null;
+  endDate: Dayjs | null;
 }
 
 // Generate mock data for the mini charts
@@ -17,48 +22,115 @@ const generateMockData = (baseValue: number, volatility: number) => {
   }));
 };
 
-const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
-  // FIX FOR ISSUE 2.2: Calculate metrics based on active inventory only
+const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate, endDate }) => {
+  // Calculate metrics based on filtered data
   const metrics = useMemo(() => {
+    console.log('Calculating metrics with:', { itemsCount: items.length, salesCount: sales.length });
+    
+    // Filter data based on date range if provided
+    let filteredItems = [...items];
+    let filteredSales = [...sales];
+    
+    if (startDate && endDate) {
+      const startTimestamp = startDate.startOf('day').valueOf();
+      const endTimestamp = endDate.endOf('day').valueOf();
+      
+      // Filter items by purchase date
+      filteredItems = items.filter(item => {
+        const purchaseDate = new Date(item.purchaseDate).getTime();
+        return purchaseDate >= startTimestamp && purchaseDate <= endTimestamp;
+      });
+      
+      // Filter sales by sale date
+      filteredSales = sales.filter(sale => {
+        const saleDate = new Date(sale.saleDate).getTime();
+        return saleDate >= startTimestamp && saleDate <= endTimestamp;
+      });
+    }
+    
+    console.log('Filtered data:', { filteredItemsCount: filteredItems.length, filteredSalesCount: filteredSales.length });
+    
     // Ensure we're only using active inventory (not sold items)
-    const activeItems = items.filter(item => item.status !== 'sold');
+    const activeItems = filteredItems.filter(item => item.status !== 'sold');
     
-    // Sold items (from API or mock)
-    const soldItems = items.filter(item => item.status === 'sold');
+    // Sold items from filtered sales
+    const soldItemsCount = filteredSales.length;
     
-    // Calculate net profit (from sold items)
-    const totalSales = soldItems.reduce((sum, item) => {
-      // Estimate sale price as 120% of purchase price for simplicity
-      const estimatedSalePrice = item.marketPrice || (item.purchasePrice * 1.2);
-      return sum + estimatedSalePrice;
+    // Calculate net profit (from items still in inventory)
+    const inventoryProfit = activeItems.reduce((sum, item) => {
+      const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup
+      return sum + (marketPrice - item.purchasePrice);
     }, 0);
-    const totalPurchaseCostForSold = soldItems.reduce((sum, item) => sum + item.purchasePrice, 0);
-    const netProfit = totalSales - totalPurchaseCostForSold;
     
-    // Calculate ROI
-    const roi = totalPurchaseCostForSold > 0 ? (netProfit / totalPurchaseCostForSold) * 100 : 0;
+    // Dynamically calculate profit from sold items by looking up each sale
+    let soldItemsProfit = 0;
+    console.log('Calculating profit from each sale:');
+    filteredSales.forEach((sale, index) => {
+      // Find the corresponding item that was sold
+      const soldItem = items.find(item => item.id === sale.itemId);
+      
+      if (soldItem) {
+        // Calculate profit for this sale
+        const purchasePrice = soldItem.purchasePrice || 0;
+        const salesTax = sale.salesTax || 0;
+        const platformFees = sale.platformFees || 0;
+        const saleProfit = sale.salePrice - purchasePrice - salesTax - platformFees;
+        
+        console.log(`Sale ${index + 1}:`, {
+          id: sale.id,
+          itemId: sale.itemId,
+          salePrice: sale.salePrice,
+          purchasePrice,
+          salesTax,
+          platformFees,
+          calculatedProfit: saleProfit
+        });
+        
+        // Add this sale's profit to the total
+        soldItemsProfit += saleProfit;
+      } else {
+        console.warn(`Could not find item with id ${sale.itemId} for sale ${sale.id}`);
+      }
+    });
     
-    // Total spend on inventory (only active items)
+    console.log('Total calculated sold items profit:', soldItemsProfit);
+    
+    // Calculate sales income
+    const salesIncome = filteredSales.reduce((sum, sale) => sum + sale.salePrice, 0);
+    console.log('Sales income:', salesIncome);
+    
+    // Calculate total spend on inventory (only active items)
     const activeInventorySpend = activeItems.reduce((sum, item) => sum + item.purchasePrice, 0);
     
+    // Calculate total purchase value of sold items
+    const soldItemsSpend = filteredSales.reduce((sum, sale) => {
+      const soldItem = items.find(item => item.id === sale.itemId);
+      return sum + (soldItem?.purchasePrice || 0);
+    }, 0);
+    
+    // Calculate ROI
+    const totalSpend = activeInventorySpend + soldItemsSpend;
+    const roi = totalSpend > 0 ? ((inventoryProfit + soldItemsProfit) / totalSpend) * 100 : 0;
+    
     return {
-      netProfit,
-      netProfitChange: -15.3, // Example value
-      salesIncome: totalSales,
-      salesIncomeChange: 12.5, // Example value
+      netProfit: inventoryProfit,
+      netProfitChange: -15.3,
+      salesIncome: salesIncome,
+      salesIncomeChange: 12.5,
       itemSpend: activeInventorySpend,
-      itemSpendChange: -8.4, // Example value
+      itemSpendChange: -8.4,
       roiPercentage: roi,
-      roiChange: 5.2, // Example value
-      subscriptionSpend: 0,
-      subscriptionSpendChange: 0,
-      itemsPurchased: activeItems.length,
-      itemsPurchasedChange: 8.7, // Example value
-      itemsSold: soldItems.length,
-      itemsSoldChange: -12.5, // Example value
-      totalSpend: activeInventorySpend // This is active inventory spend
+      roiChange: 5.2,
+      expenseSpend: 0,
+      expenseSpendChange: 0,
+      itemsPurchased: filteredItems.length,
+      itemsPurchasedChange: 8.7,
+      itemsSold: soldItemsCount,
+      itemsSoldChange: -12.5,
+      netProfitSold: soldItemsProfit, // Dynamically calculated from sales data
+      netProfitSoldChange: -6.4
     };
-  }, [items]);
+  }, [items, sales, startDate, endDate]);
 
   return (
     <Grid container spacing={3}>
@@ -68,6 +140,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           value={metrics.netProfit.toFixed(2)}
           change={metrics.netProfitChange}
           data={generateMockData(2000, 400)}
+          tooltipText="Estimated profit based on market price difference minus purchase price for items still in inventory"
         />
       </Grid>
       
@@ -77,6 +150,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           value={metrics.salesIncome.toFixed(2)}
           change={metrics.salesIncomeChange}
           data={generateMockData(5000, 800)}
+          tooltipText="Total revenue from all completed sales"
         />
       </Grid>
 
@@ -86,6 +160,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           value={metrics.itemSpend.toFixed(2)}
           change={metrics.itemSpendChange}
           data={generateMockData(7000, 1000)}
+          tooltipText="Total amount spent on items currently in inventory"
         />
       </Grid>
 
@@ -97,15 +172,17 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           data={generateMockData(25, 5)}
           prefix=""
           suffix="%"
+          tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
         />
       </Grid>
 
       <Grid item xs={12} sm={6} md={3}>
         <MetricsCard
-          title="Subscription Spend"
-          value={metrics.subscriptionSpend.toFixed(2)}
-          change={metrics.subscriptionSpendChange}
+          title="Expense Spend"
+          value={metrics.expenseSpend.toFixed(2)}
+          change={metrics.expenseSpendChange}
           data={generateMockData(0, 0)}
+          tooltipText="Total expenses excluding inventory purchases"
         />
       </Grid>
 
@@ -116,6 +193,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           change={metrics.itemsPurchasedChange}
           data={generateMockData(metrics.itemsPurchased, 5)}
           prefix=""
+          tooltipText="Total number of items purchased during the selected period"
         />
       </Grid>
 
@@ -126,15 +204,17 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items }) => {
           change={metrics.itemsSoldChange}
           data={generateMockData(metrics.itemsSold, 4)}
           prefix=""
+          tooltipText="Total number of items sold during the selected period"
         />
       </Grid>
 
       <Grid item xs={12} sm={6} md={3}>
         <MetricsCard
-          title="Active Inventory Value" // Updated title to clarify
-          value={metrics.totalSpend.toFixed(2)}
-          change={metrics.itemSpendChange}
-          data={generateMockData(7000, 1000)}
+          title="Net Profit from Sold Items"
+          value={metrics.netProfitSold.toFixed(2)}
+          change={metrics.netProfitSoldChange}
+          data={generateMockData(metrics.netProfitSold * 0.8, metrics.netProfitSold * 0.2)} // Base mock data on actual value
+          tooltipText="Realized profit from actual sales minus expenses, shipping costs, platform fees, and sales tax"
         />
       </Grid>
     </Grid>

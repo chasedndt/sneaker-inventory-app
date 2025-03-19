@@ -9,27 +9,32 @@ import {
   Snackbar,
   Alert,
   Button,
-  useTheme
+  useTheme,
+  Tooltip,
+  IconButton
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoIcon from '@mui/icons-material/Info';
 import { api, Item } from '../services/api';
+import { salesApi, Sale } from '../services/salesApi';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
 import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
-import dayjs from 'dayjs';
+import dayjs, { Dayjs } from 'dayjs';
 
 const Dashboard: React.FC = () => {
   const theme = useTheme();
   const [items, setItems] = useState<Item[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState<null | Date>(null);
-  const [endDate, setEndDate] = useState<null | Date>(null);
+  const [startDate, setStartDate] = useState<Dayjs | null>(null);
+  const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -37,8 +42,8 @@ const Dashboard: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
 
-  // Fetch items from API
-  const fetchItems = useCallback(async (showRefreshing = false) => {
+  // Fetch items and sales from API
+  const fetchData = useCallback(async (showRefreshing = false) => {
     try {
       if (showRefreshing) {
         setRefreshing(true);
@@ -46,27 +51,35 @@ const Dashboard: React.FC = () => {
         setLoading(true);
       }
       
-      console.log('🔄 Fetching inventory items...');
-      const data = await api.getItems();
+      console.log('🔄 Fetching inventory items and sales data...');
       
-      // Filter out sold items - FIX FOR ISSUE 2.1
-      const activeItems = data.filter((item: Item) => item.status !== 'sold');
-      console.log(`✅ Received ${activeItems.length} active items from API (filtered out sold items)`);
+      // Fetch items data
+      const itemsData = await api.getItems();
       
+      // Filter out sold items for active inventory
+      const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
+      console.log(`✅ Received ${activeItems.length} active items from API`);
+      
+      // Fetch sales data
+      const salesData = await salesApi.getSales();
+      console.log(`✅ Received ${salesData.length} sales records from API`);
+      
+      // Update state with both datasets
       setItems(activeItems);
+      setSales(salesData);
       setError(null);
       
       // Show success message if refreshing
       if (showRefreshing) {
         setSnackbar({
           open: true,
-          message: 'Inventory refreshed successfully',
+          message: 'Dashboard data refreshed successfully',
           severity: 'success'
         });
       }
     } catch (err: any) {
-      console.error('💥 Error fetching items:', err);
-      setError(`Failed to load inventory data: ${err.message}`);
+      console.error('💥 Error fetching data:', err);
+      setError(`Failed to load dashboard data: ${err.message}`);
       setSnackbar({
         open: true,
         message: `Error loading data: ${err.message}`,
@@ -80,18 +93,18 @@ const Dashboard: React.FC = () => {
 
   // Initial data load
   useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    fetchData();
+  }, [fetchData]);
 
   // Handle refreshing data
   const handleRefresh = () => {
-    fetchItems(true);
+    fetchData(true);
   };
 
   // Handle adding a new item
   const handleAddItemModalClose = () => {
     setIsAddItemModalOpen(false);
-    fetchItems();
+    fetchData();
     setSnackbar({
       open: true,
       message: 'Item added successfully!',
@@ -104,23 +117,135 @@ const Dashboard: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  // Calculate portfolio values from active items only (FIX FOR ISSUE 2.2)
-  const calculatePortfolioValues = (items: Item[]) => {
-    console.log('📊 Calculating portfolio statistics from active items only...');
-    // Filter out sold items again to ensure accuracy
-    const activeItems = items.filter(item => item.status !== 'sold');
-    const currentValue = activeItems.reduce((sum, item) => sum + item.purchasePrice, 0);
-    const previousValue = currentValue * 0.95; // Example calculation (5% growth assumed)
+  // Filter data based on date range
+  const getFilteredData = () => {
+    // First filter active items based on date range
+    let filteredItems = [...items];
+    let filteredSales = [...sales];
+    
+    if (startDate && endDate) {
+      const startTimestamp = startDate.startOf('day').valueOf();
+      const endTimestamp = endDate.endOf('day').valueOf();
+      
+      // Filter items by purchase date
+      filteredItems = items.filter(item => {
+        const purchaseDate = new Date(item.purchaseDate).getTime();
+        return purchaseDate >= startTimestamp && purchaseDate <= endTimestamp;
+      });
+      
+      // Filter sales by sale date
+      filteredSales = sales.filter(sale => {
+        const saleDate = new Date(sale.saleDate).getTime();
+        return saleDate >= startTimestamp && saleDate <= endTimestamp;
+      });
+    }
+    
+    return { filteredItems, filteredSales };
+  };
+
+  // Calculate portfolio stats with real, live data
+  const calculatePortfolioStats = () => {
+    const { filteredItems, filteredSales } = getFilteredData();
+    
+    // Current portfolio value (sum of market prices for all active inventory)
+    const currentValue = filteredItems.reduce((sum, item) => {
+      // Use market price if available, otherwise estimate as 20% more than purchase price
+      const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
+      return sum + marketPrice;
+    }, 0);
+    
+    // Calculate previous value (using the previous week's data)
+    // For this demo, using 5% down from current as previous value
+    const previousValue = currentValue * 0.95;
+    
     const valueChange = currentValue - previousValue;
     const percentageChange = previousValue === 0 ? 0 : (valueChange / previousValue) * 100;
-
+    
+    // Get historical portfolio value data (for the graph)
+    const historicalData = generateHistoricalPortfolioData(filteredItems, filteredSales);
+    
     return {
       currentValue,
       valueChange,
-      percentageChange: Number(percentageChange.toFixed(1))
+      percentageChange: Number(percentageChange.toFixed(1)),
+      historicalData
     };
   };
+  
+  // Generate historical portfolio data for the graph
+  const generateHistoricalPortfolioData = (filteredItems: Item[], filteredSales: Sale[]) => {
+    // If date range is set, use it for the graph, otherwise generate the last 6 data points
+    const today = dayjs();
+    const numberOfPoints = 6;
+    const pointsArray = [];
+    
+    // Create data points based on filtered data
+    if (startDate && endDate) {
+      // Calculate range for even distribution
+      const totalDays = endDate.diff(startDate, 'day');
+      const interval = Math.max(1, Math.floor(totalDays / (numberOfPoints - 1)));
+      
+      for (let i = 0; i < numberOfPoints; i++) {
+        const pointDate = startDate.add(i * interval, 'day');
+        if (pointDate.isAfter(endDate)) break;
+        
+        const dateValue = pointDate.format('M/D');
+        
+        // Calculate portfolio value at this point in time
+        const pointValue = calculateValueAtPoint(pointDate, filteredItems, filteredSales);
+        
+        pointsArray.push({ date: dateValue, value: pointValue });
+      }
+    } else {
+      // Generate last 6 data points (past weeks)
+      for (let i = 5; i >= 0; i--) {
+        const pointDate = today.subtract(i * 7, 'day');
+        const dateValue = pointDate.format('M/D');
+        
+        // Calculate portfolio value at this point in time
+        const pointValue = calculateValueAtPoint(pointDate, items, sales);
+        
+        pointsArray.push({ date: dateValue, value: pointValue });
+      }
+    }
+    
+    return pointsArray;
+  };
+  
+  // Helper to calculate portfolio value at a specific point in time
+  const calculateValueAtPoint = (date: Dayjs, itemsList: Item[], salesList: Sale[]) => {
+    const targetDate = date.endOf('day');
+    
+    // Get items that were purchased before or on the target date
+    const itemsBeforeDate = itemsList.filter(item => {
+      const purchaseDate = dayjs(item.purchaseDate);
+      return purchaseDate.isBefore(targetDate) || purchaseDate.isSame(targetDate, 'day');
+    });
+    
+    // Get sales that happened before or on the target date
+    const salesBeforeDate = salesList.filter(sale => {
+      const saleDate = dayjs(sale.saleDate);
+      return saleDate.isBefore(targetDate) || saleDate.isSame(targetDate, 'day');
+    });
+    
+    // Calculate total value of active items at this point
+    let totalValue = 0;
+    
+    // Add value of items that were purchased before this date and not sold
+    for (const item of itemsBeforeDate) {
+      // Skip items that were sold before this date
+      const isItemSold = salesBeforeDate.some(sale => sale.itemId === item.id);
+      if (!isItemSold) {
+        // Use market price if available, otherwise estimate as 20% more than purchase price
+        const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
+        totalValue += marketPrice;
+      }
+    }
+    
+    return Math.round(totalValue);
+  };
 
+  // Loading state
   if (loading) {
     return (
       <Box sx={{ 
@@ -132,12 +257,15 @@ const Dashboard: React.FC = () => {
         gap: 2
       }}>
         <CircularProgress />
-        <Typography color={theme.palette.text.secondary}>Loading your inventory...</Typography>
+        <Typography color={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : 'text.secondary'}>
+          Loading your dashboard...
+        </Typography>
       </Box>
     );
   }
 
-  const portfolioStats = calculatePortfolioValues(items);
+  // Calculate portfolio stats including historical data
+  const portfolioStats = calculatePortfolioStats();
 
   return (
     <Box sx={{ 
@@ -153,7 +281,7 @@ const Dashboard: React.FC = () => {
         mr: { xs: 0, md: 3 },
         maxWidth: { xs: '100%', md: 'calc(100% - 350px)' }
       }}>
-        {/* Date Range Picker - Fixed for Dark Mode (ISSUE 2.3) */}
+        {/* Date Range Picker with improved visibility */}
         <Paper sx={{ 
           p: '16px 24px', 
           borderRadius: 2, 
@@ -182,8 +310,8 @@ const Dashboard: React.FC = () => {
               <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
                 <DatePicker
                   label="Start Date"
-                  value={startDate ? dayjs(startDate) : null}
-                  onChange={(newValue) => setStartDate(newValue ? newValue.toDate() : null)}
+                  value={startDate}
+                  onChange={(newValue) => setStartDate(newValue)}
                   slotProps={{
                     textField: {
                       variant: 'outlined',
@@ -197,8 +325,8 @@ const Dashboard: React.FC = () => {
                 />
                 <DatePicker
                   label="End Date"
-                  value={endDate ? dayjs(endDate) : null}
-                  onChange={(newValue) => setEndDate(newValue ? newValue.toDate() : null)}
+                  value={endDate}
+                  onChange={(newValue) => setEndDate(newValue)}
                   slotProps={{
                     textField: {
                       variant: 'outlined',
@@ -229,18 +357,22 @@ const Dashboard: React.FC = () => {
           </Box>
         </Paper>
 
-        {/* Portfolio Value Chart - Dark Mode Fix (ISSUE 2.3) */}
+        {/* Portfolio Value Chart with real data */}
         <PortfolioValue 
           currentValue={portfolioStats.currentValue}
           valueChange={portfolioStats.valueChange}
           percentageChange={portfolioStats.percentageChange}
-          theme={theme} // Pass theme for dark mode
+          historicalData={portfolioStats.historicalData}
+          theme={theme}
         />
 
-        {/* Reports Grid */}
+        {/* Reports Grid with connected data */}
         <Box sx={{ mt: 3 }}>
           <ReportsSection 
-            items={items} // Pass only active items to ensure proper calculations
+            items={items}
+            sales={sales}
+            startDate={startDate}
+            endDate={endDate}
           />
         </Box>
       </Box>
@@ -253,8 +385,19 @@ const Dashboard: React.FC = () => {
           display: { xs: 'none', md: 'block' }
         }}
       >
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            mb: 2, 
+            pl: 1, 
+            color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
+            fontWeight: 600
+          }}
+        >
+          Your Inventory
+        </Typography>
         <EnhancedInventoryDisplay 
-          items={items.filter(item => item.status !== 'sold')} // Show only active items
+          items={items.filter(item => item.status !== 'sold')}
         />
       </Box>
 
@@ -266,8 +409,19 @@ const Dashboard: React.FC = () => {
           display: { xs: 'block', md: 'none' }
         }}
       >
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            mb: 2, 
+            pl: 1, 
+            color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
+            fontWeight: 600
+          }}
+        >
+          Your Inventory
+        </Typography>
         <EnhancedInventoryDisplay 
-          items={items.filter(item => item.status !== 'sold')} // Show only active items
+          items={items.filter(item => item.status !== 'sold')}
         />
       </Box>
 
