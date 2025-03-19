@@ -1,4 +1,3 @@
-// src/pages/Dashboard.tsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { 
   Box,
@@ -273,13 +272,17 @@ const Dashboard: React.FC = () => {
       flexDirection: { xs: 'column', md: 'row' },
       p: { xs: 2, md: 3 },
       maxWidth: '1800px',
-      margin: '0 auto'
+      margin: '0 auto',
+      height: 'calc(100vh - 80px)', // Set a fixed height to fit within screen
+      overflow: 'hidden' // Prevent scrolling
     }}>
       {/* Main Content - Left Side */}
       <Box sx={{ 
         flex: '1 1 auto',
         mr: { xs: 0, md: 3 },
-        maxWidth: { xs: '100%', md: 'calc(100% - 350px)' }
+        maxWidth: { xs: '100%', md: 'calc(100% - 350px)' },
+        height: '100%',
+        overflow: 'hidden' // Prevent scrolling
       }}>
         {/* Date Range Picker with improved visibility */}
         <Paper sx={{ 
@@ -362,7 +365,7 @@ const Dashboard: React.FC = () => {
           currentValue={portfolioStats.currentValue}
           valueChange={portfolioStats.valueChange}
           percentageChange={portfolioStats.percentageChange}
-          historicalData={portfolioStats.historicalData}
+          data={portfolioStats.historicalData}
           theme={theme}
         />
 
@@ -382,20 +385,28 @@ const Dashboard: React.FC = () => {
         sx={{ 
           width: { xs: '100%', md: '350px' },
           flex: '0 0 auto',
-          display: { xs: 'none', md: 'block' }
+          display: { xs: 'none', md: 'block' },
+          height: '100%',
+          overflow: 'auto' // Allow scrolling just for this section if needed
         }}
       >
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            mb: 2, 
-            pl: 1, 
-            color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
-            fontWeight: 600
-          }}
-        >
-          Your Inventory
-        </Typography>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 2,
+          pl: 1
+        }}>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
+              fontWeight: 600
+            }}
+          >
+            Your Inventory
+          </Typography>
+        </Box>
         <EnhancedInventoryDisplay 
           items={items.filter(item => item.status !== 'sold')}
         />
@@ -409,17 +420,23 @@ const Dashboard: React.FC = () => {
           display: { xs: 'block', md: 'none' }
         }}
       >
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            mb: 2, 
-            pl: 1, 
-            color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
-            fontWeight: 600
-          }}
-        >
-          Your Inventory
-        </Typography>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 2,
+          pl: 1
+        }}>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
+              fontWeight: 600
+            }}
+          >
+            Your Inventory
+          </Typography>
+        </Box>
         <EnhancedInventoryDisplay 
           items={items.filter(item => item.status !== 'sold')}
         />

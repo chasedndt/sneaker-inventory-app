@@ -4,7 +4,8 @@ import {
   Paper, 
   Typography, 
   Box,
-  useTheme
+  useTheme,
+  Tooltip
 } from '@mui/material';
 import { 
   LineChart, 
@@ -13,6 +14,7 @@ import {
 } from 'recharts';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import InfoIcon from '@mui/icons-material/Info';
 
 interface MetricsCardProps {
   title: string;
@@ -21,6 +23,7 @@ interface MetricsCardProps {
   data: Array<{ date: string; value: number }>;
   prefix?: string;
   suffix?: string;
+  tooltipText?: string;
 }
 
 const MetricsCard: React.FC<MetricsCardProps> = ({
@@ -29,7 +32,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   change,
   data,
   prefix = '$',
-  suffix = ''
+  suffix = '',
+  tooltipText
 }) => {
   const theme = useTheme();
   
@@ -41,16 +45,24 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
       bgcolor: theme.palette.background.paper,
       color: theme.palette.text.primary
     }}>
-      <Typography 
-        variant="subtitle2" 
-        sx={{ 
-          color: theme.palette.text.secondary,
-          mb: 1,
-          fontSize: '0.875rem'
-        }}
-      >
-        {title}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Typography 
+          variant="subtitle2" 
+          sx={{ 
+            color: theme.palette.text.secondary,
+            mb: 1,
+            fontSize: '0.875rem'
+          }}
+        >
+          {title}
+        </Typography>
+        
+        {tooltipText && (
+          <Tooltip title={tooltipText} placement="top" arrow>
+            <InfoIcon fontSize="small" sx={{ color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)', cursor: 'help' }} />
+          </Tooltip>
+        )}
+      </Box>
       
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
         <Typography 

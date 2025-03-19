@@ -1,4 +1,3 @@
-// src/components/PortfolioValue.tsx
 import React, { useState } from 'react';
 import { 
   Paper, 
@@ -7,7 +6,8 @@ import {
   ToggleButtonGroup, 
   ToggleButton,
   styled,
-  Theme
+  Theme,
+  Tooltip
 } from '@mui/material';
 import { 
   LineChart, 
@@ -15,10 +15,12 @@ import {
   XAxis, 
   YAxis, 
   CartesianGrid, 
-  Tooltip, 
+  Tooltip as RechartsTooltip, 
   ResponsiveContainer 
 } from 'recharts';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import InfoIcon from '@mui/icons-material/Info';
 
 // Custom styled ToggleButton to handle dark mode properly
 const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
@@ -51,20 +53,11 @@ const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
   },
 }));
 
-// Mock data matching the chart
-const mockData = [
-  { date: '1/1', value: 76805 },
-  { date: '1/8', value: 82400 },
-  { date: '1/15', value: 85900 },
-  { date: '1/22', value: 89700 },
-  { date: '1/29', value: 94500 },
-  { date: '2/5', value: 99129 }
-];
-
 interface PortfolioValueProps {
   currentValue: number;
   valueChange: number;
   percentageChange: number;
+  data: Array<{ date: string; value: number }>; // Changed from historicalData to data to match Dashboard usage
   theme?: Theme; // Accept theme prop for proper dark mode styling
 }
 
@@ -72,6 +65,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
   currentValue,
   valueChange,
   percentageChange,
+  data,
   theme
 }) => {
   const [timeRange, setTimeRange] = useState('1M');
@@ -115,12 +109,19 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
     return null;
   };
 
+  // Calculate min and max values for Y-axis
+  const minValue = Math.min(...data.map(item => item.value)) * 0.95; // 5% below min
+  const maxValue = Math.max(...data.map(item => item.value)) * 1.05; // 5% above max
+
   return (
     <Paper sx={{ 
       p: 3, 
       borderRadius: 2, 
       bgcolor: isDarkMode ? '#1e1e2d' : '#fff',
-      color: isDarkMode ? '#fff' : 'inherit'
+      color: isDarkMode ? '#fff' : 'inherit',
+      height: '350px', // Fixed height
+      display: 'flex',
+      flexDirection: 'column'
     }}>
       <Box sx={{ 
         display: 'flex', 
@@ -143,10 +144,11 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
               alignItems: 'center',
               color: valueChange >= 0 ? '#4CAF50' : '#f44336'
             }}>
-              <TrendingUpIcon fontSize="small" sx={{ 
-                mr: 0.5,
-                transform: valueChange < 0 ? 'rotate(180deg)' : 'none'
-              }} />
+              {valueChange >= 0 ? (
+                <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
+              ) : (
+                <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
+              )}
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
                 ${Math.abs(valueChange).toLocaleString()}
               </Typography>
@@ -157,6 +159,9 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
             }}>
               ({percentageChange >= 0 ? '+' : ''}{percentageChange}%)
             </Typography>
+            <Tooltip title="Total portfolio value based on market prices of all items in inventory">
+              <InfoIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary', cursor: 'help' }} />
+            </Tooltip>
           </Box>
         </Box>
 
@@ -194,9 +199,9 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
         </ToggleButtonGroup>
       </Box>
 
-      <Box sx={{ height: 300 }}>
+      <Box sx={{ flex: 1, width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={mockData}>
+          <LineChart data={data}>
             <CartesianGrid 
               strokeDasharray="3 3" 
               stroke={isDarkMode ? 'rgba(255,255,255,0.1)' : '#f5f5f5'} 
@@ -221,9 +226,9 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
                 fill: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666', 
                 fontSize: 12 
               }}
-              domain={['dataMin - 1000', 'dataMax + 1000']}
+              domain={[minValue, maxValue]} // Dynamic Y-axis range
             />
-            <Tooltip content={<CustomTooltip />} />
+            <RechartsTooltip content={<CustomTooltip />} />
             <Line 
               type="monotone"
               dataKey="value" 
