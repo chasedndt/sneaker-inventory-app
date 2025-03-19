@@ -1,4 +1,4 @@
-// src/components/Layout.tsx (Updated)
+// src/components/Layout.tsx
 import React from 'react';
 import { Box, useTheme } from '@mui/material';
 import Sidebar from './Sidebar';
@@ -30,7 +30,10 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate }) => {
         top: 0,
         borderRight: `1px solid ${theme.palette.divider}`,
         bgcolor: theme.palette.background.paper,
-        zIndex: 1200
+        zIndex: 1200,
+        boxShadow: theme.palette.mode === 'dark' 
+          ? 'none' 
+          : '1px 0 5px rgba(0,0,0,0.05)'
       }}>
         <Sidebar onNavigate={onNavigate} />
       </Box>

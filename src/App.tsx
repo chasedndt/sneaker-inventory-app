@@ -22,6 +22,10 @@ const theme = createTheme({
       default: '#121212',
       paper: '#1e1e2d',
     },
+    text: {
+      primary: 'rgba(255, 255, 255, 0.9)',
+      secondary: 'rgba(255, 255, 255, 0.7)'
+    }
   },
   components: {
     MuiTableCell: {
@@ -51,6 +55,19 @@ const theme = createTheme({
         },
       },
     },
+    MuiTooltip: {
+      styleOverrides: {
+        tooltip: {
+          backgroundColor: 'rgba(30, 30, 45, 0.95)',
+          color: 'rgba(255, 255, 255, 0.9)',
+          fontSize: '0.75rem',
+          fontWeight: 400,
+          padding: '8px 12px',
+          maxWidth: 220,
+          lineHeight: 1.5
+        }
+      }
+    }
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
@@ -61,7 +78,7 @@ const theme = createTheme({
 // In a real app, you'd use React Router for navigation between pages
 function App() {
   // State to handle which page is currently active
-  const [currentPage, setCurrentPage] = React.useState<'dashboard' | 'inventory' | 'sales'>('inventory');
+  const [currentPage, setCurrentPage] = React.useState<'dashboard' | 'inventory' | 'sales'>('dashboard');
 
   // Handle navigation between pages
   const handleNavigate = (page: string) => {

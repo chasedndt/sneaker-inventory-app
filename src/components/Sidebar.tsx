@@ -1,4 +1,4 @@
-// src/components/Sidebar.tsx (Updated)
+// src/components/Sidebar.tsx
 import React, { useState } from 'react';
 import {
   Drawer,
@@ -29,7 +29,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const theme = useTheme();
-  const [activePage, setActivePage] = useState<string>('inventory');
+  const [activePage, setActivePage] = useState<string>('dashboard');
   
   const mainMenuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard' },
@@ -54,10 +54,10 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>T</Avatar>
+          <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>H</Avatar>
           <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-              Hello Tranton
+            <Typography variant="subtitle1" sx={{ fontWeight: 'bold', color: theme.palette.text.primary }}>
+              Hello Hypelist
             </Typography>
             <Typography variant="caption" color="primary">
               Your Plan: Professional
@@ -67,7 +67,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       </Box>
       <Divider />
       
-      <List sx={{ flexGrow: 1 }}>
+      <List sx={{ flexGrow: 1, px: 1 }}>
         {mainMenuItems.map((item) => (
           <ListItem 
             key={item.text}
@@ -75,10 +75,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             selected={activePage === item.path}
             onClick={() => handleNavigate(item.path)}
             sx={{ 
-              borderRadius: 1,
-              mx: 1,
+              borderRadius: 1.5,
               mb: 0.5,
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              overflow: 'hidden',
               '&.Mui-selected': {
                 bgcolor: theme.palette.mode === 'dark' 
                   ? 'rgba(136, 132, 216, 0.15)' 
@@ -97,6 +98,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             }}
           >
             <ListItemIcon sx={{ 
+              minWidth: 40,
               color: activePage === item.path 
                 ? theme.palette.primary.main 
                 : theme.palette.text.secondary 
@@ -118,7 +120,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
       
       <Divider />
       
-      <List>
+      <List sx={{ px: 1 }}>
         {settingsMenuItems.map((item) => (
           <ListItem 
             key={item.text}
@@ -126,10 +128,11 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             selected={activePage === item.path}
             onClick={() => handleNavigate(item.path)}
             sx={{ 
-              borderRadius: 1,
-              mx: 1,
+              borderRadius: 1.5,
               mb: 0.5,
               cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              overflow: 'hidden',
               '&.Mui-selected': {
                 bgcolor: theme.palette.mode === 'dark' 
                   ? 'rgba(136, 132, 216, 0.15)' 
@@ -143,6 +146,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
             }}
           >
             <ListItemIcon sx={{ 
+              minWidth: 40,
               color: activePage === item.path 
                 ? theme.palette.primary.main 
                 : theme.palette.text.secondary 
