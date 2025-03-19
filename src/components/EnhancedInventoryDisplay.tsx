@@ -3,24 +3,19 @@ import React, { useState, useEffect } from 'react';
 import { 
   Box, 
   Typography, 
-  Paper, 
   Grid, 
   Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  SelectChangeEvent,
-  CircularProgress,
-  Skeleton,
-  Tooltip
+  Tooltip,
+  useTheme,
+  Paper,
+  Avatar
 } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ShoeIcon from '@mui/icons-material/DoNotStep'; // Better icon for sneakers
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // For image errors
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // For help/info tooltip
-import { Item, api } from '../services/api';
+import { Item } from '../services/api';
 import { getImageUrl, checkImageExists, handleImageLoadError } from '../utils/imageUtils';
 
 interface EnhancedInventoryDisplayProps {
@@ -77,7 +72,7 @@ interface ItemWithImage extends Item {
 }
 
 const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ items }) => {
-  const [sortBy, setSortBy] = useState<string>('purchaseDate');
+  const theme = useTheme();
   const [groupedItems, setGroupedItems] = useState<ItemWithImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -107,19 +102,12 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
         imageError: false
       }));
       
-      // Sort items based on the selected sort criteria
+      // Sort items by date (newest first)
       const sorted = [...enhancedItems].sort((a, b) => {
-        if (sortBy === 'purchaseDate') {
-          return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
-        } else if (sortBy === 'price') {
-          return b.totalValue - a.totalValue;
-        } else if (sortBy === 'quantity') {
-          return b.count - a.count;
-        }
-        return 0;
+        return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
       });
       
-      console.log(`✅ Sorted items by ${sortBy}`);
+      console.log(`✅ Sorted items by date`);
       setGroupedItems(sorted);
       setErrorMessage(null);
     } catch (error: any) {
@@ -128,7 +116,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     } finally {
       setIsLoading(false);
     }
-  }, [items, sortBy]);
+  }, [items]);
 
   // Effect for loading images
   useEffect(() => {
@@ -231,37 +219,12 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     );
   };
 
-  const handleSortChange = (event: SelectChangeEvent<string>) => {
-    const newSortValue = event.target.value;
-    console.log(`🔄 Changing sort order to: ${newSortValue}`);
-    setSortBy(newSortValue);
-  };
-
   if (isLoading) {
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', mt: 3, gap: 2 }}>
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between',
-          alignItems: 'center', 
-          mb: 2
-        }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Your Inventory
-          </Typography>
-          
-          <Skeleton variant="rectangular" width={120} height={40} sx={{ borderRadius: 1 }} />
-        </Box>
-        
-        {[1, 2, 3].map((_, index) => (
-          <Skeleton 
-            key={index}
-            variant="rectangular" 
-            width="100%" 
-            height={120} 
-            sx={{ borderRadius: 3 }}
-          />
-        ))}
+      <Box sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Loading inventory...
+        </Typography>
       </Box>
     );
   }
@@ -269,20 +232,12 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
   if (errorMessage) {
     return (
       <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        mt: 3,
-        p: 4, 
+        p: 2, 
         bgcolor: '#fff1f0', 
         borderRadius: 2,
         border: '1px solid #ffccc7'
       }}>
-        <Typography variant="h6" sx={{ color: '#cf1322', mb: 1 }}>
-          ❌ Error Loading Inventory
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#5c5c5c', textAlign: 'center' }}>
+        <Typography variant="body2" color="#cf1322">
           {errorMessage}
         </Typography>
       </Box>
@@ -290,48 +245,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
   }
 
   return (
-    <Box sx={{ 
-      width: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      mt: 3
-    }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        alignItems: 'center', 
-        mb: 2
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              fontWeight: 600,
-              fontSize: '1.25rem',
-              color: '#1a1a1a'
-            }}
-          >
-            Your Inventory
-          </Typography>
-          <Tooltip title="This section shows items in your inventory grouped by product name">
-            <HelpOutlineIcon fontSize="small" sx={{ color: 'text.secondary', cursor: 'help' }} />
-          </Tooltip>
-        </Box>
-        
-        <FormControl size="small" sx={{ minWidth: 120 }}>
-          <InputLabel>Sort by</InputLabel>
-          <Select
-            value={sortBy}
-            label="Sort by"
-            onChange={handleSortChange}
-          >
-            <MenuItem value="purchaseDate">Date</MenuItem>
-            <MenuItem value="price">Price</MenuItem>
-            <MenuItem value="quantity">Quantity</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
-
+    <Box sx={{ width: '100%' }}>
       {groupedItems.length === 0 ? (
         <Box sx={{ 
           display: 'flex', 
@@ -356,23 +270,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
           flexDirection: 'column',
           gap: 2,
           width: '100%',
-          maxHeight: '70vh',
-          overflowY: 'auto',
           pr: 1,
-          '&::-webkit-scrollbar': {
-            width: '8px',
-          },
-          '&::-webkit-scrollbar-track': {
-            background: '#f1f1f1',
-            borderRadius: '10px',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: '#888',
-            borderRadius: '10px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            background: '#555',
-          },
         }}>
           {groupedItems.map((item, index) => {
             // For demonstration, using purchasePrice as current value
@@ -388,7 +286,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
               // Loading state
               imageContent = (
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <CircularProgress size={24} sx={{ color: 'white' }} />
+                  <Typography variant="caption" color="rgba(255,255,255,0.8)">Loading...</Typography>
                 </Box>
               );
             } else if (item.imageError || !item.imageUrl) {
@@ -447,7 +345,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
                     <Box 
                       sx={{
                         width: '100%',
-                        height: '120px',
+                        height: '100px',
                         borderRadius: 2,
                         overflow: 'hidden',
                         backgroundColor: 'rgba(255,255,255,0.2)',

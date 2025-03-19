@@ -1,6 +1,6 @@
 // src/components/ReportsSection.tsx
 import React, { useMemo } from 'react';
-import { Grid } from '@mui/material';
+import { Grid, Box, useTheme } from '@mui/material';
 import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
 import { Sale } from '../services/salesApi';
@@ -23,6 +23,8 @@ const generateMockData = (baseValue: number, volatility: number) => {
 };
 
 const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate, endDate }) => {
+  const theme = useTheme();
+  
   // Calculate metrics based on filtered data
   const metrics = useMemo(() => {
     console.log('Calculating metrics with:', { itemsCount: items.length, salesCount: sales.length });
@@ -133,91 +135,93 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate
   }, [items, sales, startDate, endDate]);
 
   return (
-    <Grid container spacing={3}>
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Net Profit"
-          value={metrics.netProfit.toFixed(2)}
-          change={metrics.netProfitChange}
-          data={generateMockData(2000, 400)}
-          tooltipText="Estimated profit based on market price difference minus purchase price for items still in inventory"
-        />
-      </Grid>
-      
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Sales Income"
-          value={metrics.salesIncome.toFixed(2)}
-          change={metrics.salesIncomeChange}
-          data={generateMockData(5000, 800)}
-          tooltipText="Total revenue from all completed sales"
-        />
-      </Grid>
+    <Box sx={{ width: '100%', height: '100%' }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Net Profit"
+            value={metrics.netProfit.toFixed(2)}
+            change={metrics.netProfitChange}
+            data={generateMockData(2000, 400)}
+            tooltipText="Estimated profit based on market price difference minus purchase price for items still in inventory"
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Sales Income"
+            value={metrics.salesIncome.toFixed(2)}
+            change={metrics.salesIncomeChange}
+            data={generateMockData(5000, 800)}
+            tooltipText="Total revenue from all completed sales"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Item Spend"
-          value={metrics.itemSpend.toFixed(2)}
-          change={metrics.itemSpendChange}
-          data={generateMockData(7000, 1000)}
-          tooltipText="Total amount spent on items currently in inventory"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Item Spend"
+            value={metrics.itemSpend.toFixed(2)}
+            change={metrics.itemSpendChange}
+            data={generateMockData(7000, 1000)}
+            tooltipText="Total amount spent on items currently in inventory"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="ROI Percentage"
-          value={metrics.roiPercentage.toFixed(1)}
-          change={metrics.roiChange}
-          data={generateMockData(25, 5)}
-          prefix=""
-          suffix="%"
-          tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="ROI Percentage"
+            value={metrics.roiPercentage.toFixed(1)}
+            change={metrics.roiChange}
+            data={generateMockData(25, 5)}
+            prefix=""
+            suffix="%"
+            tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Expense Spend"
-          value={metrics.expenseSpend.toFixed(2)}
-          change={metrics.expenseSpendChange}
-          data={generateMockData(0, 0)}
-          tooltipText="Total expenses excluding inventory purchases"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Expense Spend"
+            value={metrics.expenseSpend.toFixed(2)}
+            change={metrics.expenseSpendChange}
+            data={generateMockData(0, 0)}
+            tooltipText="Total expenses excluding inventory purchases"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Items Purchased"
-          value={metrics.itemsPurchased.toString()}
-          change={metrics.itemsPurchasedChange}
-          data={generateMockData(metrics.itemsPurchased, 5)}
-          prefix=""
-          tooltipText="Total number of items purchased during the selected period"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Items Purchased"
+            value={metrics.itemsPurchased.toString()}
+            change={metrics.itemsPurchasedChange}
+            data={generateMockData(metrics.itemsPurchased, 5)}
+            prefix=""
+            tooltipText="Total number of items purchased during the selected period"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Items Sold"
-          value={metrics.itemsSold.toString()}
-          change={metrics.itemsSoldChange}
-          data={generateMockData(metrics.itemsSold, 4)}
-          prefix=""
-          tooltipText="Total number of items sold during the selected period"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Items Sold"
+            value={metrics.itemsSold.toString()}
+            change={metrics.itemsSoldChange}
+            data={generateMockData(metrics.itemsSold, 4)}
+            prefix=""
+            tooltipText="Total number of items sold during the selected period"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Net Profit from Sold Items"
-          value={metrics.netProfitSold.toFixed(2)}
-          change={metrics.netProfitSoldChange}
-          data={generateMockData(metrics.netProfitSold * 0.8, metrics.netProfitSold * 0.2)} // Base mock data on actual value
-          tooltipText="Realized profit from actual sales minus expenses, shipping costs, platform fees, and sales tax"
-        />
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Net Profit from Sold Items"
+            value={metrics.netProfitSold.toFixed(2)}
+            change={metrics.netProfitSoldChange}
+            data={generateMockData(metrics.netProfitSold * 0.8, metrics.netProfitSold * 0.2)} // Base mock data on actual value
+            tooltipText="Realized profit from actual sales minus expenses, shipping costs, platform fees, and sales tax"
+          />
+        </Grid>
       </Grid>
-    </Grid>
+    </Box>
   );
 };
 

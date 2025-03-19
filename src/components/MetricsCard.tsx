@@ -39,11 +39,17 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   
   return (
     <Paper sx={{ 
-      p: 2, 
+      p: 2.5, 
       height: '100%', 
       borderRadius: 2, 
       bgcolor: theme.palette.background.paper,
-      color: theme.palette.text.primary
+      color: theme.palette.text.primary,
+      boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+      '&:hover': {
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        transform: 'translateY(-2px)',
+        transition: 'all 0.2s ease-in-out'
+      },
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Typography 
@@ -51,7 +57,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
           sx={{ 
             color: theme.palette.text.secondary,
             mb: 1,
-            fontSize: '0.875rem'
+            fontSize: '0.9rem',
+            fontWeight: 500
           }}
         >
           {title}
@@ -69,7 +76,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
           variant="h6" 
           sx={{ 
             fontWeight: 600,
-            fontSize: '1.25rem',
+            fontSize: '1.35rem',
             color: theme.palette.text.primary
           }}
         >
@@ -88,7 +95,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         </Box>
       </Box>
 
-      <Box sx={{ height: 60 }}>
+      <Box sx={{ height: 70, mt: 1 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data}>
             <Line 
@@ -97,6 +104,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
               stroke={change >= 0 ? theme.palette.success.main : theme.palette.error.main}
               strokeWidth={2}
               dot={false}
+              isAnimationActive={true}
             />
           </LineChart>
         </ResponsiveContainer>

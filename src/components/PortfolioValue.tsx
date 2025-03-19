@@ -57,8 +57,8 @@ interface PortfolioValueProps {
   currentValue: number;
   valueChange: number;
   percentageChange: number;
-  data: Array<{ date: string; value: number }>; // Changed from historicalData to data to match Dashboard usage
-  theme?: Theme; // Accept theme prop for proper dark mode styling
+  data: Array<{ date: string; value: number }>;
+  theme?: Theme;
 }
 
 const PortfolioValue: React.FC<PortfolioValueProps> = ({
@@ -119,7 +119,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
       borderRadius: 2, 
       bgcolor: isDarkMode ? '#1e1e2d' : '#fff',
       color: isDarkMode ? '#fff' : 'inherit',
-      height: '350px', // Fixed height
+      height: '100%', // Use full height of the container
       display: 'flex',
       flexDirection: 'column'
     }}>
@@ -201,7 +201,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
 
       <Box sx={{ flex: 1, width: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
+          <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
             <CartesianGrid 
               strokeDasharray="3 3" 
               stroke={isDarkMode ? 'rgba(255,255,255,0.1)' : '#f5f5f5'} 
@@ -233,9 +233,9 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
               type="monotone"
               dataKey="value" 
               stroke="#8884d8" 
-              strokeWidth={2}
-              dot={{ fill: '#8884d8', strokeWidth: 2, r: 4 }}
-              activeDot={{ r: 6, fill: '#8884d8' }}
+              strokeWidth={2.5}
+              dot={{ fill: '#8884d8', strokeWidth: 2, r: 5 }}
+              activeDot={{ r: 7, fill: '#8884d8' }}
             />
           </LineChart>
         </ResponsiveContainer>
