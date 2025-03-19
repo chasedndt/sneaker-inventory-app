@@ -10,7 +10,12 @@ import {
   Button,
   useTheme,
   Tooltip,
-  IconButton
+  IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  SelectChangeEvent
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -35,6 +40,7 @@ const Dashboard: React.FC = () => {
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<string>('date');
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -98,6 +104,11 @@ const Dashboard: React.FC = () => {
   // Handle refreshing data
   const handleRefresh = () => {
     fetchData(true);
+  };
+
+  // Handle sort change
+  const handleSortChange = (event: SelectChangeEvent) => {
+    setSortBy(event.target.value);
   };
 
   // Handle adding a new item
@@ -269,177 +280,167 @@ const Dashboard: React.FC = () => {
   return (
     <Box sx={{ 
       display: 'flex',
-      flexDirection: { xs: 'column', md: 'row' },
+      flexDirection: 'column',
       p: { xs: 2, md: 3 },
       maxWidth: '1800px',
       margin: '0 auto',
-      height: 'calc(100vh - 80px)', // Set a fixed height to fit within screen
-      overflow: 'hidden' // Prevent scrolling
+      height: 'calc(100vh - 80px)',
+      width: '100%',
+      overflow: 'auto'
     }}>
-      {/* Main Content - Left Side */}
-      <Box sx={{ 
-        flex: '1 1 auto',
-        mr: { xs: 0, md: 3 },
-        maxWidth: { xs: '100%', md: 'calc(100% - 350px)' },
-        height: '100%',
-        overflow: 'hidden' // Prevent scrolling
-      }}>
-        {/* Date Range Picker with improved visibility */}
-        <Paper sx={{ 
-          p: '16px 24px', 
-          borderRadius: 2, 
-          mb: 3,
-          bgcolor: theme.palette.background.paper,
-          color: theme.palette.text.primary,
-          '& .MuiInputBase-root': {
-            color: theme.palette.text.primary
-          },
-          '& .MuiInputLabel-root': {
-            color: theme.palette.text.secondary
-          },
-          '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: theme.palette.divider
-          },
-          '& .MuiSvgIcon-root': {
-            color: theme.palette.text.secondary
-          }
-        }}>
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <Box sx={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                <DatePicker
-                  label="Start Date"
-                  value={startDate}
-                  onChange={(newValue) => setStartDate(newValue)}
-                  slotProps={{
-                    textField: {
-                      variant: 'outlined',
-                      sx: {
-                        '& .MuiInputBase-input': {
-                          color: theme.palette.text.primary
-                        }
-                      }
-                    }
-                  }}
-                />
-                <DatePicker
-                  label="End Date"
-                  value={endDate}
-                  onChange={(newValue) => setEndDate(newValue)}
-                  slotProps={{
-                    textField: {
-                      variant: 'outlined',
-                      sx: {
-                        '& .MuiInputBase-input': {
-                          color: theme.palette.text.primary
-                        }
-                      }
-                    }
-                  }}
-                />
-              </Box>
-            </LocalizationProvider>
+      {/* Header and Date Range Picker */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          width: '100%',
+          mb: 3
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              color: 'white',
+              fontWeight: 600,
+              mr: 2
+            }}
+          >
             
-            <Button
-              startIcon={<RefreshIcon />}
-              onClick={handleRefresh}
-              disabled={refreshing}
-              variant="outlined"
-              sx={{ 
-                minWidth: 120,
-                borderColor: theme.palette.primary.main,
-                color: theme.palette.primary.main
-              }}
+          </Typography>
+        </Box>
+
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2
+          }}
+        >
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <DatePicker
+                label="Start Date"
+                value={startDate}
+                onChange={(newValue) => setStartDate(newValue)}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    sx: {
+                      '& .MuiInputBase-input': {
+                        color: theme.palette.text.primary
+                      }
+                    }
+                  }
+                }}
+              />
+              <DatePicker
+                label="End Date"
+                value={endDate}
+                onChange={(newValue) => setEndDate(newValue)}
+                slotProps={{
+                  textField: {
+                    size: "small",
+                    sx: {
+                      '& .MuiInputBase-input': {
+                        color: theme.palette.text.primary
+                      }
+                    }
+                  }
+                }}
+              />
+            </Box>
+          </LocalizationProvider>
+
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel>Sort by</InputLabel>
+            <Select
+              value={sortBy}
+              label="Sort by"
+              onChange={handleSortChange}
             >
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </Button>
-          </Box>
-        </Paper>
-
-        {/* Portfolio Value Chart with real data */}
-        <PortfolioValue 
-          currentValue={portfolioStats.currentValue}
-          valueChange={portfolioStats.valueChange}
-          percentageChange={portfolioStats.percentageChange}
-          data={portfolioStats.historicalData}
-          theme={theme}
-        />
-
-        {/* Reports Grid with connected data */}
-        <Box sx={{ mt: 3 }}>
-          <ReportsSection 
-            items={items}
-            sales={sales}
-            startDate={startDate}
-            endDate={endDate}
-          />
+              <MenuItem value="date">Date</MenuItem>
+              <MenuItem value="price">Price</MenuItem>
+              <MenuItem value="brand">Brand</MenuItem>
+            </Select>
+          </FormControl>
+          
+          <Button
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            variant="outlined"
+            size="medium"
+            sx={{ 
+              minWidth: 120,
+              borderColor: theme.palette.primary.main,
+              color: theme.palette.primary.main
+            }}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
         </Box>
       </Box>
 
-      {/* Inventory Display - Right Side */}
-      <Box 
-        sx={{ 
-          width: { xs: '100%', md: '350px' },
-          flex: '0 0 auto',
-          display: { xs: 'none', md: 'block' },
+      {/* Main Content Layout */}
+      <Box sx={{ 
+        display: 'flex',
+        flexDirection: { xs: 'column', md: 'row' },
+        height: 'calc(100% - 60px)',
+        width: '100%'
+      }}>
+        {/* Left Side - Charts and Reports */}
+        <Box sx={{ 
+          flex: '1 1 auto',
+          mr: { xs: 0, md: 3 },
+          mb: { xs: 3, md: 0 },
+          width: { xs: '100%', md: 'calc(100% - 350px)' },
           height: '100%',
-          overflow: 'auto' // Allow scrolling just for this section if needed
-        }}
-      >
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          mb: 2,
-          pl: 1
+          display: 'flex',
+          flexDirection: 'column'
         }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
-              fontWeight: 600
-            }}
-          >
-            Your Inventory
-          </Typography>
-        </Box>
-        <EnhancedInventoryDisplay 
-          items={items.filter(item => item.status !== 'sold')}
-        />
-      </Box>
+          {/* Portfolio Value Chart with real data - Increased Height */}
+          <Box sx={{ height: '380px', mb: 3 }}>
+            <PortfolioValue 
+              currentValue={portfolioStats.currentValue}
+              valueChange={portfolioStats.valueChange}
+              percentageChange={portfolioStats.percentageChange}
+              data={portfolioStats.historicalData}
+              theme={theme}
+            />
+          </Box>
 
-      {/* Mobile Inventory Display - Only shown on small screens */}
-      <Box 
-        sx={{ 
-          width: '100%', 
-          mt: 3,
-          display: { xs: 'block', md: 'none' }
-        }}
-      >
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center', 
-          mb: 2,
-          pl: 1
-        }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 0, 0, 0.87)',
-              fontWeight: 600
-            }}
-          >
-            Your Inventory
-          </Typography>
+          {/* Reports Grid with connected data - Increased Size */}
+          <Box sx={{ flex: 1 }}>
+            <ReportsSection 
+              items={items}
+              sales={sales}
+              startDate={startDate}
+              endDate={endDate}
+            />
+          </Box>
         </Box>
-        <EnhancedInventoryDisplay 
-          items={items.filter(item => item.status !== 'sold')}
-        />
+
+        {/* Right Side - Inventory Display */}
+        <Box 
+          sx={{ 
+            width: { xs: '100%', md: '350px' },
+            flex: '0 0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'auto'
+          }}
+        >
+          <Box sx={{ 
+            height: '100%',
+            overflow: 'auto'
+          }}>
+            <EnhancedInventoryDisplay 
+              items={items.filter(item => item.status !== 'sold')}
+            />
+          </Box>
+        </Box>
       </Box>
 
       {/* Add Item Floating Button */}
