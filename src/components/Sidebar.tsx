@@ -57,7 +57,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
           <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>H</Avatar>
           <Box>
             <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-              Hello Hypelist
+              Hypelist
             </Typography>
             <Typography variant="caption" color="primary">
               Your Plan: Professional
