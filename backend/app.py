@@ -8,7 +8,7 @@ import time
 from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
-from models import db, Item, Size, Image, Tag, Sale
+from models import db, Item, Size, Image, Tag, Sale, Expense
 from config import Config
 
 def create_app():
@@ -506,6 +506,8 @@ def create_app():
         except Exception as e:
             image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
             return jsonify({'error': str(e)}), 500
+        
+    
 
     # SALES API ENDPOINTS
     @app.route('/api/sales', methods=['GET'])
@@ -940,6 +942,396 @@ def create_app():
         except Exception as e:
             logger.error(f"💥 Error adding platform: {str(e)}")
             return jsonify({'error': str(e)}), 500
+        
+
+# EXPENSES API ENDPOINTS
+    @app.route('/api/expenses', methods=['GET'])
+    def get_expenses():
+        """
+        Get all expenses with optional date filtering.
+        """
+        try:
+            logger.info("📊 Fetching all expenses")
+            
+            # Get query parameters for date filtering
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            # Base query
+            query = Expense.query
+            
+            # Apply date filters if provided
+            if start_date_str:
+                try:
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date >= start_date)
+                    logger.info(f"🗓️ Filtering expenses after {start_date}")
+                except ValueError:
+                    logger.warning(f"❌ Invalid start date format: {start_date_str}")
+            
+            if end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date <= end_date)
+                    logger.info(f"🗓️ Filtering expenses before {end_date}")
+                except ValueError:
+                    logger.warning(f"❌ Invalid end date format: {end_date_str}")
+            
+            # Get all expenses matching the query
+            expenses = query.order_by(Expense.expense_date.desc()).all()
+            
+            # Convert to dictionary format
+            expenses_data = [expense.to_dict() for expense in expenses]
+            
+            logger.info(f"✅ Retrieved {len(expenses_data)} expenses")
+            return jsonify(expenses_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching expenses: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses/<int:expense_id>', methods=['GET'])
+    def get_expense(expense_id):
+        """
+        Get a single expense by ID.
+        """
+        try:
+            logger.info(f"🔍 Fetching expense {expense_id}")
+            
+            expense = Expense.query.get(expense_id)
+            if not expense:
+                logger.warning(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': 'Expense not found'}), 404
+            
+            logger.info(f"✅ Retrieved expense {expense_id}")
+            return jsonify(expense.to_dict()), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching expense {expense_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses', methods=['POST'])
+    def create_expense():
+        """
+        Create a new expense record.
+        """
+        try:
+            logger.info("📝 Creating new expense record")
+            
+            # Check if we have file data and form data
+            has_receipt = 'receipt' in request.files
+            has_data = 'data' in request.form
+            
+            if not has_data:
+                logger.error("❌ No expense data provided")
+                return jsonify({'error': 'Missing expense data'}), 400
+            
+            # Parse the JSON data
+            expense_data = json.loads(request.form.get('data'))
+            
+            # Validate required fields
+            required_fields = ['expenseType', 'amount', 'expenseDate']
+            for field in required_fields:
+                if field not in expense_data:
+                    logger.error(f"❌ Missing required field: {field}")
+                    return jsonify({'error': f'Missing required field: {field}'}), 400
+            
+            # Parse date
+            try:
+                expense_date = datetime.fromisoformat(expense_data['expenseDate'].replace('Z', '+00:00'))
+            except (ValueError, TypeError) as e:
+                logger.error(f"❌ Invalid date format: {expense_data['expenseDate']}")
+                return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            
+            # Handle receipt file if provided
+            receipt_filename = None
+            if has_receipt:
+                receipt_file = request.files['receipt']
+                if receipt_file and allowed_file(receipt_file.filename):
+                    # Generate a secure filename with timestamp
+                    filename = secure_filename(receipt_file.filename)
+                    filename_parts = filename.rsplit('.', 1)
+                    timestamped_filename = f"receipt_{int(time.time())}_{filename_parts[0]}.{filename_parts[1]}"
+                    
+                    # Save the file
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    receipt_file.save(file_path)
+                    receipt_filename = timestamped_filename
+                    logger.info(f"📄 Saved receipt: {timestamped_filename}")
+            
+            # Create the expense record
+            new_expense = Expense(
+                expense_type=expense_data['expenseType'],
+                amount=float(expense_data['amount']),
+                currency=expense_data.get('currency', '$'),
+                expense_date=expense_date,
+                vendor=expense_data.get('vendor', ''),
+                notes=expense_data.get('notes', ''),
+                receipt_filename=receipt_filename,
+                is_recurring=expense_data.get('isRecurring', False),
+                recurrence_period=expense_data.get('recurrencePeriod', None)
+            )
+            
+            db.session.add(new_expense)
+            db.session.commit()
+            
+            logger.info(f"✅ Created expense with ID {new_expense.id}")
+            return jsonify(new_expense.to_dict()), 201
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error creating expense: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses/<int:expense_id>', methods=['PUT'])
+    def update_expense(expense_id):
+        """
+        Update an existing expense.
+        """
+        try:
+            logger.info(f"🔄 Updating expense {expense_id}")
+            
+            # Check if expense exists
+            expense = Expense.query.get(expense_id)
+            if not expense:
+                logger.error(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # Check if we have file data and form data
+            has_receipt = 'receipt' in request.files
+            has_data = 'data' in request.form
+            
+            if not has_data:
+                logger.error("❌ No expense data provided")
+                return jsonify({'error': 'Missing expense data'}), 400
+            
+            # Parse the JSON data
+            expense_data = json.loads(request.form.get('data'))
+            
+            # Update expense fields
+            if 'expenseType' in expense_data:
+                expense.expense_type = expense_data['expenseType']
+            
+            if 'amount' in expense_data:
+                expense.amount = float(expense_data['amount'])
+            
+            if 'currency' in expense_data:
+                expense.currency = expense_data['currency']
+            
+            if 'expenseDate' in expense_data:
+                try:
+                    expense_date = datetime.fromisoformat(expense_data['expenseDate'].replace('Z', '+00:00'))
+                    expense.expense_date = expense_date
+                except (ValueError, TypeError) as e:
+                    logger.error(f"❌ Invalid date format: {expense_data['expenseDate']}")
+                    return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            
+            if 'vendor' in expense_data:
+                expense.vendor = expense_data['vendor']
+            
+            if 'notes' in expense_data:
+                expense.notes = expense_data['notes']
+            
+            if 'isRecurring' in expense_data:
+                expense.is_recurring = expense_data['isRecurring']
+            
+            if 'recurrencePeriod' in expense_data:
+                expense.recurrence_period = expense_data['recurrencePeriod']
+            
+            # Handle receipt file if provided
+            if has_receipt:
+                receipt_file = request.files['receipt']
+                if receipt_file and allowed_file(receipt_file.filename):
+                    # Delete old receipt if it exists
+                    if expense.receipt_filename:
+                        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], expense.receipt_filename)
+                        if os.path.exists(old_file_path):
+                            os.remove(old_file_path)
+                            logger.info(f"🗑️ Deleted old receipt: {expense.receipt_filename}")
+                    
+                    # Generate a secure filename with timestamp
+                    filename = secure_filename(receipt_file.filename)
+                    filename_parts = filename.rsplit('.', 1)
+                    timestamped_filename = f"receipt_{int(time.time())}_{filename_parts[0]}.{filename_parts[1]}"
+                    
+                    # Save the file
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    receipt_file.save(file_path)
+                    expense.receipt_filename = timestamped_filename
+                    logger.info(f"📄 Updated receipt: {timestamped_filename}")
+            
+            # Update timestamp
+            expense.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"✅ Updated expense {expense_id}")
+            return jsonify(expense.to_dict()), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating expense {expense_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses/<int:expense_id>', methods=['DELETE'])
+    def delete_expense(expense_id):
+        """
+        Delete an expense record.
+        """
+        try:
+            logger.info(f"🗑️ Deleting expense {expense_id}")
+            
+            # Check if expense exists
+            expense = Expense.query.get(expense_id)
+            if not expense:
+                logger.error(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # Delete receipt file if it exists
+            if expense.receipt_filename:
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], expense.receipt_filename)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    logger.info(f"🗑️ Deleted receipt file: {expense.receipt_filename}")
+            
+            # Delete the expense record
+            db.session.delete(expense)
+            db.session.commit()
+            
+            logger.info(f"✅ Deleted expense {expense_id}")
+            return jsonify({'message': f'Expense {expense_id} deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error deleting expense {expense_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses/summary', methods=['GET'])
+    def get_expense_summary():
+        """
+        Get expense summary statistics.
+        """
+        try:
+            logger.info("📊 Generating expense summary")
+            
+            # Get query parameters for date filtering
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            # Base query
+            query = Expense.query
+            
+            # Apply date filters if provided
+            if start_date_str:
+                try:
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date >= start_date)
+                except ValueError:
+                    logger.warning(f"❌ Invalid start date format: {start_date_str}")
+            
+            if end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date <= end_date)
+                except ValueError:
+                    logger.warning(f"❌ Invalid end date format: {end_date_str}")
+            
+            # Get all expenses matching the query
+            expenses = query.all()
+            
+            # Calculate summary statistics
+            total_amount = sum(expense.amount for expense in expenses)
+            expense_count = len(expenses)
+            
+            # Group expenses by type
+            expense_by_type = {}
+            for expense in expenses:
+                expense_type = expense.expense_type
+                if expense_type not in expense_by_type:
+                    expense_by_type[expense_type] = 0
+                expense_by_type[expense_type] += expense.amount
+            
+            # Calculate month-over-month change if possible
+            current_month_total = 0
+            previous_month_total = 0
+            
+            if start_date_str and end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    
+                    # Calculate current month expenses
+                    current_month_expenses = Expense.query.filter(
+                        Expense.expense_date >= start_date,
+                        Expense.expense_date <= end_date
+                    ).all()
+                    current_month_total = sum(expense.amount for expense in current_month_expenses)
+                    
+                    # Calculate previous month range
+                    month_diff = (end_date - start_date).days
+                    prev_end_date = start_date
+                    prev_start_date = prev_end_date - timedelta(days=month_diff)
+                    
+                    # Calculate previous month expenses
+                    previous_month_expenses = Expense.query.filter(
+                        Expense.expense_date >= prev_start_date,
+                        Expense.expense_date < prev_end_date
+                    ).all()
+                    previous_month_total = sum(expense.amount for expense in previous_month_expenses)
+                except ValueError:
+                    logger.warning("❌ Invalid date format for month-over-month calculation")
+            
+            # Calculate month-over-month percentage change
+            mom_change = 0
+            if previous_month_total > 0:
+                mom_change = ((current_month_total - previous_month_total) / previous_month_total) * 100
+            
+            # Prepare the summary response
+            summary = {
+                'totalAmount': total_amount,
+                'expenseCount': expense_count,
+                'expenseByType': expense_by_type,
+                'monthOverMonthChange': mom_change
+            }
+            
+            logger.info(f"✅ Generated expense summary with {expense_count} expenses")
+            return jsonify(summary), 200
+        except Exception as e:
+            logger.error(f"💥 Error generating expense summary: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/expenses/types', methods=['GET'])
+    def get_expense_types():
+        """
+        Get list of valid expense types.
+        """
+        try:
+            logger.info("📋 Fetching expense types")
+            
+            # Define standard expense types
+            expense_types = [
+                'Shipping',
+                'Packaging',
+                'Platform Fees',
+                'Storage',
+                'Supplies',
+                'Software',
+                'Marketing',
+                'Travel',
+                'Utilities',
+                'Rent',
+                'Insurance',
+                'Taxes',
+                'Other'
+            ]
+            
+            # Get custom expense types from the database
+            custom_types = db.session.query(Expense.expense_type).distinct().all()
+            for custom_type in custom_types:
+                if custom_type[0] not in expense_types:
+                    expense_types.append(custom_type[0])
+            
+            logger.info(f"✅ Retrieved {len(expense_types)} expense types")
+            return jsonify(expense_types), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching expense types: {str(e)}")
+            return jsonify({'error': str(e)}), 500    
+    
 
     @app.before_request
     def log_request_info():
@@ -949,6 +1341,11 @@ def create_app():
     return app
 
 app = create_app()
+
+
+
+
+
 
 @app.shell_context_processor
 def make_shell_context():
