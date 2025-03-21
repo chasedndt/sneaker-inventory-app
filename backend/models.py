@@ -163,6 +163,49 @@ class Sale(db.Model):
                 'error': f"Failed to serialize sale: {str(e)}"
             }
 
+# New Expense model for the expenses page
+class Expense(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Expense details
+    expense_type = db.Column(db.String(50), nullable=False)  # 'shipping', 'supplies', 'fees', 'storage', 'other'
+    amount = db.Column(db.Float, nullable=False)
+    currency = db.Column(db.String(10), nullable=False, default='$')
+    expense_date = db.Column(db.DateTime, nullable=False)
+    vendor = db.Column(db.String(100))
+    notes = db.Column(db.Text)
+    receipt_filename = db.Column(db.String(255))
+    is_recurring = db.Column(db.Boolean, default=False)
+    recurrence_period = db.Column(db.String(20))  # 'monthly', 'yearly', etc.
+    
+    def to_dict(self):
+        """
+        Create a dictionary representation of the expense for API responses.
+        """
+        try:
+            return {
+                'id': self.id,
+                'expenseType': self.expense_type,
+                'amount': self.amount,
+                'currency': self.currency,
+                'expenseDate': self.expense_date.isoformat() if self.expense_date else None,
+                'vendor': self.vendor,
+                'notes': self.notes,
+                'receiptFilename': self.receipt_filename,
+                'isRecurring': self.is_recurring,
+                'recurrencePeriod': self.recurrence_period,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+        except Exception as e:
+            print(f"💸 Error in Expense.to_dict(): {str(e)}")
+            return {
+                'id': self.id if hasattr(self, 'id') else None,
+                'error': f"Failed to serialize expense: {str(e)}"
+            }
+
 # Association table for many-to-many relationship between items and tags
 item_tags = db.Table('item_tags',
     db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True),

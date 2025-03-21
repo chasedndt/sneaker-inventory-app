@@ -29,16 +29,16 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const theme = useTheme();
-  const [activePage, setActivePage] = useState<string>('inventory');
+  const [activePage, setActivePage] = useState<string>('dashoard');
   
   const mainMenuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard' },
     { text: 'Activity', icon: <ActivityIcon />, path: 'activity' },
     { text: 'Inventory', icon: <InventoryIcon />, path: 'inventory' },
     { text: 'Sales', icon: <SalesIcon />, path: 'sales' },
+    { text: 'Expenses', icon: <ExpensesIcon />, path: 'expenses' }, // Added new Expenses menu item
     { text: 'Coplists', icon: <CoplistsIcon />, path: 'coplists' },
-    { text: 'Releases', icon: <ReleasesIcon />, path: 'releases' },
-    { text: 'Expenses', icon: <ExpensesIcon />, path: 'expenses' }
+    { text: 'Releases', icon: <ReleasesIcon />, path: 'releases' }
   ];
 
   const settingsMenuItems = [
