@@ -10,6 +10,8 @@ import logging
 from datetime import datetime
 from models import db, Item, Size, Image, Tag, Sale, Expense
 from config import Config
+from datetime import datetime, timedelta
+
 
 def create_app():
     app = Flask(__name__)

@@ -1,44 +1,51 @@
+// src/components/ReportsSection.tsx
 import React, { useMemo } from 'react';
-import { Grid } from '@mui/material';
+import { Grid, Box, useTheme } from '@mui/material';
 import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
 import { Sale } from '../services/salesApi';
+import { Expense } from '../models/expenses'; // Import Expense type
+import { calculateTotalExpenses, isCurrentMonth } from '../utils/expensesUtils'; // Import expense utilities
 import { Dayjs } from 'dayjs';
 
-// Props to include sales data and date filters
+// Props to include sales and expenses data and date filters
 interface ReportsSectionProps {
   items: Item[];
   sales: Sale[];
+  expenses: Expense[]; // Add expenses prop
   startDate: Dayjs | null;
   endDate: Dayjs | null;
 }
 
-// Generate trend data for the mini charts based on real data
-const generateTrendData = (baseValue: number, data: number[], count: number = 7) => {
-  // If we have enough data points, use them directly
-  if (data.length >= count) {
-    return data.slice(0, count).map((value, index) => ({
-      date: `${index + 1}`,
-      value
-    }));
-  }
-  
-  // Otherwise, generate some data based on the baseValue
-  const volatility = baseValue * 0.1; // 10% volatility
-  return Array.from({ length: count }, (_, i) => ({
+// Generate mock data for the mini charts
+const generateMockData = (baseValue: number, volatility: number) => {
+  return Array.from({ length: 7 }, (_, i) => ({
     date: `${i + 1}`,
-    value: baseValue + (Math.random() * volatility - volatility / 2)
+    value: baseValue + Math.random() * volatility - volatility / 2
   }));
 };
 
-const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate, endDate }) => {
+const ReportsSection: React.FC<ReportsSectionProps> = ({ 
+  items, 
+  sales, 
+  expenses, // Include expenses
+  startDate, 
+  endDate 
+}) => {
+  const theme = useTheme();
+  
   // Calculate metrics based on filtered data
   const metrics = useMemo(() => {
-    console.log('Calculating metrics with:', { itemsCount: items.length, salesCount: sales.length });
+    console.log('Calculating metrics with:', { 
+      itemsCount: items.length, 
+      salesCount: sales.length,
+      expensesCount: expenses.length // Log expenses count
+    });
     
     // Filter data based on date range if provided
     let filteredItems = [...items];
     let filteredSales = [...sales];
+    let filteredExpenses = [...expenses]; // Filter expenses
     
     if (startDate && endDate) {
       const startTimestamp = startDate.startOf('day').valueOf();
@@ -55,9 +62,46 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate
         const saleDate = new Date(sale.saleDate).getTime();
         return saleDate >= startTimestamp && saleDate <= endTimestamp;
       });
+      
+      // Filter expenses by expense date
+      filteredExpenses = expenses.filter(expense => {
+        const expenseDate = new Date(expense.expenseDate).getTime();
+        return expenseDate >= startTimestamp && expenseDate <= endTimestamp;
+      });
     }
     
-    console.log('Filtered data:', { filteredItemsCount: filteredItems.length, filteredSalesCount: filteredSales.length });
+    console.log('Filtered data:', { 
+      filteredItemsCount: filteredItems.length, 
+      filteredSalesCount: filteredSales.length,
+      filteredExpensesCount: filteredExpenses.length // Log filtered expenses
+    });
+    
+    // Calculate total expenses
+    const totalExpenseSpend = calculateTotalExpenses(filteredExpenses);
+    
+    // Calculate expenses change (comparing to previous period)
+    let expenseSpendChange = 0;
+    if (startDate && endDate) {
+      const currentPeriodLength = endDate.diff(startDate, 'day');
+      const previousStartDate = startDate.subtract(currentPeriodLength, 'day');
+      const previousEndDate = startDate.subtract(1, 'day');
+      
+      // Get expenses from previous period
+      const previousPeriodExpenses = expenses.filter(expense => {
+        const expenseDate = new Date(expense.expenseDate).getTime();
+        return expenseDate >= previousStartDate.valueOf() && expenseDate <= previousEndDate.valueOf();
+      });
+      
+      const previousPeriodTotal = calculateTotalExpenses(previousPeriodExpenses);
+      
+      // Calculate percentage change
+      if (previousPeriodTotal > 0) {
+        expenseSpendChange = ((totalExpenseSpend - previousPeriodTotal) / previousPeriodTotal) * 100;
+      }
+    } else {
+      // Default to 0% change if no date range is specified
+      expenseSpendChange = 0;
+    }
     
     // Ensure we're only using active inventory (not sold items)
     const activeItems = filteredItems.filter(item => item.status !== 'sold');
@@ -117,130 +161,125 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({ items, sales, startDate
       return sum + (soldItem?.purchasePrice || 0);
     }, 0);
     
-    // Calculate ROI
+    // Calculate ROI (now including expenses)
     const totalSpend = activeInventorySpend + soldItemsSpend;
-    const roi = totalSpend > 0 ? ((inventoryProfit + soldItemsProfit) / totalSpend) * 100 : 0;
+    const totalProfit = inventoryProfit + soldItemsProfit - totalExpenseSpend; // Subtract expenses
+    const roi = totalSpend > 0 ? (totalProfit / totalSpend) * 100 : 0;
     
-    // Collect historical data for trend charts
-    const profitHistory: number[] = [];
-    const salesHistory: number[] = [];
-    const spendHistory: number[] = [];
-    const roiHistory: number[] = [];
+    // Calculate net profit (now including expenses)
+    const netProfit = inventoryProfit - totalExpenseSpend; // Subtract expenses from inventory profit
     
-    // This would normally be populated from historical data
-    // For now, we'll use calculated values with some variation
+    // Calculate net profit change
+    const netProfitChange = -15.3; // This would be calculated dynamically based on previous period
     
     return {
-      netProfit: inventoryProfit,
-      netProfitChange: -15.3,
+      netProfit: netProfit,
+      netProfitChange: netProfitChange,
       salesIncome: salesIncome,
       salesIncomeChange: 12.5,
       itemSpend: activeInventorySpend,
       itemSpendChange: -8.4,
       roiPercentage: roi,
       roiChange: 5.2,
-      expenseSpend: 0,
-      expenseSpendChange: 0,
+      expenseSpend: totalExpenseSpend, // Include calculated expense total
+      expenseSpendChange: expenseSpendChange, // Include calculated expense change
       itemsPurchased: filteredItems.length,
       itemsPurchasedChange: 8.7,
       itemsSold: soldItemsCount,
       itemsSoldChange: -12.5,
       netProfitSold: soldItemsProfit, // Dynamically calculated from sales data
-      netProfitSoldChange: -6.4,
-      // Add trend data for charts
-      profitHistory,
-      salesHistory,
-      spendHistory,
-      roiHistory
+      netProfitSoldChange: -6.4
     };
-  }, [items, sales, startDate, endDate]);
+  }, [items, sales, expenses, startDate, endDate]); // Add expenses to dependency array
 
   return (
-    <Grid container spacing={3} sx={{ height: 'auto' }}>
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Net Profit"
-          value={metrics.netProfit.toFixed(2)}
-          change={metrics.netProfitChange}
-          data={generateTrendData(metrics.netProfit, metrics.profitHistory)}
-          tooltipText="Estimated profit based on market price difference minus purchase price for items still in inventory"
-        />
-      </Grid>
-      
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Sales Income"
-          value={metrics.salesIncome.toFixed(2)}
-          change={metrics.salesIncomeChange}
-          data={generateTrendData(metrics.salesIncome, metrics.salesHistory)}
-          tooltipText="Total revenue from all completed sales"
-        />
-      </Grid>
+    <Box sx={{ width: '100%', height: '100%' }}>
+      <Grid container spacing={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Net Profit"
+            value={metrics.netProfit.toFixed(2)}
+            change={metrics.netProfitChange}
+            data={generateMockData(2000, 400)}
+            tooltipText="Estimated profit based on market price difference minus purchase price and expenses"
+          />
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Sales Income"
+            value={metrics.salesIncome.toFixed(2)}
+            change={metrics.salesIncomeChange}
+            data={generateMockData(5000, 800)}
+            tooltipText="Total revenue from all completed sales"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Item Spend"
-          value={metrics.itemSpend.toFixed(2)}
-          change={metrics.itemSpendChange}
-          data={generateTrendData(metrics.itemSpend, metrics.spendHistory)}
-          tooltipText="Total amount spent on items currently in inventory"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Item Spend"
+            value={metrics.itemSpend.toFixed(2)}
+            change={metrics.itemSpendChange}
+            data={generateMockData(7000, 1000)}
+            tooltipText="Total amount spent on items currently in inventory"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="ROI Percentage"
-          value={metrics.roiPercentage.toFixed(1)}
-          change={metrics.roiChange}
-          data={generateTrendData(metrics.roiPercentage, metrics.roiHistory)}
-          prefix=""
-          suffix="%"
-          tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="ROI Percentage"
+            value={metrics.roiPercentage.toFixed(1)}
+            change={metrics.roiChange}
+            data={generateMockData(25, 5)}
+            prefix=""
+            suffix="%"
+            tooltipText="Return on investment calculated as ((Net Profit - Expenses) / Total Item Spend) × 100"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Expense Spend"
-          value={metrics.expenseSpend.toFixed(2)}
-          change={metrics.expenseSpendChange}
-          data={generateTrendData(metrics.expenseSpend, [])}
-          tooltipText="Total expenses excluding inventory purchases"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Expense Spend"
+            value={metrics.expenseSpend.toFixed(2)}
+            change={metrics.expenseSpendChange}
+            data={generateMockData(metrics.expenseSpend * 0.8, metrics.expenseSpend * 0.2)}
+            tooltipText="Total expenses excluding inventory purchases"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Items Purchased"
-          value={metrics.itemsPurchased.toString()}
-          change={metrics.itemsPurchasedChange}
-          data={generateTrendData(metrics.itemsPurchased, [])}
-          prefix=""
-          tooltipText="Total number of items purchased during the selected period"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Items Purchased"
+            value={metrics.itemsPurchased.toString()}
+            change={metrics.itemsPurchasedChange}
+            data={generateMockData(metrics.itemsPurchased, 5)}
+            prefix=""
+            tooltipText="Total number of items purchased during the selected period"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Items Sold"
-          value={metrics.itemsSold.toString()}
-          change={metrics.itemsSoldChange}
-          data={generateTrendData(metrics.itemsSold, [])}
-          prefix=""
-          tooltipText="Total number of items sold during the selected period"
-        />
-      </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Items Sold"
+            value={metrics.itemsSold.toString()}
+            change={metrics.itemsSoldChange}
+            data={generateMockData(metrics.itemsSold, 4)}
+            prefix=""
+            tooltipText="Total number of items sold during the selected period"
+          />
+        </Grid>
 
-      <Grid item xs={12} sm={6} md={3}>
-        <MetricsCard
-          title="Net Profit from Sold Items"
-          value={metrics.netProfitSold.toFixed(2)}
-          change={metrics.netProfitSoldChange}
-          data={generateTrendData(metrics.netProfitSold, [])}
-          tooltipText="Realized profit from actual sales minus expenses, shipping costs, platform fees, and sales tax"
-        />
+        <Grid item xs={12} sm={6} md={3}>
+          <MetricsCard
+            title="Net Profit from Sold Items"
+            value={metrics.netProfitSold.toFixed(2)}
+            change={metrics.netProfitSoldChange}
+            data={generateMockData(metrics.netProfitSold * 0.8, metrics.netProfitSold * 0.2)} // Base mock data on actual value
+            tooltipText="Realized profit from actual sales minus expenses, shipping costs, platform fees, and sales tax"
+          />
+        </Grid>
       </Grid>
-    </Grid>
+    </Box>
   );
 };
 
