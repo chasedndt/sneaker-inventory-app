@@ -24,6 +24,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import InfoIcon from '@mui/icons-material/Info';
 import { api, Item } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
+import { expensesApi } from '../services/expensesApi'; // Add import for expenses API
+import { Expense } from '../models/expenses'; // Add import for Expense type
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
@@ -34,6 +36,7 @@ const Dashboard: React.FC = () => {
   const theme = useTheme();
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [expenses, setExpenses] = useState<Expense[]>([]); // Add expenses state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +50,7 @@ const Dashboard: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
 
-  // Fetch items and sales from API
+  // Fetch items, sales, and expenses from API
   const fetchData = useCallback(async (showRefreshing = false) => {
     try {
       if (showRefreshing) {
@@ -56,7 +59,7 @@ const Dashboard: React.FC = () => {
         setLoading(true);
       }
       
-      console.log('🔄 Fetching inventory items and sales data...');
+      console.log('🔄 Fetching inventory items, sales, and expenses data...');
       
       // Fetch items data
       const itemsData = await api.getItems();
@@ -69,9 +72,14 @@ const Dashboard: React.FC = () => {
       const salesData = await salesApi.getSales();
       console.log(`✅ Received ${salesData.length} sales records from API`);
       
-      // Update state with both datasets
+      // Fetch expenses data
+      const expensesData = await expensesApi.getExpenses();
+      console.log(`✅ Received ${expensesData.length} expense records from API`);
+      
+      // Update state with all datasets
       setItems(activeItems);
       setSales(salesData);
+      setExpenses(expensesData); // Store expenses data
       setError(null);
       
       // Show success message if refreshing
@@ -122,7 +130,7 @@ const Dashboard: React.FC = () => {
     });
   };
 
-  // Close snackbar
+  // Handle closing snackbar
   const handleCloseSnackbar = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
@@ -132,6 +140,7 @@ const Dashboard: React.FC = () => {
     // First filter active items based on date range
     let filteredItems = [...items];
     let filteredSales = [...sales];
+    let filteredExpenses = [...expenses]; // Filter expenses
     
     if (startDate && endDate) {
       const startTimestamp = startDate.startOf('day').valueOf();
@@ -148,14 +157,20 @@ const Dashboard: React.FC = () => {
         const saleDate = new Date(sale.saleDate).getTime();
         return saleDate >= startTimestamp && saleDate <= endTimestamp;
       });
+      
+      // Filter expenses by expense date
+      filteredExpenses = expenses.filter(expense => {
+        const expenseDate = new Date(expense.expenseDate).getTime();
+        return expenseDate >= startTimestamp && expenseDate <= endTimestamp;
+      });
     }
     
-    return { filteredItems, filteredSales };
+    return { filteredItems, filteredSales, filteredExpenses };
   };
 
   // Calculate portfolio stats with real, live data
   const calculatePortfolioStats = () => {
-    const { filteredItems, filteredSales } = getFilteredData();
+    const { filteredItems, filteredSales, filteredExpenses } = getFilteredData();
     
     // Current portfolio value (sum of market prices for all active inventory)
     const currentValue = filteredItems.reduce((sum, item) => {
@@ -172,7 +187,7 @@ const Dashboard: React.FC = () => {
     const percentageChange = previousValue === 0 ? 0 : (valueChange / previousValue) * 100;
     
     // Get historical portfolio value data (for the graph)
-    const historicalData = generateHistoricalPortfolioData(filteredItems, filteredSales);
+    const historicalData = generateHistoricalPortfolioData(filteredItems, filteredSales, filteredExpenses);
     
     return {
       currentValue,
@@ -183,7 +198,7 @@ const Dashboard: React.FC = () => {
   };
   
   // Generate historical portfolio data for the graph
-  const generateHistoricalPortfolioData = (filteredItems: Item[], filteredSales: Sale[]) => {
+  const generateHistoricalPortfolioData = (filteredItems: Item[], filteredSales: Sale[], filteredExpenses: Expense[]) => {
     // If date range is set, use it for the graph, otherwise generate the last 6 data points
     const today = dayjs();
     const numberOfPoints = 6;
@@ -202,7 +217,7 @@ const Dashboard: React.FC = () => {
         const dateValue = pointDate.format('M/D');
         
         // Calculate portfolio value at this point in time
-        const pointValue = calculateValueAtPoint(pointDate, filteredItems, filteredSales);
+        const pointValue = calculateValueAtPoint(pointDate, filteredItems, filteredSales, filteredExpenses);
         
         pointsArray.push({ date: dateValue, value: pointValue });
       }
@@ -213,7 +228,7 @@ const Dashboard: React.FC = () => {
         const dateValue = pointDate.format('M/D');
         
         // Calculate portfolio value at this point in time
-        const pointValue = calculateValueAtPoint(pointDate, items, sales);
+        const pointValue = calculateValueAtPoint(pointDate, items, sales, expenses);
         
         pointsArray.push({ date: dateValue, value: pointValue });
       }
@@ -223,7 +238,7 @@ const Dashboard: React.FC = () => {
   };
   
   // Helper to calculate portfolio value at a specific point in time
-  const calculateValueAtPoint = (date: Dayjs, itemsList: Item[], salesList: Sale[]) => {
+  const calculateValueAtPoint = (date: Dayjs, itemsList: Item[], salesList: Sale[], expensesList: Expense[]) => {
     const targetDate = date.endOf('day');
     
     // Get items that were purchased before or on the target date
@@ -236,6 +251,12 @@ const Dashboard: React.FC = () => {
     const salesBeforeDate = salesList.filter(sale => {
       const saleDate = dayjs(sale.saleDate);
       return saleDate.isBefore(targetDate) || saleDate.isSame(targetDate, 'day');
+    });
+    
+    // Get expenses that happened before or on the target date
+    const expensesBeforeDate = expensesList.filter(expense => {
+      const expenseDate = dayjs(expense.expenseDate);
+      return expenseDate.isBefore(targetDate) || expenseDate.isSame(targetDate, 'day');
     });
     
     // Calculate total value of active items at this point
@@ -251,6 +272,10 @@ const Dashboard: React.FC = () => {
         totalValue += marketPrice;
       }
     }
+    
+    // Subtract expenses up to this point (optional)
+    // const totalExpenses = expensesBeforeDate.reduce((sum, expense) => sum + expense.amount, 0);
+    // totalValue -= totalExpenses;
     
     return Math.round(totalValue);
   };
@@ -416,6 +441,7 @@ const Dashboard: React.FC = () => {
             <ReportsSection 
               items={items}
               sales={sales}
+              expenses={expenses} // Pass expenses data to ReportsSection
               startDate={startDate}
               endDate={endDate}
             />
