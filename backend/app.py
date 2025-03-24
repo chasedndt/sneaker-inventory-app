@@ -1334,13 +1334,81 @@ def create_app():
             logger.error(f"💥 Error fetching expense types: {str(e)}")
             return jsonify({'error': str(e)}), 500    
     
+    # net Profit from sold items KPI Metric 
 
+    @app.route('/api/sales/net-profit', methods=['GET'])
+    def get_sales_net_profit():
+        """
+        Calculate the total net profit from all completed sales.
+        """
+        try:
+            logger.info("Calculating net profit from sold items")
+            
+            # Get query parameters for date filtering
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            # Base query
+            query = Sale.query
+            
+            # Apply status filter for completed sales only
+            query = query.filter(Sale.status == 'completed')
+            
+            # Apply date filters if provided
+            if start_date_str:
+                try:
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Sale.sale_date >= start_date)
+                    logger.info(f"Filtering sales after {start_date}")
+                except ValueError:
+                    logger.warning(f"Invalid start date format: {start_date_str}")
+            
+            if end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Sale.sale_date <= end_date)
+                    logger.info(f"Filtering sales before {end_date}")
+                except ValueError:
+                    logger.warning(f"Invalid end date format: {end_date_str}")
+            
+            # Get all sales matching the query
+            sales = query.all()
+            
+            # Calculate total net profit from sold items
+            total_net_profit = 0
+            
+            for sale in sales:
+                # Get the item details
+                item = Item.query.get(sale.item_id)
+                if item:
+                    # Calculate profit for this sale
+                    purchase_price = item.purchase_price
+                    sales_tax = sale.sales_tax or 0
+                    platform_fees = sale.platform_fees or 0
+                    
+                    # Calculate net profit
+                    sale_profit = sale.sale_price - purchase_price - sales_tax - platform_fees
+                    total_net_profit += sale_profit
+            
+            logger.info(f"Calculated net profit from {len(sales)} sales: ${total_net_profit:.2f}")
+            
+            # Return the total net profit along with the count of sales included
+            return jsonify({
+                'netProfitSold': total_net_profit,
+                'salesCount': len(sales)
+            }), 200
+        except Exception as e:
+            logger.error(f"Error calculating net profit from sales: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    
+# end of sales  KPI metrics
     @app.before_request
     def log_request_info():
         logger.debug('Headers: %s', request.headers)
         logger.debug('Body: %s', request.get_data())
 
     return app
+
 
 app = create_app()
 

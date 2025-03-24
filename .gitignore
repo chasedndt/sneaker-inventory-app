@@ -26,4 +26,4 @@ yarn-error.log*
 backend/__pycache__/
 backend/image_requests.log
 backend/uploads/*
-
+backend/instance/inventory.db
