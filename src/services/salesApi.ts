@@ -316,6 +316,66 @@ export const salesApi = {
       console.warn('⚠️ Using mock response for delete due to error');
       return { success: true };
     }
+  },
+
+  /**
+   * Get the total net profit from sold items
+   * @param startDate Optional start date filter
+   * @param endDate Optional end date filter
+   * @returns Promise<{netProfitSold: number, salesCount: number}> Total net profit and count of sales
+   */
+  getNetProfit: async (startDate?: Date, endDate?: Date): Promise<{netProfitSold: number, salesCount: number}> => {
+    try {
+      console.log('🔄 Fetching net profit from sales API...');
+      
+      // Construct URL with query parameters for date filtering
+      let url = `${API_BASE_URL}/sales/net-profit`;
+      const params = new URLSearchParams();
+      
+      if (startDate) {
+        params.append('start_date', startDate.toISOString());
+      }
+      
+      if (endDate) {
+        params.append('end_date', endDate.toISOString());
+      }
+      
+      // Append query parameters if any exist
+      const queryString = params.toString();
+      if (queryString) {
+        url += `?${queryString}`;
+      }
+      
+      console.log('🔍 Making API request to:', url);
+      
+      // Make the request
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include',
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ API getNetProfit failed with status: ${response.status}`);
+        
+        // If the API is not yet implemented, return mock data
+        if (response.status === 404) {
+          console.warn('⚠️ Net profit endpoint not found, using mock data');
+          return { netProfitSold: 0, salesCount: 0 };
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`✅ Retrieved net profit data:`, data);
+      return data;
+    } catch (error: any) {
+      console.error('💥 Error fetching net profit data:', error);
+      
+      // Return mock data for development
+      console.warn('⚠️ Using mock net profit data due to error');
+      return { netProfitSold: 0, salesCount: 0 };
+    }
   }
 };
 
