@@ -5,6 +5,7 @@ import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
 import { Sale, salesApi } from '../services/salesApi';
 import { Expense } from '../models/expenses';
+import { expensesApi } from '../services/expensesApi';
 import { calculateTotalExpenses, isCurrentMonth } from '../utils/expensesUtils';
 import { Dayjs } from 'dayjs';
 
@@ -37,6 +38,10 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
   // Add state for real net profit from sold items
   const [netProfitSold, setNetProfitSold] = useState<number>(0);
   const [netProfitSoldChange, setNetProfitSoldChange] = useState<number>(-6.4); // Default value
+  
+  // Add state for real expense data
+  const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [expensePercentageChange, setExpensePercentageChange] = useState<number>(0);
   
   // Fetch net profit from sold items data
   useEffect(() => {
@@ -75,6 +80,47 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     };
     
     fetchNetProfit();
+  }, [startDate, endDate]);
+  
+  // Fetch total expenses data
+  useEffect(() => {
+    const fetchTotalExpenses = async () => {
+      try {
+        console.log('🚀 Starting to fetch total expenses data...');
+        console.log('🗓️ Date range:', { 
+          startDate: startDate?.format('YYYY-MM-DD'), 
+          endDate: endDate?.format('YYYY-MM-DD') 
+        });
+        
+        // Convert dayjs objects to Date objects if they exist
+        const startDateObj = startDate ? startDate.toDate() : undefined;
+        const endDateObj = endDate ? endDate.toDate() : undefined;
+        
+        // Call the API to get real expense data
+        console.log('📞 Calling expensesApi.getTotalExpenses with dates:', { 
+          startDateObj, 
+          endDateObj 
+        });
+        
+        const expenseData = await expensesApi.getTotalExpenses(startDateObj, endDateObj);
+        
+        // Log the response
+        console.log('📊 API response for total expenses:', expenseData);
+        
+        // Update state with the real data
+        setTotalExpenses(expenseData.totalExpenses);
+        setExpensePercentageChange(expenseData.percentageChange);
+        
+        console.log('💾 State updated with new expense values:', {
+          totalExpenses: expenseData.totalExpenses,
+          percentageChange: expenseData.percentageChange
+        });
+      } catch (error) {
+        console.error('❌ Error fetching total expenses data:', error);
+      }
+    };
+    
+    fetchTotalExpenses();
   }, [startDate, endDate]);
   
   // Calculate metrics based on filtered data
@@ -119,32 +165,8 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       filteredExpensesCount: filteredExpenses.length
     });
     
-    // Calculate total expenses
-    const totalExpenseSpend = calculateTotalExpenses(filteredExpenses);
-    
-    // Calculate expenses change (comparing to previous period)
-    let expenseSpendChange = 0;
-    if (startDate && endDate) {
-      const currentPeriodLength = endDate.diff(startDate, 'day');
-      const previousStartDate = startDate.subtract(currentPeriodLength, 'day');
-      const previousEndDate = startDate.subtract(1, 'day');
-      
-      // Get expenses from previous period
-      const previousPeriodExpenses = expenses.filter(expense => {
-        const expenseDate = new Date(expense.expenseDate).getTime();
-        return expenseDate >= previousStartDate.valueOf() && expenseDate <= previousEndDate.valueOf();
-      });
-      
-      const previousPeriodTotal = calculateTotalExpenses(previousPeriodExpenses);
-      
-      // Calculate percentage change
-      if (previousPeriodTotal > 0) {
-        expenseSpendChange = ((totalExpenseSpend - previousPeriodTotal) / previousPeriodTotal) * 100;
-      }
-    } else {
-      // Default to 0% change if no date range is specified
-      expenseSpendChange = 0;
-    }
+    // We'll no longer calculate expenses here since we're fetching it from the API
+    // but keep the rest of the calculations for other metrics
     
     // Ensure we're only using active inventory (not sold items)
     const activeItems = filteredItems.filter(item => item.status !== 'sold');
@@ -204,13 +226,19 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       return sum + (soldItem?.purchasePrice || 0);
     }, 0);
     
+    // Use local calculation for expenses as a fallback if API call fails
+    const localExpenseSpend = calculateTotalExpenses(filteredExpenses);
+    
+    // Use totalExpenses from the API if available, otherwise use local calculation
+    const expenseSpend = totalExpenses > 0 ? totalExpenses : localExpenseSpend;
+    
     // Calculate ROI (now including expenses)
     const totalSpend = activeInventorySpend + soldItemsSpend;
-    const totalProfit = inventoryProfit + soldItemsProfit - totalExpenseSpend;
+    const totalProfit = inventoryProfit + soldItemsProfit - expenseSpend;
     const roi = totalSpend > 0 ? (totalProfit / totalSpend) * 100 : 0;
     
     // Calculate net profit (now including expenses)
-    const netProfit = inventoryProfit - totalExpenseSpend;
+    const netProfit = inventoryProfit - expenseSpend;
     
     // Calculate net profit change
     const netProfitChange = -15.3; // This would be calculated dynamically based on previous period
@@ -224,8 +252,8 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       itemSpendChange: -8.4,
       roiPercentage: roi,
       roiChange: 5.2,
-      expenseSpend: totalExpenseSpend,
-      expenseSpendChange: expenseSpendChange,
+      expenseSpend: expenseSpend,
+      expenseSpendChange: expensePercentageChange, // Use the real percentage change from API
       itemsPurchased: filteredItems.length,
       itemsPurchasedChange: 8.7,
       itemsSold: soldItemsCount,
@@ -234,7 +262,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       soldItemsProfit: soldItemsProfit,
       soldItemsProfitChange: -6.4
     };
-  }, [items, sales, expenses, startDate, endDate]);
+  }, [items, sales, expenses, startDate, endDate, totalExpenses, expensePercentageChange]);
 
   return (
     <Box sx={{ width: '100%', height: '100%' }}>

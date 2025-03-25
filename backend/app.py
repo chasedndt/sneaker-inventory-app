@@ -1334,7 +1334,7 @@ def create_app():
             logger.error(f"💥 Error fetching expense types: {str(e)}")
             return jsonify({'error': str(e)}), 500    
     
-    # net Profit from sold items KPI Metric 
+    # net Profit from sold items Dashboard KPI Metric 
 
     @app.route('/api/sales/net-profit', methods=['GET'])
     def get_sales_net_profit():
@@ -1400,6 +1400,90 @@ def create_app():
         except Exception as e:
             logger.error(f"Error calculating net profit from sales: {str(e)}")
             return jsonify({'error': str(e)}), 500
+        
+   # Expense Data Dashboard KPI Metric
+    @app.route('/api/expenses/total', methods=['GET'])
+    def get_total_expenses():
+        """
+        Calculate the total amount of all expenses with optional date filtering.
+        """
+        try:
+            logger.info("Calculating total expenses")
+            
+            # Get query parameters for date filtering
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            # Base query
+            query = Expense.query
+            
+            # Apply date filters if provided
+            if start_date_str:
+                try:
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date >= start_date)
+                    logger.info(f"Filtering expenses after {start_date}")
+                except ValueError:
+                    logger.warning(f"Invalid start date format: {start_date_str}")
+            
+            if end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    query = query.filter(Expense.expense_date <= end_date)
+                    logger.info(f"Filtering expenses before {end_date}")
+                except ValueError:
+                    logger.warning(f"Invalid end date format: {end_date_str}")
+            
+            # Get all expenses matching the query
+            expenses = query.all()
+            
+            # Calculate total expenses
+            total_amount = sum(expense.amount for expense in expenses)
+            
+            # Calculate previous period's total for percentage change
+            prev_period_total = 0
+            percentage_change = 0
+            
+            if start_date_str and end_date_str:
+                try:
+                    # Convert to datetime objects
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                    
+                    # Calculate period length in days
+                    period_length = (end_date - start_date).days
+                    
+                    # Calculate previous period date range
+                    prev_period_end = start_date - timedelta(days=1)
+                    prev_period_start = prev_period_end - timedelta(days=period_length)
+                    
+                    # Query for previous period expenses
+                    prev_period_expenses = Expense.query.filter(
+                        Expense.expense_date >= prev_period_start,
+                        Expense.expense_date <= prev_period_end
+                    ).all()
+                    
+                    # Calculate previous period total
+                    prev_period_total = sum(expense.amount for expense in prev_period_expenses)
+                    
+                    # Calculate percentage change
+                    if prev_period_total > 0:
+                        percentage_change = ((total_amount - prev_period_total) / prev_period_total) * 100
+                except Exception as e:
+                    logger.error(f"Error calculating previous period data: {str(e)}")
+            
+            logger.info(f"Calculated total expenses: ${total_amount:.2f} with {percentage_change:.2f}% change from previous period")
+            
+            # Return the results
+            return jsonify({
+                'totalExpenses': total_amount,
+                'expenseCount': len(expenses),
+                'percentageChange': percentage_change,
+                'previousPeriodTotal': prev_period_total
+            }), 200
+        except Exception as e:
+            logger.error(f"Error calculating total expenses: {str(e)}")
+            return jsonify({'error': str(e)}), 500      
     
 # end of sales  KPI metrics
     @app.before_request
