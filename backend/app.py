@@ -1339,66 +1339,171 @@ def create_app():
     @app.route('/api/sales/net-profit', methods=['GET'])
     def get_sales_net_profit():
         """
-        Calculate the total net profit from all completed sales.
+        Calculate the total net profit from all completed sales,
+        properly accounting for all expenses.
         """
         try:
-            logger.info("Calculating net profit from sold items")
+            logger.info("📊 Calculating net profit from sold items with expenses")
             
             # Get query parameters for date filtering
             start_date_str = request.args.get('start_date')
             end_date_str = request.args.get('end_date')
             
-            # Base query
-            query = Sale.query
+            # Initialize date objects to None
+            start_date = None
+            end_date = None
             
-            # Apply status filter for completed sales only
-            query = query.filter(Sale.status == 'completed')
-            
-            # Apply date filters if provided
+            # Parse start date if provided
             if start_date_str:
                 try:
                     start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Sale.sale_date >= start_date)
-                    logger.info(f"Filtering sales after {start_date}")
+                    logger.info(f"🗓️ Filtering sales and expenses after {start_date}")
                 except ValueError:
-                    logger.warning(f"Invalid start date format: {start_date_str}")
+                    logger.warning(f"⚠️ Invalid start date format: {start_date_str}")
             
+            # Parse end date if provided
             if end_date_str:
                 try:
                     end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Sale.sale_date <= end_date)
-                    logger.info(f"Filtering sales before {end_date}")
+                    logger.info(f"🗓️ Filtering sales and expenses before {end_date}")
                 except ValueError:
-                    logger.warning(f"Invalid end date format: {end_date_str}")
+                    logger.warning(f"⚠️ Invalid end date format: {end_date_str}")
+            
+            # -- Sales calculations --
+            # Base query for completed sales
+            sales_query = Sale.query.filter(Sale.status == 'completed')
+            
+            # Apply date filters to sales if provided
+            if start_date:
+                sales_query = sales_query.filter(Sale.sale_date >= start_date)
+            if end_date:
+                sales_query = sales_query.filter(Sale.sale_date <= end_date)
             
             # Get all sales matching the query
-            sales = query.all()
+            sales = sales_query.all()
             
-            # Calculate total net profit from sold items
-            total_net_profit = 0
+            # Calculate gross profit from completed sales
+            gross_profit = 0
+            total_sales_revenue = 0
+            total_costs_of_goods = 0
             
             for sale in sales:
                 # Get the item details
                 item = Item.query.get(sale.item_id)
                 if item:
-                    # Calculate profit for this sale
+                    # Calculate revenue and costs
+                    sale_price = sale.sale_price
                     purchase_price = item.purchase_price
                     sales_tax = sale.sales_tax or 0
                     platform_fees = sale.platform_fees or 0
+                    shipping_cost = item.shipping_price or 0
                     
-                    # Calculate net profit
-                    sale_profit = sale.sale_price - purchase_price - sales_tax - platform_fees
-                    total_net_profit += sale_profit
+                    # Add to totals
+                    total_sales_revenue += sale_price
+                    total_costs_of_goods += purchase_price
+                    
+                    # Calculate profit for this sale
+                    item_profit = sale_price - purchase_price - sales_tax - platform_fees - shipping_cost
+                    gross_profit += item_profit
             
-            logger.info(f"Calculated net profit from {len(sales)} sales: ${total_net_profit:.2f}")
+            # -- Expense calculations --
+            # Base query for expenses
+            expense_query = Expense.query
             
-            # Return the total net profit along with the count of sales included
-            return jsonify({
-                'netProfitSold': total_net_profit,
-                'salesCount': len(sales)
-            }), 200
+            # Apply date filters to expenses if provided
+            if start_date:
+                expense_query = expense_query.filter(Expense.expense_date >= start_date)
+            if end_date:
+                expense_query = expense_query.filter(Expense.expense_date <= end_date)
+            
+            # Get all expenses matching the query
+            expenses = expense_query.all()
+            
+            # Calculate total expenses
+            total_expenses = sum(expense.amount for expense in expenses)
+            
+            # Calculate net profit (gross profit minus expenses)
+            net_profit = gross_profit - total_expenses
+            
+            # Calculate average profit per sale
+            avg_profit_per_sale = net_profit / len(sales) if len(sales) > 0 else 0
+            
+            # Calculate previous period metrics for comparison
+            previous_period_net_profit = 0
+            net_profit_change = 0
+            
+            if start_date and end_date:
+                # Calculate the duration of the current period
+                period_duration = (end_date - start_date).days
+                
+                # Define previous period date range
+                prev_end_date = start_date
+                prev_start_date = prev_end_date - timedelta(days=period_duration)
+                
+                logger.info(f"🗓️ Previous period: {prev_start_date} to {prev_end_date}")
+                
+                # Get previous period sales
+                prev_sales_query = Sale.query.filter(
+                    Sale.status == 'completed',
+                    Sale.sale_date >= prev_start_date,
+                    Sale.sale_date < prev_end_date
+                )
+                prev_sales = prev_sales_query.all()
+                
+                # Get previous period expenses
+                prev_expense_query = Expense.query.filter(
+                    Expense.expense_date >= prev_start_date,
+                    Expense.expense_date < prev_end_date
+                )
+                prev_expenses = prev_expense_query.all()
+                
+                # Calculate previous period profits
+                prev_gross_profit = 0
+                
+                for prev_sale in prev_sales:
+                    prev_item = Item.query.get(prev_sale.item_id)
+                    if prev_item:
+                        prev_item_profit = (
+                            prev_sale.sale_price 
+                            - prev_item.purchase_price 
+                            - (prev_sale.sales_tax or 0) 
+                            - (prev_sale.platform_fees or 0) 
+                            - (prev_item.shipping_price or 0)
+                        )
+                        prev_gross_profit += prev_item_profit
+                
+                # Calculate previous period total expenses
+                prev_total_expenses = sum(expense.amount for expense in prev_expenses)
+                
+                # Calculate previous period net profit
+                previous_period_net_profit = prev_gross_profit - prev_total_expenses
+                
+                # Calculate percentage change
+                if previous_period_net_profit != 0:
+                    net_profit_change = ((net_profit - previous_period_net_profit) / abs(previous_period_net_profit)) * 100
+                else:
+                    # If previous period profit was 0, use current profit to determine direction
+                    net_profit_change = 100 if net_profit > 0 else -100 if net_profit < 0 else 0
+            
+            # Prepare comprehensive response
+            response = {
+                'netProfitSold': net_profit,
+                'salesCount': len(sales),
+                'grossProfit': gross_profit,
+                'totalExpenses': total_expenses,
+                'totalSalesRevenue': total_sales_revenue,
+                'totalCostsOfGoods': total_costs_of_goods,
+                'avgProfitPerSale': avg_profit_per_sale,
+                'previousPeriodNetProfit': previous_period_net_profit,
+                'netProfitChange': net_profit_change
+            }
+            
+            logger.info(f"✅ Calculated net profit metrics from {len(sales)} sales and {len(expenses)} expenses")
+            logger.info(f"📊 Net profit: ${net_profit:.2f}, Change: {net_profit_change:.2f}%")
+            
+            return jsonify(response), 200
         except Exception as e:
-            logger.error(f"Error calculating net profit from sales: {str(e)}")
+            logger.error(f"💥 Error calculating net profit metrics: {str(e)}")
             return jsonify({'error': str(e)}), 500
         
    # Expense Data Dashboard KPI Metric
@@ -1483,8 +1588,280 @@ def create_app():
             }), 200
         except Exception as e:
             logger.error(f"Error calculating total expenses: {str(e)}")
-            return jsonify({'error': str(e)}), 500      
+            return jsonify({'error': str(e)}), 500 
+
+        ## Comprehensive endpoint for all dashboard KPI metrics. Ensures consistent calculation methods across all metrics.         
     
+    @app.route('/api/dashboard/kpi-metrics', methods=['GET'])
+    def get_dashboard_kpi_metrics():
+        """
+        Comprehensive endpoint for all dashboard KPI metrics.
+        Ensures consistent calculation methods across all metrics.
+        """
+        try:
+            logger.info("📊 Generating comprehensive dashboard KPI metrics")
+            
+            # Get query parameters for date filtering
+            start_date_str = request.args.get('start_date')
+            end_date_str = request.args.get('end_date')
+            
+            # Initialize date objects to None
+            start_date = None
+            end_date = None
+            
+            # Parse start date if provided
+            if start_date_str:
+                try:
+                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                except ValueError:
+                    logger.warning(f"⚠️ Invalid start date format: {start_date_str}")
+            
+            # Parse end date if provided
+            if end_date_str:
+                try:
+                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+                except ValueError:
+                    logger.warning(f"⚠️ Invalid end date format: {end_date_str}")
+            
+            # ---- ITEM METRICS ----
+            # Get active items (not sold)
+            active_items_query = Item.query.filter(Item.status != 'sold')
+            
+            # Apply date filters if provided
+            if start_date:
+                active_items_query = active_items_query.filter(Item.purchase_date >= start_date)
+            if end_date:
+                active_items_query = active_items_query.filter(Item.purchase_date <= end_date)
+            
+            active_items = active_items_query.all()
+            
+            # Count items by status
+            total_inventory = len(active_items)
+            unlisted_items = len([item for item in active_items if item.status == 'unlisted'])
+            listed_items = len([item for item in active_items if item.status == 'listed'])
+            
+            # Calculate inventory values
+            total_inventory_cost = sum(item.purchase_price for item in active_items)
+            total_shipping_cost = sum(item.shipping_price or 0 for item in active_items)
+            
+            # Estimate market value
+            total_market_value = sum(
+                item.market_price if item.market_price else (item.purchase_price * 1.2)
+                for item in active_items
+            )
+            
+            # Estimate potential profit
+            potential_profit = total_market_value - total_inventory_cost - total_shipping_cost
+            
+            # ---- SALES METRICS ----
+            # Get completed sales
+            sales_query = Sale.query.filter(Sale.status == 'completed')
+            
+            # Apply date filters if provided
+            if start_date:
+                sales_query = sales_query.filter(Sale.sale_date >= start_date)
+            if end_date:
+                sales_query = sales_query.filter(Sale.sale_date <= end_date)
+            
+            sales = sales_query.all()
+            
+            # Calculate sales metrics
+            total_sales = len(sales)
+            total_sales_revenue = sum(sale.sale_price for sale in sales)
+            total_platform_fees = sum(sale.platform_fees or 0 for sale in sales)
+            total_sales_tax = sum(sale.sales_tax or 0 for sale in sales)
+            
+            # Calculate cost basis of sold items
+            cost_of_goods_sold = 0
+            sold_items_shipping_cost = 0
+            
+            for sale in sales:
+                item = Item.query.get(sale.item_id)
+                if item:
+                    cost_of_goods_sold += item.purchase_price
+                    sold_items_shipping_cost += (item.shipping_price or 0)
+            
+            # Calculate gross profit from sales
+            gross_profit = (
+                total_sales_revenue 
+                - cost_of_goods_sold 
+                - total_platform_fees 
+                - total_sales_tax 
+                - sold_items_shipping_cost
+            )
+            
+            # ---- EXPENSE METRICS ----
+            # Get expenses
+            expense_query = Expense.query
+            
+            # Apply date filters if provided
+            if start_date:
+                expense_query = expense_query.filter(Expense.expense_date >= start_date)
+            if end_date:
+                expense_query = expense_query.filter(Expense.expense_date <= end_date)
+            
+            expenses = expense_query.all()
+            
+            # Calculate expense metrics
+            total_expenses = sum(expense.amount for expense in expenses)
+            
+            # Group expenses by type
+            expense_by_type = {}
+            for expense in expenses:
+                expense_type = expense.expense_type
+                if expense_type not in expense_by_type:
+                    expense_by_type[expense_type] = 0
+                expense_by_type[expense_type] += expense.amount
+            
+            # ---- NET PROFIT AND ROI ----
+            # Net profit from sold items (realized profit)
+            net_profit_sold = gross_profit - total_expenses
+            
+            # Calculate ROI for sold items
+            roi_sold = (net_profit_sold / cost_of_goods_sold * 100) if cost_of_goods_sold > 0 else 0
+            
+            # Calculate ROI for potential profit (inventory)
+            roi_inventory = (potential_profit / total_inventory_cost * 100) if total_inventory_cost > 0 else 0
+            
+            # Calculate overall ROI
+            total_investment = total_inventory_cost + cost_of_goods_sold
+            total_profit = potential_profit + net_profit_sold
+            overall_roi = (total_profit / total_investment * 100) if total_investment > 0 else 0
+            
+            # ---- PERIOD COMPARISON ----
+            # Variables for comparison metrics
+            net_profit_change = 0
+            roi_change = 0
+            expense_change = 0
+            revenue_change = 0
+            
+            if start_date and end_date:
+                # Calculate the duration of the current period
+                period_duration = (end_date - start_date).days
+                
+                # Define previous period date range
+                prev_end_date = start_date
+                prev_start_date = prev_end_date - timedelta(days=period_duration)
+                
+                logger.info(f"🗓️ Previous period: {prev_start_date} to {prev_end_date}")
+                
+                # --- PREVIOUS PERIOD SALES ---
+                prev_sales_query = Sale.query.filter(
+                    Sale.status == 'completed',
+                    Sale.sale_date >= prev_start_date,
+                    Sale.sale_date < prev_end_date
+                )
+                prev_sales = prev_sales_query.all()
+                
+                prev_total_sales_revenue = sum(sale.sale_price for sale in prev_sales)
+                prev_total_platform_fees = sum(sale.platform_fees or 0 for sale in prev_sales)
+                prev_total_sales_tax = sum(sale.sales_tax or 0 for sale in prev_sales)
+                
+                prev_cost_of_goods_sold = 0
+                prev_sold_items_shipping_cost = 0
+                
+                for sale in prev_sales:
+                    item = Item.query.get(sale.item_id)
+                    if item:
+                        prev_cost_of_goods_sold += item.purchase_price
+                        prev_sold_items_shipping_cost += (item.shipping_price or 0)
+                
+                prev_gross_profit = (
+                    prev_total_sales_revenue 
+                    - prev_cost_of_goods_sold 
+                    - prev_total_platform_fees 
+                    - prev_total_sales_tax 
+                    - prev_sold_items_shipping_cost
+                )
+                
+                # --- PREVIOUS PERIOD EXPENSES ---
+                prev_expense_query = Expense.query.filter(
+                    Expense.expense_date >= prev_start_date,
+                    Expense.expense_date < prev_end_date
+                )
+                prev_expenses = prev_expense_query.all()
+                
+                prev_total_expenses = sum(expense.amount for expense in prev_expenses)
+                
+                # --- PREVIOUS PERIOD NET PROFIT ---
+                prev_net_profit_sold = prev_gross_profit - prev_total_expenses
+                
+                # --- PREVIOUS PERIOD ROI ---
+                prev_roi_sold = (prev_net_profit_sold / prev_cost_of_goods_sold * 100) if prev_cost_of_goods_sold > 0 else 0
+                
+                # --- CALCULATE CHANGES ---
+                # Net profit change
+                if prev_net_profit_sold != 0:
+                    net_profit_change = ((net_profit_sold - prev_net_profit_sold) / abs(prev_net_profit_sold)) * 100
+                else:
+                    net_profit_change = 100 if net_profit_sold > 0 else -100 if net_profit_sold < 0 else 0
+                
+                # ROI change
+                if prev_roi_sold != 0:
+                    roi_change = roi_sold - prev_roi_sold
+                else:
+                    roi_change = roi_sold
+                
+                # Expense change
+                if prev_total_expenses != 0:
+                    expense_change = ((total_expenses - prev_total_expenses) / prev_total_expenses) * 100
+                else:
+                    expense_change = 100 if total_expenses > 0 else 0
+                
+                # Revenue change
+                if prev_total_sales_revenue != 0:
+                    revenue_change = ((total_sales_revenue - prev_total_sales_revenue) / prev_total_sales_revenue) * 100
+                else:
+                    revenue_change = 100 if total_sales_revenue > 0 else 0
+            
+            # Compile the comprehensive metrics response
+            metrics = {
+                # Inventory metrics
+                'inventoryMetrics': {
+                    'totalInventory': total_inventory,
+                    'unlistedItems': unlisted_items,
+                    'listedItems': listed_items,
+                    'totalInventoryCost': total_inventory_cost,
+                    'totalShippingCost': total_shipping_cost,
+                    'totalMarketValue': total_market_value,
+                    'potentialProfit': potential_profit
+                },
+                
+                # Sales metrics
+                'salesMetrics': {
+                    'totalSales': total_sales,
+                    'totalSalesRevenue': total_sales_revenue,
+                    'totalPlatformFees': total_platform_fees,
+                    'totalSalesTax': total_sales_tax,
+                    'costOfGoodsSold': cost_of_goods_sold,
+                    'grossProfit': gross_profit,
+                    'revenueChange': revenue_change
+                },
+                
+                # Expense metrics
+                'expenseMetrics': {
+                    'totalExpenses': total_expenses,
+                    'expenseByType': expense_by_type,
+                    'expenseChange': expense_change
+                },
+                
+                # Profit and ROI metrics
+                'profitMetrics': {
+                    'netProfitSold': net_profit_sold,
+                    'netProfitChange': net_profit_change,
+                    'potentialProfit': potential_profit,
+                    'roiSold': roi_sold,
+                    'roiInventory': roi_inventory,
+                    'overallRoi': overall_roi,
+                    'roiChange': roi_change
+                }
+            }
+            
+            logger.info("✅ Generated comprehensive dashboard KPI metrics")
+            return jsonify(metrics), 200
+        except Exception as e:
+            logger.error(f"💥 Error generating dashboard KPI metrics: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 # end of sales  KPI metrics
     @app.before_request
     def log_request_info():

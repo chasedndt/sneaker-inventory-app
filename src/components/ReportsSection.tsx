@@ -3,10 +3,10 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { Grid, Box, useTheme } from '@mui/material';
 import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
-import { Sale, salesApi } from '../services/salesApi';
+import { Sale, salesApi, NetProfitResponse } from '../services/salesApi';
 import { Expense } from '../models/expenses';
-import { expensesApi } from '../services/expensesApi';
 import { calculateTotalExpenses, isCurrentMonth } from '../utils/expensesUtils';
+import { dashboardService, ComprehensiveMetrics } from '../services/dashboardService';
 import { Dayjs } from 'dayjs';
 
 // Props to include sales and expenses data and date filters
@@ -35,15 +35,41 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
 }) => {
   const theme = useTheme();
   
-  // Add state for real net profit from sold items
-  const [netProfitSold, setNetProfitSold] = useState<number>(0);
-  const [netProfitSoldChange, setNetProfitSoldChange] = useState<number>(-6.4); // Default value
+  // State for dashboard metrics from the new comprehensive endpoint
+  const [dashboardMetrics, setDashboardMetrics] = useState<ComprehensiveMetrics | null>(null);
   
-  // Add state for real expense data
-  const [totalExpenses, setTotalExpenses] = useState<number>(0);
-  const [expensePercentageChange, setExpensePercentageChange] = useState<number>(0);
+  // State for net profit from sold items
+  const [netProfitData, setNetProfitData] = useState<NetProfitResponse | null>(null);
   
-  // Fetch net profit from sold items data
+  // Fetch dashboard metrics when date range changes
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        console.log('🚀 Starting to fetch dashboard metrics...');
+        console.log('🗓️ Date range:', { 
+          startDate: startDate?.format('YYYY-MM-DD'), 
+          endDate: endDate?.format('YYYY-MM-DD') 
+        });
+        
+        // Convert dayjs objects to Date objects if they exist
+        const startDateObj = startDate ? startDate.toDate() : undefined;
+        const endDateObj = endDate ? endDate.toDate() : undefined;
+        
+        // Call the API to get comprehensive metrics
+        const metricsData = await dashboardService.fetchDashboardMetrics(startDateObj, endDateObj);
+        
+        // Update state with the fetched data
+        setDashboardMetrics(metricsData);
+        console.log('💾 State updated with dashboard metrics');
+      } catch (error) {
+        console.error('❌ Error fetching dashboard metrics:', error);
+      }
+    };
+    
+    fetchMetrics();
+  }, [startDate, endDate]);
+  
+  // Fetch net profit from sold items when date range changes
   useEffect(() => {
     const fetchNetProfit = async () => {
       try {
@@ -57,23 +83,12 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         const startDateObj = startDate ? startDate.toDate() : undefined;
         const endDateObj = endDate ? endDate.toDate() : undefined;
         
-        // Call the API to get real net profit data
-        console.log('📞 Calling salesApi.getNetProfit with dates:', { 
-          startDateObj, 
-          endDateObj 
-        });
-        
+        // Call the API to get net profit data
         const netProfitData = await salesApi.getNetProfit(startDateObj, endDateObj);
         
-        // Log the response
-        console.log('📊 API response for net profit:', netProfitData);
-        
-        // Update state with the real data
-        setNetProfitSold(netProfitData.netProfitSold);
-        console.log('💾 State updated with new net profit value:', netProfitData.netProfitSold);
-        
-        // For the percentage change, you could implement a similar API call to get previous period data
-        // For now, we'll keep the mock value
+        // Update state with the fetched data
+        setNetProfitData(netProfitData);
+        console.log('💾 State updated with net profit data:', netProfitData);
       } catch (error) {
         console.error('❌ Error fetching net profit data:', error);
       }
@@ -82,50 +97,9 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     fetchNetProfit();
   }, [startDate, endDate]);
   
-  // Fetch total expenses data
-  useEffect(() => {
-    const fetchTotalExpenses = async () => {
-      try {
-        console.log('🚀 Starting to fetch total expenses data...');
-        console.log('🗓️ Date range:', { 
-          startDate: startDate?.format('YYYY-MM-DD'), 
-          endDate: endDate?.format('YYYY-MM-DD') 
-        });
-        
-        // Convert dayjs objects to Date objects if they exist
-        const startDateObj = startDate ? startDate.toDate() : undefined;
-        const endDateObj = endDate ? endDate.toDate() : undefined;
-        
-        // Call the API to get real expense data
-        console.log('📞 Calling expensesApi.getTotalExpenses with dates:', { 
-          startDateObj, 
-          endDateObj 
-        });
-        
-        const expenseData = await expensesApi.getTotalExpenses(startDateObj, endDateObj);
-        
-        // Log the response
-        console.log('📊 API response for total expenses:', expenseData);
-        
-        // Update state with the real data
-        setTotalExpenses(expenseData.totalExpenses);
-        setExpensePercentageChange(expenseData.percentageChange);
-        
-        console.log('💾 State updated with new expense values:', {
-          totalExpenses: expenseData.totalExpenses,
-          percentageChange: expenseData.percentageChange
-        });
-      } catch (error) {
-        console.error('❌ Error fetching total expenses data:', error);
-      }
-    };
-    
-    fetchTotalExpenses();
-  }, [startDate, endDate]);
-  
-  // Calculate metrics based on filtered data
-  const metrics = useMemo(() => {
-    console.log('Calculating metrics with:', { 
+  // Calculate metrics using local data as a fallback
+  const fallbackMetrics = useMemo(() => {
+    console.log('Calculating fallback metrics with:', { 
       itemsCount: items.length, 
       salesCount: sales.length,
       expensesCount: expenses.length
@@ -165,8 +139,32 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       filteredExpensesCount: filteredExpenses.length
     });
     
-    // We'll no longer calculate expenses here since we're fetching it from the API
-    // but keep the rest of the calculations for other metrics
+    // Calculate total expenses
+    const totalExpenseSpend = calculateTotalExpenses(filteredExpenses);
+    
+    // Calculate expenses change (comparing to previous period)
+    let expenseSpendChange = 0;
+    if (startDate && endDate) {
+      const currentPeriodLength = endDate.diff(startDate, 'day');
+      const previousStartDate = startDate.subtract(currentPeriodLength, 'day');
+      const previousEndDate = startDate.subtract(1, 'day');
+      
+      // Get expenses from previous period
+      const previousPeriodExpenses = expenses.filter(expense => {
+        const expenseDate = new Date(expense.expenseDate).getTime();
+        return expenseDate >= previousStartDate.valueOf() && expenseDate <= previousEndDate.valueOf();
+      });
+      
+      const previousPeriodTotal = calculateTotalExpenses(previousPeriodExpenses);
+      
+      // Calculate percentage change
+      if (previousPeriodTotal > 0) {
+        expenseSpendChange = ((totalExpenseSpend - previousPeriodTotal) / previousPeriodTotal) * 100;
+      }
+    } else {
+      // Default to 0% change if no date range is specified
+      expenseSpendChange = 0;
+    }
     
     // Ensure we're only using active inventory (not sold items)
     const activeItems = filteredItems.filter(item => item.status !== 'sold');
@@ -192,7 +190,8 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         const purchasePrice = soldItem.purchasePrice || 0;
         const salesTax = sale.salesTax || 0;
         const platformFees = sale.platformFees || 0;
-        const saleProfit = sale.salePrice - purchasePrice - salesTax - platformFees;
+        const shipping = soldItem.shippingPrice || 0;
+        const saleProfit = sale.salePrice - purchasePrice - salesTax - platformFees - shipping;
         
         console.log(`Sale ${index + 1}:`, {
           id: sale.id,
@@ -201,6 +200,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           purchasePrice,
           salesTax,
           platformFees,
+          shipping,
           calculatedProfit: saleProfit
         });
         
@@ -226,43 +226,82 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       return sum + (soldItem?.purchasePrice || 0);
     }, 0);
     
-    // Use local calculation for expenses as a fallback if API call fails
-    const localExpenseSpend = calculateTotalExpenses(filteredExpenses);
-    
-    // Use totalExpenses from the API if available, otherwise use local calculation
-    const expenseSpend = totalExpenses > 0 ? totalExpenses : localExpenseSpend;
-    
     // Calculate ROI (now including expenses)
     const totalSpend = activeInventorySpend + soldItemsSpend;
-    const totalProfit = inventoryProfit + soldItemsProfit - expenseSpend;
+    const totalProfit = inventoryProfit + soldItemsProfit - totalExpenseSpend;
     const roi = totalSpend > 0 ? (totalProfit / totalSpend) * 100 : 0;
     
     // Calculate net profit (now including expenses)
-    const netProfit = inventoryProfit - expenseSpend;
+    const netProfit = inventoryProfit - totalExpenseSpend;
     
-    // Calculate net profit change
-    const netProfitChange = -15.3; // This would be calculated dynamically based on previous period
+    // For demonstration purposes, providing default changes
+    const netProfitChange = -15.3; // This would ideally be calculated from previous period data
+    const salesIncomeChange = 12.5;
+    const itemSpendChange = -8.4;
+    const roiChange = 5.2;
+    const itemsPurchasedChange = 8.7;
+    const itemsSoldChange = -12.5;
+    const soldItemsProfitChange = -6.4;
     
     return {
       netProfit: netProfit,
       netProfitChange: netProfitChange,
       salesIncome: salesIncome,
-      salesIncomeChange: 12.5,
+      salesIncomeChange: salesIncomeChange,
       itemSpend: activeInventorySpend,
-      itemSpendChange: -8.4,
+      itemSpendChange: itemSpendChange,
       roiPercentage: roi,
-      roiChange: 5.2,
-      expenseSpend: expenseSpend,
-      expenseSpendChange: expensePercentageChange, // Use the real percentage change from API
+      roiChange: roiChange,
+      expenseSpend: totalExpenseSpend,
+      expenseSpendChange: expenseSpendChange,
       itemsPurchased: filteredItems.length,
-      itemsPurchasedChange: 8.7,
+      itemsPurchasedChange: itemsPurchasedChange,
       itemsSold: soldItemsCount,
-      itemsSoldChange: -12.5,
-      // We're not using this calculated value anymore, but keeping it for reference
+      itemsSoldChange: itemsSoldChange,
       soldItemsProfit: soldItemsProfit,
-      soldItemsProfitChange: -6.4
+      soldItemsProfitChange: soldItemsProfitChange
     };
-  }, [items, sales, expenses, startDate, endDate, totalExpenses, expensePercentageChange]);
+  }, [items, sales, expenses, startDate, endDate]);
+  
+  // Use the metrics from the API if available, otherwise fall back to calculated values
+  const metrics = dashboardMetrics ? {
+    // Net Profit
+    netProfit: dashboardMetrics.profitMetrics.potentialProfit,
+    netProfitChange: dashboardMetrics.profitMetrics.netProfitChange,
+    
+    // Sales Income
+    salesIncome: dashboardMetrics.salesMetrics.totalSalesRevenue,
+    salesIncomeChange: dashboardMetrics.salesMetrics.revenueChange,
+    
+    // Item Spend
+    itemSpend: dashboardMetrics.inventoryMetrics.totalInventoryCost,
+    itemSpendChange: 0, // Not provided directly by the API
+    
+    // ROI
+    roiPercentage: dashboardMetrics.profitMetrics.overallRoi,
+    roiChange: dashboardMetrics.profitMetrics.roiChange,
+    
+    // Expenses
+    expenseSpend: dashboardMetrics.expenseMetrics.totalExpenses,
+    expenseSpendChange: dashboardMetrics.expenseMetrics.expenseChange,
+    
+    // Items metrics
+    itemsPurchased: dashboardMetrics.inventoryMetrics.totalInventory,
+    itemsPurchasedChange: 0, // Not provided directly by the API
+    
+    // Sold items
+    itemsSold: dashboardMetrics.salesMetrics.totalSales,
+    itemsSoldChange: 0, // Not provided directly by the API
+  } : fallbackMetrics;
+  
+  // Get net profit from sold items from the dedicated API if available
+  const netProfitSold = netProfitData ? 
+    netProfitData.netProfitSold : 
+    (dashboardMetrics ? dashboardMetrics.profitMetrics.netProfitSold : 0);
+  
+  const netProfitSoldChange = netProfitData ? 
+    netProfitData.netProfitChange : 
+    (dashboardMetrics ? dashboardMetrics.profitMetrics.netProfitChange : 0);
 
   return (
     <Box sx={{ width: '100%', height: '100%' }}>
@@ -272,7 +311,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Net Profit"
             value={metrics.netProfit.toFixed(2)}
             change={metrics.netProfitChange}
-            data={generateMockData(2000, 400)}
+            data={generateMockData(Math.max(1, metrics.netProfit) * 0.8, Math.max(1, metrics.netProfit) * 0.2)}
             tooltipText="Estimated profit based on market price difference minus purchase price and expenses"
           />
         </Grid>
@@ -282,7 +321,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Sales Income"
             value={metrics.salesIncome.toFixed(2)}
             change={metrics.salesIncomeChange}
-            data={generateMockData(5000, 800)}
+            data={generateMockData(Math.max(1, metrics.salesIncome) * 0.8, Math.max(1, metrics.salesIncome) * 0.2)}
             tooltipText="Total revenue from all completed sales"
           />
         </Grid>
@@ -292,7 +331,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Item Spend"
             value={metrics.itemSpend.toFixed(2)}
             change={metrics.itemSpendChange}
-            data={generateMockData(7000, 1000)}
+            data={generateMockData(Math.max(1, metrics.itemSpend) * 0.8, Math.max(1, metrics.itemSpend) * 0.2)}
             tooltipText="Total amount spent on items currently in inventory"
           />
         </Grid>
@@ -302,7 +341,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="ROI Percentage"
             value={metrics.roiPercentage.toFixed(1)}
             change={metrics.roiChange}
-            data={generateMockData(25, 5)}
+            data={generateMockData(Math.max(1, metrics.roiPercentage) * 0.8, Math.max(1, metrics.roiPercentage) * 0.2)}
             prefix=""
             suffix="%"
             tooltipText="Return on investment calculated as ((Net Profit - Expenses) / Total Item Spend) × 100"
@@ -314,7 +353,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Expense Spend"
             value={metrics.expenseSpend.toFixed(2)}
             change={metrics.expenseSpendChange}
-            data={generateMockData(metrics.expenseSpend * 0.8, metrics.expenseSpend * 0.2)}
+            data={generateMockData(Math.max(1, metrics.expenseSpend) * 0.8, Math.max(1, metrics.expenseSpend) * 0.2)}
             tooltipText="Total expenses excluding inventory purchases"
           />
         </Grid>
@@ -324,7 +363,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Items Purchased"
             value={metrics.itemsPurchased.toString()}
             change={metrics.itemsPurchasedChange}
-            data={generateMockData(metrics.itemsPurchased, 5)}
+            data={generateMockData(Math.max(1, metrics.itemsPurchased), 5)}
             prefix=""
             tooltipText="Total number of items purchased during the selected period"
           />
@@ -335,7 +374,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             title="Items Sold"
             value={metrics.itemsSold.toString()}
             change={metrics.itemsSoldChange}
-            data={generateMockData(metrics.itemsSold, 4)}
+            data={generateMockData(Math.max(1, metrics.itemsSold), 4)}
             prefix=""
             tooltipText="Total number of items sold during the selected period"
           />
