@@ -45,18 +45,19 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
       bgcolor: theme.palette.background.paper,
       color: theme.palette.text.primary,
       boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
+      display: 'flex',
+      flexDirection: 'column',
       '&:hover': {
         boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
         transform: 'translateY(-2px)',
         transition: 'all 0.2s ease-in-out'
       },
     }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Typography 
           variant="subtitle2" 
           sx={{ 
             color: theme.palette.text.secondary,
-            mb: 1,
             fontSize: '0.9rem',
             fontWeight: 500
           }}
@@ -71,7 +72,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         )}
       </Box>
       
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <Typography 
           variant="h6" 
           sx={{ 
@@ -95,8 +96,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         </Box>
       </Box>
 
-      <Box sx={{ height: 70, mt: 1 }}>
-        <ResponsiveContainer width="100%" height="100%">
+      <Box sx={{ flex: 1, mt: 'auto', display: 'flex', alignItems: 'flex-end', minHeight: 80 }}>
+        <ResponsiveContainer width="100%" height={80}>
           <LineChart data={data}>
             <Line 
               type="monotone"

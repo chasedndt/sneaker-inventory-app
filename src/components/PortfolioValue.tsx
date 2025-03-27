@@ -1,13 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
-  Paper, 
-  Typography, 
   Box, 
-  ToggleButtonGroup, 
-  ToggleButton,
-  styled,
+  Typography, 
+  Tooltip,
   Theme,
-  Tooltip
+  useTheme
 } from '@mui/material';
 import { 
   LineChart, 
@@ -22,37 +19,6 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoIcon from '@mui/icons-material/Info';
 
-// Custom styled ToggleButton to handle dark mode properly
-const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
-  padding: '4px 12px',
-  fontSize: '0.813rem',
-  fontWeight: 500,
-  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : '#666',
-  borderColor: theme.palette.divider,
-  textTransform: 'none',
-  height: '32px',
-  minWidth: '48px',
-  '&:hover': {
-    backgroundColor: theme.palette.mode === 'dark' 
-      ? 'rgba(255, 255, 255, 0.08)' 
-      : 'rgba(0, 0, 0, 0.04)',
-  },
-  '&.Mui-selected': {
-    backgroundColor: theme.palette.mode === 'dark' 
-      ? 'rgba(255, 255, 255, 0.16)' 
-      : '#f5f5f5',
-    color: theme.palette.mode === 'dark' 
-      ? '#fff' 
-      : '#1a1a1a',
-    fontWeight: 600,
-    '&:hover': {
-      backgroundColor: theme.palette.mode === 'dark' 
-        ? 'rgba(255, 255, 255, 0.24)' 
-        : '#eeeeee',
-    },
-  },
-}));
-
 interface PortfolioValueProps {
   currentValue: number;
   valueChange: number;
@@ -66,21 +32,14 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
   valueChange,
   percentageChange,
   data,
-  theme
+  theme: propTheme
 }) => {
-  const [timeRange, setTimeRange] = useState('1M');
-
-  const handleTimeRangeChange = (
-    event: React.MouseEvent<HTMLElement>,
-    newTimeRange: string,
-  ) => {
-    if (newTimeRange !== null) {
-      setTimeRange(newTimeRange);
-    }
-  };
+  // Use provided theme or default theme
+  const defaultTheme = useTheme();
+  const theme = propTheme || defaultTheme;
 
   // Fixed styling for dark mode
-  const isDarkMode = theme?.palette.mode === 'dark';
+  const isDarkMode = theme.palette.mode === 'dark';
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -114,9 +73,8 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
   const maxValue = Math.max(...data.map(item => item.value)) * 1.05; // 5% above max
 
   return (
-    <Paper sx={{ 
-      p: 3, 
-      borderRadius: 2, 
+    <Box sx={{ 
+      p: 0, 
       bgcolor: isDarkMode ? '#1e1e2d' : '#fff',
       color: isDarkMode ? '#fff' : 'inherit',
       height: '100%', // Use full height of the container
@@ -127,7 +85,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'flex-start', 
-        mb: 3
+        p: 2
       }}>
         <Box>
           <Typography variant="h3" sx={{ 
@@ -138,7 +96,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
           }}>
             ${currentValue.toLocaleString()}
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
             <Box sx={{ 
               display: 'flex', 
               alignItems: 'center',
@@ -164,42 +122,9 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
             </Tooltip>
           </Box>
         </Box>
-
-        <ToggleButtonGroup
-          value={timeRange}
-          exclusive
-          onChange={handleTimeRangeChange}
-          size="small"
-          sx={{
-            '& .MuiToggleButtonGroup-grouped': {
-              margin: 0,
-              border: 1,
-              borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e0e0e0',
-              '&:not(:first-of-type)': {
-                borderRadius: 0,
-                borderLeft: '1px solid',
-                borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#e0e0e0',
-              },
-              '&:first-of-type': {
-                borderRadius: '4px 0 0 4px',
-              },
-              '&:last-of-type': {
-                borderRadius: '0 4px 4px 0',
-              },
-            },
-          }}
-        >
-          <StyledToggleButton value="24H">24H</StyledToggleButton>
-          <StyledToggleButton value="1W">1W</StyledToggleButton>
-          <StyledToggleButton value="1M">1M</StyledToggleButton>
-          <StyledToggleButton value="3M">3M</StyledToggleButton>
-          <StyledToggleButton value="6M">6M</StyledToggleButton>
-          <StyledToggleButton value="1Y">1Y</StyledToggleButton>
-          <StyledToggleButton value="ALL">ALL</StyledToggleButton>
-        </ToggleButtonGroup>
       </Box>
 
-      <Box sx={{ flex: 1, width: '100%' }}>
+      <Box sx={{ flex: 1, width: '100%', pt: 2 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
             <CartesianGrid 
@@ -240,7 +165,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
           </LineChart>
         </ResponsiveContainer>
       </Box>
-    </Paper>
+    </Box>
   );
 };
 

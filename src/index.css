@@ -5,13 +5,13 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  box-sizing: border-box;
 }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
-
 
 .placeholder-image {
   background-color: #e0e0e0;
@@ -25,4 +25,73 @@ code {
   border-radius: 8px;
 }
 
+/* Fix for sidebar hover effects */
+.MuiListItemButton-root {
+  overflow: hidden !important;
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
 
+.MuiListItemButton-root::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: transparent;
+  transition: background-color 0.2s ease-in-out;
+  pointer-events: none;
+  border-radius: 0;
+}
+
+.MuiListItemButton-root:hover::before {
+  background-color: rgba(138, 132, 216, 0.08);
+}
+
+.MuiListItemButton-root.Mui-selected::before {
+  background-color: transparent;
+}
+
+/* Fix for KPI metrics charts */
+.recharts-responsive-container {
+  height: 100% !important;
+  min-height: 80px !important;
+}
+
+/* Date filter positioning and styling */
+.date-filter-container {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.MuiTextField-root.date-picker {
+  width: 160px;
+}
+
+/* Time range toggle styling */
+.time-range-toggle {
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Fixes for dark mode styling */
+.dark-mode .MuiPaper-root {
+  background-color: #1e1e2d;
+}
+
+.dark-mode .MuiListItemButton-root:hover::before {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Make sure borders don't overflow */
+* {
+  box-sizing: border-box;
+}
+
+/* Keep toggle buttons contained */
+.MuiToggleButtonGroup-root {
+  overflow: hidden;
+}
