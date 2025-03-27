@@ -20,6 +20,21 @@ export interface Sale {
 }
 
 /**
+ * Enhanced interface for net profit response that includes expense data
+ */
+export interface NetProfitResponse {
+  netProfitSold: number;
+  salesCount: number;
+  grossProfit: number;
+  totalExpenses: number;
+  totalSalesRevenue: number;
+  totalCostsOfGoods: number;
+  avgProfitPerSale: number;
+  previousPeriodNetProfit: number;
+  netProfitChange: number;
+}
+
+/**
  * Interface for data submitted when recording a new sale
  */
 export interface RecordSaleData {
@@ -319,14 +334,14 @@ export const salesApi = {
   },
 
   /**
-   * Get the total net profit from sold items
+   * Get the total net profit from sold items with proper expense accounting
    * @param startDate Optional start date filter
    * @param endDate Optional end date filter
-   * @returns Promise<{netProfitSold: number, salesCount: number}> Total net profit and count of sales
+   * @returns Promise<NetProfitResponse> Complete profit metrics including expenses
    */
-  getNetProfit: async (startDate?: Date, endDate?: Date): Promise<{netProfitSold: number, salesCount: number}> => {
+  getNetProfit: async (startDate?: Date, endDate?: Date): Promise<NetProfitResponse> => {
     try {
-      console.log('🔄 Fetching net profit from sales API...');
+      console.log('🔄 Fetching net profit with expenses from sales API...');
       
       // Construct URL with query parameters for date filtering
       let url = `${API_BASE_URL}/sales/net-profit`;
@@ -360,21 +375,21 @@ export const salesApi = {
         // If the API is not yet implemented, return mock data
         if (response.status === 404) {
           console.warn('⚠️ Net profit endpoint not found, using mock data');
-          return { netProfitSold: 0, salesCount: 0 };
+          return getMockNetProfitResponse();
         }
         
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.json();
-      console.log(`✅ Retrieved net profit data:`, data);
+      console.log(`✅ Retrieved enhanced net profit data:`, data);
       return data;
     } catch (error: any) {
       console.error('💥 Error fetching net profit data:', error);
       
       // Return mock data for development
       console.warn('⚠️ Using mock net profit data due to error');
-      return { netProfitSold: 0, salesCount: 0 };
+      return getMockNetProfitResponse();
     }
   }
 };
@@ -431,6 +446,24 @@ function getMockSales(): Sale[] {
       status: 'pending'
     }
   ];
+}
+
+/**
+ * Generate mock net profit response data for development
+ * @returns Mock NetProfitResponse object
+ */
+function getMockNetProfitResponse(): NetProfitResponse {
+  return {
+    netProfitSold: 2500,
+    salesCount: 15,
+    grossProfit: 3200,
+    totalExpenses: 700,
+    totalSalesRevenue: 12000,
+    totalCostsOfGoods: 8800,
+    avgProfitPerSale: 166.67,
+    previousPeriodNetProfit: 2200,
+    netProfitChange: 13.64
+  };
 }
 
 export default salesApi;

@@ -1,119 +1,185 @@
+// src/services/dashboardService.ts
+import { Item } from './api';
+
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
+
 /**
- * Dashboard Data Interface
- * @interface DashboardData
- * @description Defines the structure of data required for the dashboard
+ * Interface for dashboard data returned by the API
  */
 export interface DashboardData {
-  /**
-   * Total value of portfolio in USD
-   * @type {number}
-   */
   portfolioValue: number;
-
-  /**
-   * Total number of items in inventory
-   * @type {number}
-   */
   totalInventory: number;
-
-  /**
-   * Number of active listings across all platforms
-   * @type {number}
-   */
   activeListings: number;
-
-  /**
-   * Total sales for the current month in USD
-   * @type {number}
-   */
   monthlySales: number;
-
-  /**
-   * Current profit margin as a percentage
-   * @type {number}
-   */
   profitMargin: number;
-
-  /**
-   * Portfolio metrics
-   * @type {Object}
-   */
   metrics: {
-    /**
-     * Net profit in USD
-     * @type {number}
-     */
     netProfit: number;
-
-    /**
-     * Percentage change in net profit
-     * @type {number}
-     */
     netProfitChange: number;
-
-    /**
-     * Total amount spent in USD
-     * @type {number}
-     */
     totalSpend: number;
-
-    /**
-     * Percentage change in total spend
-     * @type {number}
-     */
     totalSpendChange: number;
-
-    /**
-     * Number of items purchased
-     * @type {number}
-     */
     itemsPurchased: number;
-
-    /**
-     * Number of items sold
-     * @type {number}
-     */
     itemsSold: number;
   };
 }
 
 /**
- * Fetches dashboard data from the backend
- * 
- * @async
- * @function fetchDashboardData
- * @description Retrieves all necessary data for populating the dashboard including
- * portfolio value, inventory counts, sales metrics, and performance indicators
- * 
- * @param {Object} [options] - Optional parameters for the fetch request
- * @param {Date} [options.startDate] - Start date for filtering data
- * @param {Date} [options.endDate] - End date for filtering data
- * 
- * @returns {Promise<DashboardData>} Promise that resolves to dashboard data
- * @throws {Error} When the API request fails or returns invalid data
+ * Interface for comprehensive dashboard metrics
  */
-export const fetchDashboardData = async (
-  options?: { startDate?: Date; endDate?: Date }
-): Promise<DashboardData> => {
-  // Simulate API call delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Return mock data matching the interface
-  return {
-    portfolioValue: 50000,
-    totalInventory: 500,
-    activeListings: 250,
-    monthlySales: 10000,
-    profitMargin: 25,
-    metrics: {
-      netProfit: 2500,
-      netProfitChange: 15,
-      totalSpend: 12000,
-      totalSpendChange: -5,
-      itemsPurchased: 45,
-      itemsSold: 32
-    }
+export interface ComprehensiveMetrics {
+  inventoryMetrics: {
+    totalInventory: number;
+    unlistedItems: number;
+    listedItems: number;
+    totalInventoryCost: number;
+    totalShippingCost: number;
+    totalMarketValue: number;
+    potentialProfit: number;
   };
+  salesMetrics: {
+    totalSales: number;
+    totalSalesRevenue: number;
+    totalPlatformFees: number;
+    totalSalesTax: number;
+    costOfGoodsSold: number;
+    grossProfit: number;
+    revenueChange: number;
+  };
+  expenseMetrics: {
+    totalExpenses: number;
+    expenseByType: Record<string, number>;
+    expenseChange: number;
+  };
+  profitMetrics: {
+    netProfitSold: number;
+    netProfitChange: number;
+    potentialProfit: number;
+    roiSold: number;
+    roiInventory: number;
+    overallRoi: number;
+    roiChange: number;
+  };
+}
+
+export const dashboardService = {
+  /**
+   * Fetches dashboard data from the backend
+   * 
+   * @async
+   * @function fetchDashboardData
+   * @description Retrieves all necessary data for populating the dashboard
+   * 
+   * @param {Object} [options] - Optional parameters for the fetch request
+   * @param {Date} [options.startDate] - Start date for filtering data
+   * @param {Date} [options.endDate] - End date for filtering data
+   * 
+   * @returns {Promise<DashboardData>} Promise that resolves to dashboard data
+   * @throws {Error} When the API request fails or returns invalid data
+   */
+  fetchDashboardData: async (
+    options?: { startDate?: Date; endDate?: Date }
+  ): Promise<DashboardData> => {
+    // Simulate API call delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Return mock data matching the interface
+    return {
+      portfolioValue: 50000,
+      totalInventory: 500,
+      activeListings: 250,
+      monthlySales: 10000,
+      profitMargin: 25,
+      metrics: {
+        netProfit: 2500,
+        netProfitChange: 15,
+        totalSpend: 12000,
+        totalSpendChange: -5,
+        itemsPurchased: 45,
+        itemsSold: 32
+      }
+    };
+  },
+
+  /**
+   * Fetches comprehensive dashboard metrics from the new endpoint
+   * 
+   * @async
+   * @function fetchDashboardMetrics
+   * @description Retrieves comprehensive metrics for all KPIs with consistent calculations
+   * 
+   * @param {Date} [startDate] - Optional start date for filtering data
+   * @param {Date} [endDate] - Optional end date for filtering data
+   * 
+   * @returns {Promise<ComprehensiveMetrics>} Promise that resolves to comprehensive metrics
+   * @throws {Error} When the API request fails
+   */
+  fetchDashboardMetrics: async (startDate?: Date, endDate?: Date): Promise<ComprehensiveMetrics> => {
+    try {
+      console.log('🚀 Fetching comprehensive dashboard metrics...');
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (startDate) {
+        params.append('start_date', startDate.toISOString());
+      }
+      if (endDate) {
+        params.append('end_date', endDate.toISOString());
+      }
+      
+      // Make API request
+      const url = `${API_BASE_URL}/dashboard/kpi-metrics${params.toString() ? `?${params.toString()}` : ''}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('📊 Received dashboard metrics:', data);
+      
+      return data;
+    } catch (error) {
+      console.error('💥 Error fetching dashboard metrics:', error);
+      
+      // Return empty data structure in case of error
+      return {
+        inventoryMetrics: {
+          totalInventory: 0,
+          unlistedItems: 0,
+          listedItems: 0,
+          totalInventoryCost: 0,
+          totalShippingCost: 0,
+          totalMarketValue: 0,
+          potentialProfit: 0
+        },
+        salesMetrics: {
+          totalSales: 0,
+          totalSalesRevenue: 0,
+          totalPlatformFees: 0,
+          totalSalesTax: 0,
+          costOfGoodsSold: 0,
+          grossProfit: 0,
+          revenueChange: 0
+        },
+        expenseMetrics: {
+          totalExpenses: 0,
+          expenseByType: {},
+          expenseChange: 0
+        },
+        profitMetrics: {
+          netProfitSold: 0,
+          netProfitChange: 0,
+          potentialProfit: 0,
+          roiSold: 0,
+          roiInventory: 0,
+          overallRoi: 0,
+          roiChange: 0
+        }
+      };
+    }
+  }
 };
 
 /**
