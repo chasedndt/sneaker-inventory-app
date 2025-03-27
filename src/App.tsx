@@ -47,12 +47,27 @@ function App() {
           },
         },
       },
+      // Add custom style overrides for hover effects
+      MuiListItemButton: {
+        styleOverrides: {
+          root: {
+            '&:hover': {
+              overflow: 'hidden', // Ensure hover effect is contained
+            },
+          },
+        },
+      },
     },
   });
 
   // Handle navigation
   const handleNavigate = (page: string) => {
     setCurrentPage(page);
+  };
+
+  // Toggle dark mode
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
   };
 
   // Render the current page

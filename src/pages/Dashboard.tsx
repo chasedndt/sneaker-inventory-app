@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Box,
   Typography, 
@@ -15,7 +15,10 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  ToggleButtonGroup,
+  ToggleButton,
+  styled
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -32,6 +35,63 @@ import AddItemModal from '../components/AddItemModal';
 import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 import dayjs, { Dayjs } from 'dayjs';
 
+// Custom styled ToggleButton
+const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
+  padding: '4px 12px',
+  fontSize: '0.813rem',
+  fontWeight: 400,
+  color: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : '#666',
+  borderColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : theme.palette.divider,
+  textTransform: 'none',
+  height: '32px',
+  minWidth: '48px',
+  borderRadius: 0,
+  '&:hover': {
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? 'rgba(255, 255, 255, 0.08)' 
+      : 'rgba(0, 0, 0, 0.04)',
+  },
+  '&.Mui-selected': {
+    backgroundColor: theme.palette.mode === 'dark' 
+      ? 'rgba(255, 255, 255, 0.16)' 
+      : '#f5f5f5',
+    color: theme.palette.mode === 'dark' 
+      ? '#fff' 
+      : '#1a1a1a',
+    fontWeight: 600,
+    '&:hover': {
+      backgroundColor: theme.palette.mode === 'dark' 
+        ? 'rgba(255, 255, 255, 0.24)' 
+        : '#eeeeee',
+    },
+  },
+  '&:first-of-type': {
+    borderTopLeftRadius: '8px',
+    borderBottomLeftRadius: '8px',
+  },
+  '&:last-of-type': {
+    borderTopRightRadius: '8px',
+    borderBottomRightRadius: '8px',
+  }
+}));
+
+// Define time range options
+interface TimeRange {
+  label: string;
+  value: string;
+  days: number;
+}
+
+const timeRanges: TimeRange[] = [
+  { label: '24H', value: '24H', days: 1 },
+  { label: '1W', value: '1W', days: 7 },
+  { label: '1M', value: '1M', days: 30 },
+  { label: '3M', value: '3M', days: 90 },
+  { label: '6M', value: '6M', days: 180 },
+  { label: '1Y', value: '1Y', days: 365 },
+  { label: 'ALL', value: 'ALL', days: 0 }
+];
+
 const Dashboard: React.FC = () => {
   const theme = useTheme();
   const [items, setItems] = useState<Item[]>([]);
@@ -44,6 +104,7 @@ const Dashboard: React.FC = () => {
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState<string>('date');
+  const [timeRange, setTimeRange] = useState<string>('1M');
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
@@ -109,6 +170,29 @@ const Dashboard: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // Update date range when time filter changes
+  useEffect(() => {
+    const updateDateRangeFromTimeFilter = () => {
+      const today = dayjs();
+      const range = timeRanges.find(r => r.value === timeRange);
+      
+      if (!range) return;
+      
+      if (range.value === 'ALL') {
+        // Reset date filters for "ALL"
+        setStartDate(null);
+        setEndDate(null);
+      } else {
+        // Set end date to today
+        setEndDate(today);
+        // Set start date based on days
+        setStartDate(today.subtract(range.days, 'day'));
+      }
+    };
+    
+    updateDateRangeFromTimeFilter();
+  }, [timeRange]);
+
   // Handle refreshing data
   const handleRefresh = () => {
     fetchData(true);
@@ -119,7 +203,25 @@ const Dashboard: React.FC = () => {
     setSortBy(event.target.value);
   };
 
-  // Handle adding a new item
+  // Handle time range change
+  const handleTimeRangeChange = (event: React.MouseEvent<HTMLElement>, newTimeRange: string) => {
+    if (newTimeRange !== null) {
+      setTimeRange(newTimeRange);
+    }
+  };
+
+  // Handle date changes
+  const handleStartDateChange = (newDate: Dayjs | null) => {
+    setStartDate(newDate);
+    setTimeRange(''); // Reset time filter when manually changing dates
+  };
+
+  const handleEndDateChange = (newDate: Dayjs | null) => {
+    setEndDate(newDate);
+    setTimeRange(''); // Reset time filter when manually changing dates
+  };
+
+  // Adding a new item
   const handleAddItemModalClose = () => {
     setIsAddItemModalOpen(false);
     fetchData();
@@ -135,12 +237,11 @@ const Dashboard: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  // Filter data based on date range
-  const getFilteredData = () => {
-    // First filter active items based on date range
+  // Calculate portfolio stats including historical data
+  const calculatePortfolioStats = () => {
+    // Filter data based on date range
     let filteredItems = [...items];
     let filteredSales = [...sales];
-    let filteredExpenses = [...expenses]; // Filter expenses
     
     if (startDate && endDate) {
       const startTimestamp = startDate.startOf('day').valueOf();
@@ -157,20 +258,7 @@ const Dashboard: React.FC = () => {
         const saleDate = new Date(sale.saleDate).getTime();
         return saleDate >= startTimestamp && saleDate <= endTimestamp;
       });
-      
-      // Filter expenses by expense date
-      filteredExpenses = expenses.filter(expense => {
-        const expenseDate = new Date(expense.expenseDate).getTime();
-        return expenseDate >= startTimestamp && expenseDate <= endTimestamp;
-      });
     }
-    
-    return { filteredItems, filteredSales, filteredExpenses };
-  };
-
-  // Calculate portfolio stats with real, live data
-  const calculatePortfolioStats = () => {
-    const { filteredItems, filteredSales, filteredExpenses } = getFilteredData();
     
     // Current portfolio value (sum of market prices for all active inventory)
     const currentValue = filteredItems.reduce((sum, item) => {
@@ -179,15 +267,51 @@ const Dashboard: React.FC = () => {
       return sum + marketPrice;
     }, 0);
     
-    // Calculate previous value (using the previous week's data)
-    // For this demo, using 5% down from current as previous value
+    // Calculate previous value (using 5% down from current as previous value for demo)
+    // In a real implementation, you would use historical data or previous period's data
     const previousValue = currentValue * 0.95;
     
     const valueChange = currentValue - previousValue;
     const percentageChange = previousValue === 0 ? 0 : (valueChange / previousValue) * 100;
     
-    // Get historical portfolio value data (for the graph)
-    const historicalData = generateHistoricalPortfolioData(filteredItems, filteredSales, filteredExpenses);
+    // Generate historical portfolio data for the graph
+    // This should use real data in production
+    let historicalData = [];
+    
+    if (startDate && endDate) {
+      // Calculate range for even distribution
+      const totalDays = endDate.diff(startDate, 'day');
+      const numPoints = Math.min(7, totalDays + 1); // Maximum 7 points on the graph
+      const interval = Math.max(1, Math.floor(totalDays / (numPoints - 1)));
+      
+      for (let i = 0; i < numPoints; i++) {
+        const pointDate = startDate.add(i * interval, 'day');
+        if (pointDate.isAfter(endDate)) break;
+        
+        const dateValue = pointDate.format('M/D');
+        
+        // Calculate portfolio value at this point in time
+        // For demo purposes, using simple interpolation
+        // In production, you'd calculate actual value at each date
+        const progress = i / (numPoints - 1);
+        const pointValue = previousValue + progress * valueChange;
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else {
+      // Default 6 data points for the last 6 months
+      const today = dayjs();
+      for (let i = 5; i >= 0; i--) {
+        const pointDate = today.subtract(i, 'month');
+        const dateValue = pointDate.format('M/D');
+        
+        // Generate a reasonable growth curve for demo
+        const progress = (5 - i) / 5;
+        const pointValue = previousValue + progress * valueChange;
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    }
     
     return {
       currentValue,
@@ -195,89 +319,6 @@ const Dashboard: React.FC = () => {
       percentageChange: Number(percentageChange.toFixed(1)),
       historicalData
     };
-  };
-  
-  // Generate historical portfolio data for the graph
-  const generateHistoricalPortfolioData = (filteredItems: Item[], filteredSales: Sale[], filteredExpenses: Expense[]) => {
-    // If date range is set, use it for the graph, otherwise generate the last 6 data points
-    const today = dayjs();
-    const numberOfPoints = 6;
-    const pointsArray = [];
-    
-    // Create data points based on filtered data
-    if (startDate && endDate) {
-      // Calculate range for even distribution
-      const totalDays = endDate.diff(startDate, 'day');
-      const interval = Math.max(1, Math.floor(totalDays / (numberOfPoints - 1)));
-      
-      for (let i = 0; i < numberOfPoints; i++) {
-        const pointDate = startDate.add(i * interval, 'day');
-        if (pointDate.isAfter(endDate)) break;
-        
-        const dateValue = pointDate.format('M/D');
-        
-        // Calculate portfolio value at this point in time
-        const pointValue = calculateValueAtPoint(pointDate, filteredItems, filteredSales, filteredExpenses);
-        
-        pointsArray.push({ date: dateValue, value: pointValue });
-      }
-    } else {
-      // Generate last 6 data points (past weeks)
-      for (let i = 5; i >= 0; i--) {
-        const pointDate = today.subtract(i * 7, 'day');
-        const dateValue = pointDate.format('M/D');
-        
-        // Calculate portfolio value at this point in time
-        const pointValue = calculateValueAtPoint(pointDate, items, sales, expenses);
-        
-        pointsArray.push({ date: dateValue, value: pointValue });
-      }
-    }
-    
-    return pointsArray;
-  };
-  
-  // Helper to calculate portfolio value at a specific point in time
-  const calculateValueAtPoint = (date: Dayjs, itemsList: Item[], salesList: Sale[], expensesList: Expense[]) => {
-    const targetDate = date.endOf('day');
-    
-    // Get items that were purchased before or on the target date
-    const itemsBeforeDate = itemsList.filter(item => {
-      const purchaseDate = dayjs(item.purchaseDate);
-      return purchaseDate.isBefore(targetDate) || purchaseDate.isSame(targetDate, 'day');
-    });
-    
-    // Get sales that happened before or on the target date
-    const salesBeforeDate = salesList.filter(sale => {
-      const saleDate = dayjs(sale.saleDate);
-      return saleDate.isBefore(targetDate) || saleDate.isSame(targetDate, 'day');
-    });
-    
-    // Get expenses that happened before or on the target date
-    const expensesBeforeDate = expensesList.filter(expense => {
-      const expenseDate = dayjs(expense.expenseDate);
-      return expenseDate.isBefore(targetDate) || expenseDate.isSame(targetDate, 'day');
-    });
-    
-    // Calculate total value of active items at this point
-    let totalValue = 0;
-    
-    // Add value of items that were purchased before this date and not sold
-    for (const item of itemsBeforeDate) {
-      // Skip items that were sold before this date
-      const isItemSold = salesBeforeDate.some(sale => sale.itemId === item.id);
-      if (!isItemSold) {
-        // Use market price if available, otherwise estimate as 20% more than purchase price
-        const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
-        totalValue += marketPrice;
-      }
-    }
-    
-    // Subtract expenses up to this point (optional)
-    // const totalExpenses = expensesBeforeDate.reduce((sum, expense) => sum + expense.amount, 0);
-    // totalValue -= totalExpenses;
-    
-    return Math.round(totalValue);
   };
 
   // Loading state
@@ -298,9 +339,6 @@ const Dashboard: React.FC = () => {
       </Box>
     );
   }
-
-  // Calculate portfolio stats including historical data
-  const portfolioStats = calculatePortfolioStats();
 
   return (
     <Box sx={{ 
@@ -323,18 +361,15 @@ const Dashboard: React.FC = () => {
           mb: 3
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              color: 'white',
-              fontWeight: 600,
-              mr: 2
-            }}
-          >
-            
-          </Typography>
-        </Box>
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            color: theme.palette.mode === 'dark' ? 'white' : 'text.primary',
+            fontWeight: 600,
+          }}
+        >
+          Dashboard
+        </Typography>
 
         <Box
           sx={{
@@ -343,41 +378,6 @@ const Dashboard: React.FC = () => {
             gap: 2
           }}
         >
-          <LocalizationProvider dateAdapter={AdapterDayjs}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <DatePicker
-                label="Start Date"
-                value={startDate}
-                onChange={(newValue) => setStartDate(newValue)}
-                slotProps={{
-                  textField: {
-                    size: "small",
-                    sx: {
-                      '& .MuiInputBase-input': {
-                        color: theme.palette.text.primary
-                      }
-                    }
-                  }
-                }}
-              />
-              <DatePicker
-                label="End Date"
-                value={endDate}
-                onChange={(newValue) => setEndDate(newValue)}
-                slotProps={{
-                  textField: {
-                    size: "small",
-                    sx: {
-                      '& .MuiInputBase-input': {
-                        color: theme.palette.text.primary
-                      }
-                    }
-                  }
-                }}
-              />
-            </Box>
-          </LocalizationProvider>
-
           <FormControl size="small" sx={{ minWidth: 120 }}>
             <InputLabel>Sort by</InputLabel>
             <Select
@@ -426,22 +426,93 @@ const Dashboard: React.FC = () => {
           flexDirection: 'column'
         }}>
           {/* Portfolio Value Chart with real data - Increased Height */}
-          <Box sx={{ height: '380px', mb: 3 }}>
-            <PortfolioValue 
-              currentValue={portfolioStats.currentValue}
-              valueChange={portfolioStats.valueChange}
-              percentageChange={portfolioStats.percentageChange}
-              data={portfolioStats.historicalData}
-              theme={theme}
-            />
-          </Box>
+          <Paper sx={{ height: '380px', mb: 3, borderRadius: 2, overflow: 'hidden' }}>
+            {/* Date filters and time range filters */}
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              p: 2, 
+              borderBottom: `1px solid ${theme.palette.divider}`
+            }}>
+              {/* Date Range Filters - Now positioned on the left */}
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                  <DatePicker
+                    label="Start Date"
+                    value={startDate}
+                    onChange={handleStartDateChange}
+                    slotProps={{
+                      textField: {
+                        size: "small",
+                        sx: {
+                          width: '160px',
+                          '& .MuiInputBase-input': {
+                            color: theme.palette.text.primary
+                          }
+                        }
+                      }
+                    }}
+                  />
+                  <DatePicker
+                    label="End Date"
+                    value={endDate}
+                    onChange={handleEndDateChange}
+                    slotProps={{
+                      textField: {
+                        size: "small",
+                        sx: {
+                          width: '160px',
+                          '& .MuiInputBase-input': {
+                            color: theme.palette.text.primary
+                          }
+                        }
+                      }
+                    }}
+                  />
+                </Box>
+              </LocalizationProvider>
 
-          {/* Reports Grid with connected data - Increased Size */}
+              {/* Time Range Filters */}
+              <ToggleButtonGroup
+                value={timeRange}
+                exclusive
+                onChange={handleTimeRangeChange}
+                aria-label="time range"
+                size="small"
+                sx={{
+                  backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
+                  borderRadius: 2,
+                  border: `1px solid ${theme.palette.divider}`,
+                  overflow: 'hidden'
+                }}
+              >
+                {timeRanges.map((range) => (
+                  <StyledToggleButton key={range.value} value={range.value}>
+                    {range.label}
+                  </StyledToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+
+            {/* Portfolio Value Component */}
+            <Box sx={{ height: 'calc(100% - 64px)', width: '100%' }}>
+              <PortfolioValue 
+                currentValue={calculatePortfolioStats().currentValue}
+                valueChange={calculatePortfolioStats().valueChange}
+                percentageChange={calculatePortfolioStats().percentageChange}
+                data={calculatePortfolioStats().historicalData}
+                theme={theme}
+              />
+            </Box>
+          </Paper>
+
+          {/* Reports Grid with connected data */}
           <Box sx={{ flex: 1 }}>
             <ReportsSection 
               items={items}
               sales={sales}
-              expenses={expenses} // Pass expenses data to ReportsSection
+              expenses={expenses}
               startDate={startDate}
               endDate={endDate}
             />

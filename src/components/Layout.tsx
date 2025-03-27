@@ -28,12 +28,9 @@ const Layout: React.FC<LayoutProps> = ({ children, onNavigate }) => {
         position: 'fixed',
         left: 0,
         top: 0,
-        borderRight: `1px solid ${theme.palette.divider}`,
-        bgcolor: theme.palette.background.paper,
         zIndex: 1200,
-        boxShadow: theme.palette.mode === 'dark' 
-          ? 'none' 
-          : '1px 0 5px rgba(0,0,0,0.05)'
+        // Remove the box-shadow to prevent visual overflow
+        // since we've fixed the hover effect in Sidebar component
       }}>
         <Sidebar onNavigate={onNavigate} />
       </Box>

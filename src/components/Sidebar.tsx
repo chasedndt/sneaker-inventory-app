@@ -1,177 +1,152 @@
-// src/components/Sidebar.tsx
 import React, { useState } from 'react';
 import {
-  Drawer,
+  Box,
   List,
   ListItem,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
-  Typography,
-  Box,
-  Avatar,
   Divider,
-  useTheme
+  Typography,
+  useTheme,
+  alpha
 } from '@mui/material';
-import {
-  Dashboard as DashboardIcon,
-  Timeline as ActivityIcon,
-  Inventory as InventoryIcon,
-  AttachMoney as SalesIcon,
-  List as CoplistsIcon,
-  NewReleases as ReleasesIcon,
-  Receipt as ExpensesIcon,
-  Settings as SettingsIcon
-} from '@mui/icons-material';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import SellIcon from '@mui/icons-material/Sell';
+import ReceiptIcon from '@mui/icons-material/Receipt';
+import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+import NewReleasesIcon from '@mui/icons-material/NewReleases';
+import SettingsIcon from '@mui/icons-material/Settings';
 
 interface SidebarProps {
   onNavigate: (page: string) => void;
 }
 
+type MenuItemType = {
+  label: string;
+  icon: React.ReactElement;
+  value: string;
+  dividerAfter?: boolean;
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const theme = useTheme();
-  const [activePage, setActivePage] = useState<string>('dashoard');
-  
-  const mainMenuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: 'dashboard' },
-    { text: 'Activity', icon: <ActivityIcon />, path: 'activity' },
-    { text: 'Inventory', icon: <InventoryIcon />, path: 'inventory' },
-    { text: 'Sales', icon: <SalesIcon />, path: 'sales' },
-    { text: 'Expenses', icon: <ExpensesIcon />, path: 'expenses' }, // Added new Expenses menu item
-    { text: 'Coplists', icon: <CoplistsIcon />, path: 'coplists' },
-    { text: 'Releases', icon: <ReleasesIcon />, path: 'releases' }
+  const [activePage, setActivePage] = useState('dashboard');
+
+  // Define menu items
+  const menuItems: MenuItemType[] = [
+    { label: 'Dashboard', icon: <DashboardIcon />, value: 'dashboard' },
+    { label: 'Activity', icon: <ShowChartIcon />, value: 'activity' },
+    { label: 'Inventory', icon: <InventoryIcon />, value: 'inventory' },
+    { label: 'Sales', icon: <SellIcon />, value: 'sales' },
+    { label: 'Expenses', icon: <ReceiptIcon />, value: 'expenses' },
+    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists' },
+    { label: 'Releases', icon: <NewReleasesIcon />, value: 'releases', dividerAfter: true },
+    { label: 'Settings', icon: <SettingsIcon />, value: 'settings' },
   ];
 
-  const settingsMenuItems = [
-    { text: 'Settings', icon: <SettingsIcon />, path: 'settings' }
-  ];
-  
-  const handleNavigate = (path: string) => {
-    setActivePage(path);
-    onNavigate(path);
+  const handleNavigate = (page: string) => {
+    setActivePage(page);
+    onNavigate(page);
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Avatar sx={{ mr: 2, bgcolor: theme.palette.primary.main }}>H</Avatar>
-          <Box>
-            <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-              Hypelist
-            </Typography>
-            <Typography variant="caption" color="primary">
-              Your Plan: Professional
-            </Typography>
-          </Box>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      backgroundColor: theme.palette.mode === 'dark' ? '#1a1a2e' : '#f8f9fa',
+      borderRight: `1px solid ${theme.palette.divider}`,
+    }}>
+      {/* App Logo and Title */}
+      <Box sx={{ 
+        p: 2, 
+        display: 'flex', 
+        alignItems: 'center', 
+        borderBottom: `1px solid ${theme.palette.divider}`
+      }}>
+        <Box 
+          sx={{ 
+            width: 40, 
+            height: 40, 
+            borderRadius: '50%', 
+            bgcolor: '#8884d8',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'white',
+            fontWeight: 'bold',
+            mr: 2
+          }}
+        >
+          H
+        </Box>
+        <Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+            Hypelist
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Your Plan: Professional
+          </Typography>
         </Box>
       </Box>
-      <Divider />
-      
-      <List sx={{ flexGrow: 1 }}>
-        {mainMenuItems.map((item) => (
-          <ListItem 
-            key={item.text}
-            button
-            selected={activePage === item.path}
-            onClick={() => handleNavigate(item.path)}
-            sx={{ 
-              borderRadius: 1,
-              mx: 1,
-              mb: 0.5,
-              cursor: 'pointer',
-              position: 'relative',
-              zIndex: 1,
-              '&.Mui-selected': {
-                bgcolor: theme.palette.mode === 'dark' 
-                  ? 'rgba(136, 132, 216, 0.15)' 
-                  : 'rgba(25, 118, 210, 0.08)',
-                '&:hover': {
-                  bgcolor: theme.palette.mode === 'dark' 
-                    ? 'rgba(136, 132, 216, 0.25)' 
-                    : 'rgba(25, 118, 210, 0.12)',
-                }
-              },
-              '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.05)' 
-                  : 'rgba(0, 0, 0, 0.04)',
-                  '&::before': {
-                    content: '""',
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    borderRadius: 1,
-                    pointerEvents: 'none',
-                    zIndex: -1,
-                  }
-              }
-            }}
-          >
-            <ListItemIcon sx={{ 
-              color: activePage === item.path 
-                ? theme.palette.primary.main 
-                : theme.palette.text.secondary 
-            }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText 
-              primary={item.text} 
-              primaryTypographyProps={{
-                fontWeight: activePage === item.path ? 'bold' : 'normal',
-                color: activePage === item.path 
-                  ? theme.palette.primary.main 
-                  : theme.palette.text.primary
-              }}
-            />
-          </ListItem>
-        ))}
-      </List>
-      
-      <Divider />
-      
-      <List>
-        {settingsMenuItems.map((item) => (
-          <ListItem 
-            key={item.text}
-            button
-            selected={activePage === item.path}
-            onClick={() => handleNavigate(item.path)}
-            sx={{ 
-              borderRadius: 1,
-              mx: 1,
-              mb: 0.5,
-              cursor: 'pointer',
-              '&.Mui-selected': {
-                bgcolor: theme.palette.mode === 'dark' 
-                  ? 'rgba(136, 132, 216, 0.15)' 
-                  : 'rgba(25, 118, 210, 0.08)',
-              },
-              '&:hover': {
-                bgcolor: theme.palette.mode === 'dark' 
-                  ? 'rgba(255, 255, 255, 0.05)' 
-                  : 'rgba(0, 0, 0, 0.04)',
-              }
-            }}
-          >
-            <ListItemIcon sx={{ 
-              color: activePage === item.path 
-                ? theme.palette.primary.main 
-                : theme.palette.text.secondary 
-            }}>
-              {item.icon}
-            </ListItemIcon>
-            <ListItemText 
-              primary={item.text}
-              primaryTypographyProps={{
-                fontWeight: activePage === item.path ? 'bold' : 'normal',
-                color: activePage === item.path 
-                  ? theme.palette.primary.main 
-                  : theme.palette.text.primary
-              }}
-            />
-          </ListItem>
+
+      {/* Navigation Menu */}
+      <List sx={{ width: '100%', flex: 1, p: 0 }}>
+        {menuItems.map((item) => (
+          <React.Fragment key={item.value}>
+            <ListItem disablePadding>
+              <ListItemButton
+                selected={activePage === item.value}
+                onClick={() => handleNavigate(item.value)}
+                sx={{
+                  py: 1.5,
+                  px: 2,
+                  borderRadius: 0,
+                  '&.Mui-selected': {
+                    bgcolor: 'transparent',
+                    borderLeft: `3px solid ${theme.palette.primary.main}`,
+                    '& .MuiListItemIcon-root': {
+                      color: theme.palette.primary.main,
+                    },
+                    '& .MuiListItemText-primary': {
+                      color: theme.palette.primary.main,
+                      fontWeight: 'medium',
+                    },
+                  },
+                  '&:hover': {
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
+                    // Important: Clip the hover effect to the button boundaries
+                    overflow: 'hidden',
+                  },
+                }}
+              >
+                <ListItemIcon 
+                  sx={{
+                    color: activePage === item.value 
+                      ? theme.palette.primary.main 
+                      : theme.palette.text.secondary,
+                    minWidth: 36,
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.label} 
+                  primaryTypographyProps={{
+                    fontSize: '0.9rem',
+                    fontWeight: activePage === item.value ? 'medium' : 'regular',
+                    color: activePage === item.value 
+                      ? theme.palette.primary.main 
+                      : theme.palette.text.primary,
+                  }}
+                />
+              </ListItemButton>
+            </ListItem>
+            {item.dividerAfter && <Divider sx={{ my: 1 }} />}
+          </React.Fragment>
         ))}
       </List>
     </Box>
