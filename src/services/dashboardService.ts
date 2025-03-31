@@ -1,4 +1,5 @@
 // src/services/dashboardService.ts
+import { useState, useEffect, useCallback } from 'react';
 import { Item } from './api';
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
@@ -78,29 +79,59 @@ export const dashboardService = {
   fetchDashboardData: async (
     options?: { startDate?: Date; endDate?: Date }
   ): Promise<DashboardData> => {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Return mock data matching the interface
-    return {
-      portfolioValue: 50000,
-      totalInventory: 500,
-      activeListings: 250,
-      monthlySales: 10000,
-      profitMargin: 25,
-      metrics: {
-        netProfit: 2500,
-        netProfitChange: 15,
-        totalSpend: 12000,
-        totalSpendChange: -5,
-        itemsPurchased: 45,
-        itemsSold: 32
+    try {
+      console.log('🚀 Fetching real dashboard data...');
+      
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (options?.startDate) {
+        params.append('start_date', options.startDate.toISOString());
       }
-    };
+      if (options?.endDate) {
+        params.append('end_date', options.endDate.toISOString());
+      }
+      
+      // Make the API request
+      const response = await fetch(`${API_BASE_URL}/dashboard/kpi-metrics${params.toString() ? `?${params.toString()}` : ''}`, {
+        method: 'GET',
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const comprehensiveData = await response.json();
+      
+      // Transform comprehensive metrics into the DashboardData format
+      const dashboardData: DashboardData = {
+        portfolioValue: comprehensiveData.inventoryMetrics.totalMarketValue,
+        totalInventory: comprehensiveData.inventoryMetrics.totalInventory,
+        activeListings: comprehensiveData.inventoryMetrics.listedItems,
+        monthlySales: comprehensiveData.salesMetrics.totalSalesRevenue,
+        profitMargin: comprehensiveData.profitMetrics.overallRoi,
+        metrics: {
+          netProfit: comprehensiveData.profitMetrics.netProfitSold,
+          netProfitChange: comprehensiveData.profitMetrics.netProfitChange,
+          totalSpend: comprehensiveData.inventoryMetrics.totalInventoryCost + 
+                      comprehensiveData.expenseMetrics.totalExpenses,
+          totalSpendChange: comprehensiveData.expenseMetrics.expenseChange,
+          itemsPurchased: comprehensiveData.inventoryMetrics.totalInventory,
+          itemsSold: comprehensiveData.salesMetrics.totalSales
+        }
+      };
+      
+      return dashboardData;
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      
+      // If API fails, throw the error for proper handling
+      throw error;
+    }
   },
 
   /**
-   * Fetches comprehensive dashboard metrics from the new endpoint
+   * Fetches comprehensive dashboard metrics from the API endpoint
    * 
    * @async
    * @function fetchDashboardMetrics
@@ -127,6 +158,8 @@ export const dashboardService = {
       
       // Make API request
       const url = `${API_BASE_URL}/dashboard/kpi-metrics${params.toString() ? `?${params.toString()}` : ''}`;
+      console.log(`Making request to: ${url}`);
+      
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include'
@@ -143,41 +176,8 @@ export const dashboardService = {
     } catch (error) {
       console.error('💥 Error fetching dashboard metrics:', error);
       
-      // Return empty data structure in case of error
-      return {
-        inventoryMetrics: {
-          totalInventory: 0,
-          unlistedItems: 0,
-          listedItems: 0,
-          totalInventoryCost: 0,
-          totalShippingCost: 0,
-          totalMarketValue: 0,
-          potentialProfit: 0
-        },
-        salesMetrics: {
-          totalSales: 0,
-          totalSalesRevenue: 0,
-          totalPlatformFees: 0,
-          totalSalesTax: 0,
-          costOfGoodsSold: 0,
-          grossProfit: 0,
-          revenueChange: 0
-        },
-        expenseMetrics: {
-          totalExpenses: 0,
-          expenseByType: {},
-          expenseChange: 0
-        },
-        profitMetrics: {
-          netProfitSold: 0,
-          netProfitChange: 0,
-          potentialProfit: 0,
-          roiSold: 0,
-          roiInventory: 0,
-          overallRoi: 0,
-          roiChange: 0
-        }
-      };
+      // If the API fails, throw error for proper handling
+      throw error;
     }
   }
 };

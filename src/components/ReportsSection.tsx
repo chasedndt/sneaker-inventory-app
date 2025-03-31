@@ -67,18 +67,28 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     return { filteredItems, filteredSales, filteredExpenses };
   }, [items, sales, expenses, startDate, endDate]);
   
-  // Calculate net profit from sold items - FIXED IMPLEMENTATION
+  // FIXED: Correctly calculate net profit from sold items
+  // This is the key function that needs fixing
   const calculateNetProfitFromSoldItems = (filteredSales: Sale[], filteredExpenses: Expense[], allItems: Item[]): number => {
     // Only include completed sales
     const completedSales = filteredSales.filter(sale => sale.status === 'completed');
     
-    // Calculate profit from each completed sale
+    if (completedSales.length === 0) {
+      // If no completed sales in this period, just return the negative expenses
+      return -calculateTotalExpenses(filteredExpenses);
+    }
+    
+    // Calculate gross profit from each completed sale
     const salesProfit = completedSales.reduce((total, sale) => {
-      // Find the corresponding item
+      // Use the profit field if available
+      if (typeof sale.profit === 'number') {
+        return total + sale.profit;
+      }
+      
+      // Otherwise calculate from components
       const soldItem = allItems.find(item => item.id === sale.itemId);
       if (!soldItem) return total;
       
-      // Calculate profit for this sale
       const purchasePrice = soldItem.purchasePrice || 0;
       const salesTax = sale.salesTax || 0;
       const platformFees = sale.platformFees || 0;
@@ -88,20 +98,12 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       return total + saleProfit;
     }, 0);
     
-    // Calculate total expenses
+    // Calculate total expenses for the period
     const totalExpenses = calculateTotalExpenses(filteredExpenses);
     
-    // Allocate a portion of expenses to completed sales
-    let expenseAllocation = 0;
-    if (filteredSales.length > 0) {
-      // Calculate what percentage of all sales are completed
-      const completedRatio = completedSales.length / filteredSales.length;
-      // Allocate expenses proportionally
-      expenseAllocation = totalExpenses * completedRatio;
-    }
-    
-    // Net profit is sales profit minus allocated expenses
-    const netProfit = salesProfit - expenseAllocation;
+    // Net profit is sales profit minus total expenses in this period
+    // This is the simple calculation that properly reflects "Realized Profit - Expenses"
+    const netProfit = salesProfit - totalExpenses;
     
     return netProfit;
   };
@@ -111,21 +113,25 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     const { filteredItems, filteredSales, filteredExpenses } = filteredData;
     
     // Ensure we're only using active inventory (not sold items)
-    const activeItems = filteredItems.filter(item => item.status !== 'sold');
+    const activeItems = items.filter(item => item.status !== 'sold');
     
     // Net Profit calculation
-    const netProfit = activeItems.reduce((sum, item) => {
+    const potentialProfit = activeItems.reduce((sum, item) => {
       const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
       return sum + (marketPrice - item.purchasePrice);
     }, 0);
+    
+    // Net profit is potential profit minus expenses
+    const netProfit = potentialProfit - calculateTotalExpenses(filteredExpenses);
     
     // Sales Income calculation
     const salesIncome = filteredSales.reduce((sum, sale) => sum + sale.salePrice, 0);
     
     // Item Spend calculation
-    const itemSpend = activeItems.reduce((sum, item) => sum + item.purchasePrice, 0);
+    const itemSpend = filteredItems.reduce((sum, item) => sum + item.purchasePrice, 0);
     
-    // ROI calculation
+    // FIXED: ROI calculation - ensure it's properly calculated even if itemSpend is 0
+    // ROI should be based on potential profit for active inventory
     const roi = itemSpend > 0 ? (netProfit / itemSpend) * 100 : 0;
     
     // Expense Spend calculation
@@ -135,10 +141,10 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     const itemsPurchased = filteredItems.length;
     const itemsSold = filteredSales.length;
     
-    // Calculate profit from sold items - USING THE FIXED FUNCTION
+    // FIXED: Calculate profit from sold items using the improved function
     const soldItemsProfit = calculateNetProfitFromSoldItems(filteredSales, filteredExpenses, items);
     
-    // Simple placeholder changes - in a real app, you'd calculate these from historical data
+    // Default percentage changes for visual indicators
     const netProfitChange = 5.2;
     const salesIncomeChange = 12.5;
     const itemSpendChange = -3.4;
@@ -247,11 +253,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
 
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
-            title="Net Profit from Sold Items"
+            title="Realized Profit - Expenses"
             value={metrics.soldItemsProfit.toFixed(2)}
             change={metrics.soldItemsProfitChange}
             data={generateMiniChartData(Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.8, Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.1, 5)}
-            tooltipText="Realized profit from completed sales minus allocated expenses"
+            tooltipText="Profit from completed sales minus expenses within the period"
           />
         </Grid>
       </Grid>

@@ -17,6 +17,7 @@ export interface Sale {
   platformFees?: number;
   status: 'pending' | 'needsShipping' | 'completed';
   saleId?: string;
+  profit?: number; // Added this property to the interface
 }
 
 /**
@@ -409,7 +410,8 @@ function getMockSales(): Sale[] {
       currency: '$',
       salesTax: 10.50,
       platformFees: 15.75,
-      status: 'completed'
+      status: 'completed',
+      profit: 40.01 // Added profit to mock data
     },
     {
       id: 2,
@@ -421,7 +423,8 @@ function getMockSales(): Sale[] {
       salesTax: 6.50,
       platformFees: 12.99,
       status: 'completed',
-      saleId: 'ORD-12345'
+      saleId: 'ORD-12345',
+      profit: 35.50 // Added profit to mock data
     },
     {
       id: 3,
@@ -432,7 +435,8 @@ function getMockSales(): Sale[] {
       currency: '$',
       platformFees: 8.99,
       status: 'needsShipping',
-      saleId: 'EB-987654'
+      saleId: 'EB-987654',
+      profit: 20.00 // Added profit to mock data
     },
     {
       id: 4,
@@ -443,7 +447,8 @@ function getMockSales(): Sale[] {
       currency: '$',
       salesTax: 17.50,
       platformFees: 26.25,
-      status: 'pending'
+      status: 'pending',
+      profit: 75.25 // Added profit to mock data
     }
   ];
 }
