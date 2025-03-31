@@ -1,5 +1,5 @@
 // src/components/ReportsSection.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Grid, Box, useTheme } from '@mui/material';
 import MetricsCard from './MetricsCard';
 import { Item } from '../services/api';
@@ -34,6 +34,24 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
 }) => {
   const theme = useTheme();
   
+  // Add direct debugging to see what data is coming in
+  useEffect(() => {
+    console.log('🔍 ReportsSection Props:', {
+      itemsCount: items.length,
+      salesCount: sales.length,
+      expensesCount: expenses.length,
+      startDate: startDate?.format('YYYY-MM-DD'),
+      endDate: endDate?.format('YYYY-MM-DD')
+    });
+    
+    // Debug completed sales
+    const completedSales = sales.filter(sale => sale.status === 'completed');
+    console.log('✅ Completed Sales:', completedSales);
+    
+    // Debug expenses
+    console.log('💰 Expenses:', expenses);
+  }, [items, sales, expenses, startDate, endDate]);
+  
   // Filter data based on date range
   const filteredData = useMemo(() => {
     // Filter items based on date range
@@ -64,52 +82,72 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       });
     }
     
+    // Debug filtered data
+    console.log('🔍 Filtered Data:', {
+      filteredItemsCount: filteredItems.length,
+      filteredSalesCount: filteredSales.length,
+      filteredExpensesCount: filteredExpenses.length
+    });
+    
     return { filteredItems, filteredSales, filteredExpenses };
   }, [items, sales, expenses, startDate, endDate]);
   
-  // FIXED: Correctly calculate net profit from sold items
-  // This is the key function that needs fixing
+  // FIXED: Manual calculation of profit for completed sales
+  const calculateSaleProfit = (sale: Sale, allItems: Item[]): number => {
+    // Find the corresponding item
+    const soldItem = allItems.find(item => item.id === sale.itemId);
+    if (!soldItem) return 0;
+    
+    const purchasePrice = soldItem.purchasePrice || 0;
+    const salesTax = sale.salesTax || 0;
+    const platformFees = sale.platformFees || 0;
+    const shippingCost = soldItem.shippingPrice || 0;
+    
+    return sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
+  };
+
+  // DIRECT FIX: Calculate net profit from sold items with detailed logging
   const calculateNetProfitFromSoldItems = (filteredSales: Sale[], filteredExpenses: Expense[], allItems: Item[]): number => {
+    console.log('🔎 Starting calculateNetProfitFromSoldItems calculation...');
+    
     // Only include completed sales
     const completedSales = filteredSales.filter(sale => sale.status === 'completed');
+    console.log(`✅ Found ${completedSales.length} completed sales in filtered data`);
     
     if (completedSales.length === 0) {
-      // If no completed sales in this period, just return the negative expenses
-      return -calculateTotalExpenses(filteredExpenses);
+      console.log('⚠️ No completed sales found, returning negative expenses');
+      const totalExpenses = calculateTotalExpenses(filteredExpenses);
+      return -totalExpenses;
     }
     
     // Calculate gross profit from each completed sale
-    const salesProfit = completedSales.reduce((total, sale) => {
-      // Use the profit field if available
-      if (typeof sale.profit === 'number') {
-        return total + sale.profit;
-      }
+    let salesProfit = 0;
+    completedSales.forEach(sale => {
+      let saleProfit = 0;
       
-      // Otherwise calculate from components
-      const soldItem = allItems.find(item => item.id === sale.itemId);
-      if (!soldItem) return total;
+      // Use manual calculation for every sale to ensure consistency
+      saleProfit = calculateSaleProfit(sale, allItems);
+      salesProfit += saleProfit;
       
-      const purchasePrice = soldItem.purchasePrice || 0;
-      const salesTax = sale.salesTax || 0;
-      const platformFees = sale.platformFees || 0;
-      const shippingCost = soldItem.shippingPrice || 0;
-      
-      const saleProfit = sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
-      return total + saleProfit;
-    }, 0);
+      console.log(`📊 Sale ID ${sale.id}: Profit = $${saleProfit.toFixed(2)}`);
+    });
+    
+    console.log(`💵 Total sales profit: $${salesProfit.toFixed(2)}`);
     
     // Calculate total expenses for the period
     const totalExpenses = calculateTotalExpenses(filteredExpenses);
+    console.log(`💸 Total expenses: $${totalExpenses.toFixed(2)}`);
     
     // Net profit is sales profit minus total expenses in this period
-    // This is the simple calculation that properly reflects "Realized Profit - Expenses"
     const netProfit = salesProfit - totalExpenses;
+    console.log(`🧮 Final calculation: $${salesProfit.toFixed(2)} - $${totalExpenses.toFixed(2)} = $${netProfit.toFixed(2)}`);
     
     return netProfit;
   };
   
   // Compute metrics from filtered data
   const metrics = useMemo(() => {
+    console.log('🔄 Recalculating metrics...');
     const { filteredItems, filteredSales, filteredExpenses } = filteredData;
     
     // Ensure we're only using active inventory (not sold items)
@@ -130,8 +168,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     // Item Spend calculation
     const itemSpend = filteredItems.reduce((sum, item) => sum + item.purchasePrice, 0);
     
-    // FIXED: ROI calculation - ensure it's properly calculated even if itemSpend is 0
-    // ROI should be based on potential profit for active inventory
+    // ROI calculation
     const roi = itemSpend > 0 ? (netProfit / itemSpend) * 100 : 0;
     
     // Expense Spend calculation
@@ -141,8 +178,20 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     const itemsPurchased = filteredItems.length;
     const itemsSold = filteredSales.length;
     
-    // FIXED: Calculate profit from sold items using the improved function
+    // Calculate profit from sold items - DIRECTLY CALCULATE RATHER THAN RELYING ON PROPS
     const soldItemsProfit = calculateNetProfitFromSoldItems(filteredSales, filteredExpenses, items);
+    
+    // Debug the final metrics
+    console.log('📊 Final metrics:', {
+      netProfit,
+      salesIncome,
+      itemSpend,
+      roi,
+      expenseSpend,
+      itemsPurchased,
+      itemsSold,
+      soldItemsProfit
+    });
     
     // Default percentage changes for visual indicators
     const netProfitChange = 5.2;
@@ -174,9 +223,15 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     };
   }, [filteredData, items]);
 
+  // Log metrics whenever they change
+  useEffect(() => {
+    console.log('📈 Updated metrics:', metrics);
+  }, [metrics]);
+
   return (
     <Box sx={{ width: '100%', height: '100%' }}>
       <Grid container spacing={3}>
+        {/* Net Profit */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Net Profit"
@@ -187,6 +242,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
         
+        {/* Sales Income */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Sales Income"
@@ -197,6 +253,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* Item Spend */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Item Spend"
@@ -207,6 +264,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* ROI Percentage */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="ROI Percentage"
@@ -219,6 +277,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* Expense Spend */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Expense Spend"
@@ -229,6 +288,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* Items Purchased */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Items Purchased"
@@ -240,6 +300,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* Items Sold */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Items Sold"
@@ -251,6 +312,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
           />
         </Grid>
 
+        {/* Realized Profit - Expenses */}
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Realized Profit - Expenses"
