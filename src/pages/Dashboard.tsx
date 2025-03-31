@@ -1,3 +1,4 @@
+// src/pages/Dashboard.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Box,
@@ -34,6 +35,7 @@ import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
 import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 import dayjs, { Dayjs } from 'dayjs';
+import { debugNetProfitFromSoldItems } from '../utils/profitCalculator';
 
 // Custom styled ToggleButton
 const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
@@ -110,6 +112,29 @@ const Dashboard: React.FC = () => {
     message: '',
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
+  
+  // Add debugging to test profit calculation
+  useEffect(() => {
+    if (items.length && sales.length) {
+      console.log('🧪 Running profit calculation test:');
+      
+      // Run test with date range
+      if (startDate && endDate) {
+        debugNetProfitFromSoldItems(
+          sales, 
+          expenses, 
+          items,
+          { 
+            start: startDate.toDate(), 
+            end: endDate.toDate() 
+          }
+        );
+      } else {
+        // Run test without date range
+        debugNetProfitFromSoldItems(sales, expenses, items);
+      }
+    }
+  }, [items, sales, expenses, startDate, endDate]);
 
   // Fetch items, sales, and expenses from API
   const fetchData = useCallback(async (showRefreshing = false) => {
@@ -133,9 +158,15 @@ const Dashboard: React.FC = () => {
       const salesData = await salesApi.getSales();
       console.log(`✅ Received ${salesData.length} sales records from API`);
       
+      // Debug sales data
+      console.log('📊 Sales data:', salesData);
+      
       // Fetch expenses data
       const expensesData = await expensesApi.getExpenses();
       console.log(`✅ Received ${expensesData.length} expense records from API`);
+      
+      // Debug expenses data
+      console.log('💰 Expenses data:', expensesData);
       
       // Update state with all datasets
       setItems(activeItems);
@@ -237,10 +268,9 @@ const Dashboard: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  // FIXED: Calculate portfolio stats including historical data
-  // Ensures portfolio value is calculated on all active inventory regardless of date filter
+  // Calculate portfolio stats including historical data
   const calculatePortfolioStats = () => {
-    // IMPORTANT: Active items are always calculated on the entire inventory,
+    // Active items are always calculated on the entire inventory,
     // regardless of date filters - this is the entire portfolio value
     const activeItems = items.filter(item => item.status !== 'sold');
     
