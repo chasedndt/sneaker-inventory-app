@@ -17,7 +17,9 @@ export interface Sale {
   platformFees?: number;
   status: 'pending' | 'needsShipping' | 'completed';
   saleId?: string;
-  profit?: number; // Added this property to the interface
+  profit?: number;
+  purchasePrice?: number;
+  shippingPrice?: number;
 }
 
 /**
@@ -72,25 +74,35 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API getSales failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sales endpoint not found, using mock data');
-          return getMockSales();
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const sales = await response.json();
       console.log(`✅ Received ${sales.length} sales from API`);
-      return sales;
+
+      // Calculate profit for each sale if it's not already present
+      const salesWithProfit = sales.map((sale: Sale) => {
+        if (sale.profit === undefined) {
+          // Calculate profit based on available data
+          const purchasePrice = sale.purchasePrice || 0;
+          const salesTax = sale.salesTax || 0;
+          const platformFees = sale.platformFees || 0;
+          const shippingCost = sale.shippingPrice || 0;
+          
+          // Calculate and add profit to the sale object
+          const profit = sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
+          return {
+            ...sale,
+            profit
+          };
+        }
+        return sale;
+      });
+      
+      return salesWithProfit;
     } catch (error: any) {
       console.error('💥 Error in getSales:', error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock sales data due to error');
-      return getMockSales();
+      throw error;
     }
   },
   
@@ -109,31 +121,27 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API getSale failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sale endpoint not found, using mock data');
-          const mockSales = getMockSales();
-          const sale = mockSales.find(s => s.id === id);
-          if (!sale) throw new Error(`Sale with ID ${id} not found`);
-          return sale;
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const sale = await response.json();
       console.log(`✅ Retrieved sale ${id} details:`, sale);
+      
+      // Add profit calculation if not present
+      if (sale.profit === undefined) {
+        const purchasePrice = sale.purchasePrice || 0;
+        const salesTax = sale.salesTax || 0;
+        const platformFees = sale.platformFees || 0;
+        const shippingCost = sale.shippingPrice || 0;
+        
+        // Calculate profit
+        sale.profit = sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
+      }
+      
       return sale;
     } catch (error: any) {
       console.error(`💥 Error fetching sale ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock sale data due to error');
-      const mockSales = getMockSales();
-      const sale = mockSales.find(s => s.id === id);
-      if (!sale) throw new Error(`Sale with ID ${id} not found`);
-      return sale;
+      throw error;
     }
   },
   
@@ -156,16 +164,6 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API recordSale failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sales endpoint not found, using mock response');
-          return {
-            id: Math.floor(Math.random() * 1000) + 100,
-            ...saleData,
-          };
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -174,13 +172,7 @@ export const salesApi = {
       return sale;
     } catch (error: any) {
       console.error('💥 Error in recordSale:', error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response due to error');
-      return {
-        id: Math.floor(Math.random() * 1000) + 100,
-        ...saleData,
-      };
+      throw error;
     }
   },
   
@@ -204,15 +196,6 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API updateSale failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sales endpoint not found, using mock response');
-          return {
-            ...saleData,
-          };
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -221,12 +204,7 @@ export const salesApi = {
       return sale;
     } catch (error: any) {
       console.error(`💥 Error updating sale ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response due to error');
-      return {
-        ...saleData,
-      };
+      throw error;
     }
   },
   
@@ -258,22 +236,6 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API updateSaleField failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sales field update endpoint not found, using mock response');
-          return {
-            id,
-            itemId: 0,
-            platform: '',
-            saleDate: new Date().toISOString(),
-            salePrice: 0,
-            currency: '$',
-            status: 'pending' as 'pending',
-            [field]: value
-          };
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -282,19 +244,7 @@ export const salesApi = {
       return sale;
     } catch (error: any) {
       console.error(`💥 Error updating field ${field} of sale ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response for field update due to error');
-      return {
-        id,
-        itemId: 0,
-        platform: '',
-        saleDate: new Date().toISOString(),
-        salePrice: 0,
-        currency: '$',
-        status: 'pending' as 'pending',
-        [field]: value
-      };
+      throw error;
     }
   },
   
@@ -313,13 +263,6 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API deleteSale failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Sales endpoint not found, using mock response');
-          return { success: true };
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -327,10 +270,7 @@ export const salesApi = {
       return { success: true };
     } catch (error: any) {
       console.error(`💥 Error deleting sale ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response for delete due to error');
-      return { success: true };
+      throw error;
     }
   },
 
@@ -372,13 +312,6 @@ export const salesApi = {
       
       if (!response.ok) {
         console.error(`❌ API getNetProfit failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
-        if (response.status === 404) {
-          console.warn('⚠️ Net profit endpoint not found, using mock data');
-          return getMockNetProfitResponse();
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -387,88 +320,9 @@ export const salesApi = {
       return data;
     } catch (error: any) {
       console.error('💥 Error fetching net profit data:', error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock net profit data due to error');
-      return getMockNetProfitResponse();
+      throw error;
     }
   }
 };
-
-/**
- * Generate mock sales data for development
- * @returns Array of mock sale objects
- */
-function getMockSales(): Sale[] {
-  return [
-    {
-      id: 1,
-      itemId: 1,
-      platform: 'StockX',
-      saleDate: '2025-02-15T08:30:00.000Z',
-      salePrice: 209.99,
-      currency: '$',
-      salesTax: 10.50,
-      platformFees: 15.75,
-      status: 'completed',
-      profit: 40.01 // Added profit to mock data
-    },
-    {
-      id: 2,
-      itemId: 2,
-      platform: 'GOAT',
-      saleDate: '2025-02-10T14:45:00.000Z',
-      salePrice: 129.99,
-      currency: '$',
-      salesTax: 6.50,
-      platformFees: 12.99,
-      status: 'completed',
-      saleId: 'ORD-12345',
-      profit: 35.50 // Added profit to mock data
-    },
-    {
-      id: 3,
-      itemId: 3,
-      platform: 'eBay',
-      saleDate: '2025-03-05T10:15:00.000Z',
-      salePrice: 89.99,
-      currency: '$',
-      platformFees: 8.99,
-      status: 'needsShipping',
-      saleId: 'EB-987654',
-      profit: 20.00 // Added profit to mock data
-    },
-    {
-      id: 4,
-      itemId: 4,
-      platform: 'StockX',
-      saleDate: '2025-03-12T16:20:00.000Z',
-      salePrice: 349.99,
-      currency: '$',
-      salesTax: 17.50,
-      platformFees: 26.25,
-      status: 'pending',
-      profit: 75.25 // Added profit to mock data
-    }
-  ];
-}
-
-/**
- * Generate mock net profit response data for development
- * @returns Mock NetProfitResponse object
- */
-function getMockNetProfitResponse(): NetProfitResponse {
-  return {
-    netProfitSold: 2500,
-    salesCount: 15,
-    grossProfit: 3200,
-    totalExpenses: 700,
-    totalSalesRevenue: 12000,
-    totalCostsOfGoods: 8800,
-    avgProfitPerSale: 166.67,
-    previousPeriodNetProfit: 2200,
-    netProfitChange: 13.64
-  };
-}
 
 export default salesApi;

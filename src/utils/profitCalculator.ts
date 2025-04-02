@@ -6,15 +6,30 @@ import { calculateTotalExpenses } from './expensesUtils';
 
 /**
  * Calculate profit for a single sale
+ * Improved to provide better error handling while maintaining accuracy
  */
 export const calculateSaleProfit = (sale: Sale, allItems: Item[]): number => {
-  // Find the corresponding item
+  // Find the corresponding item by its ID - this is the correct and intended match
   const soldItem = allItems.find(item => item.id === sale.itemId);
+  
   if (!soldItem) {
-    console.warn(`⚠️ No matching item found for sale ID ${sale.id}`);
-    return 0;
+    console.error(`❌ No matching item found for sale ID ${sale.id} with itemId ${sale.itemId}`);
+    
+    // If we have the profit already calculated in the sale object, use that
+    if (sale.profit !== undefined) {
+      console.log(`Using pre-calculated profit from sale object: $${sale.profit}`);
+      return sale.profit;
+    }
+    
+    // If we don't have profit data, use the sale price with platform fees and taxes
+    // This maintains data integrity better than making up values
+    console.log(`Using only available sale data for profit calculation`);
+    const salesTax = sale.salesTax || 0;
+    const platformFees = sale.platformFees || 0;
+    return sale.salePrice - salesTax - platformFees;
   }
   
+  // Once we have the item, calculate the profit
   const purchasePrice = soldItem.purchasePrice || 0;
   const salesTax = sale.salesTax || 0;
   const platformFees = sale.platformFees || 0;
@@ -25,6 +40,7 @@ export const calculateSaleProfit = (sale: Sale, allItems: Item[]): number => {
   console.log(`
     Sale ID: ${sale.id}
     Item ID: ${sale.itemId}
+    Item Name: ${soldItem.productName || 'Unknown'}
     Sale Price: $${sale.salePrice}
     Purchase Price: $${purchasePrice}
     Sales Tax: $${salesTax}
