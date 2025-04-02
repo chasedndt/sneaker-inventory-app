@@ -1,5 +1,5 @@
 // src/App.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -8,11 +8,15 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import InventoryPage from './pages/InventoryPage';
 import SalesPage from './pages/SalesPage';
-import ExpensesPage from './pages/ExpensesPage'; 
+import ExpensesPage from './pages/ExpensesPage';
+import SettingsPage from './pages/SettingsPage';
+import CoplistsPage from './pages/CoplistsPage';
+import { SettingsProvider, useSettings } from './context/SettingsContext';
 
-function App() {
+// AppContent component that uses the settings context
+const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
-  const [darkMode, setDarkMode] = useState<boolean>(true);
+  const { darkMode } = useSettings();
 
   const theme = createTheme({
     palette: {
@@ -47,12 +51,11 @@ function App() {
           },
         },
       },
-      // Add custom style overrides for hover effects
       MuiListItemButton: {
         styleOverrides: {
           root: {
             '&:hover': {
-              overflow: 'hidden', // Ensure hover effect is contained
+              overflow: 'hidden',
             },
           },
         },
@@ -63,11 +66,6 @@ function App() {
   // Handle navigation
   const handleNavigate = (page: string) => {
     setCurrentPage(page);
-  };
-
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
   };
 
   // Render the current page
@@ -81,6 +79,10 @@ function App() {
         return <SalesPage />;
       case 'expenses':
         return <ExpensesPage />;
+      case 'settings':
+        return <SettingsPage />;
+      case 'coplists':
+        return <CoplistsPage />;
       default:
         return <Dashboard />;
     }
@@ -95,6 +97,15 @@ function App() {
         </Layout>
       </LocalizationProvider>
     </ThemeProvider>
+  );
+};
+
+// Main App component with providers
+function App() {
+  return (
+    <SettingsProvider>
+      <AppContent />
+    </SettingsProvider>
   );
 }
 
