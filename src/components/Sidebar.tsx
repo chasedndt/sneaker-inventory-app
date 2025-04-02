@@ -12,12 +12,10 @@ import {
   alpha
 } from '@mui/material';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import SellIcon from '@mui/icons-material/Sell';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
-import NewReleasesIcon from '@mui/icons-material/NewReleases';
 import SettingsIcon from '@mui/icons-material/Settings';
 
 interface SidebarProps {
@@ -35,15 +33,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   const theme = useTheme();
   const [activePage, setActivePage] = useState('dashboard');
 
-  // Define menu items
+  // Define menu items - removed Activity and Releases
   const menuItems: MenuItemType[] = [
     { label: 'Dashboard', icon: <DashboardIcon />, value: 'dashboard' },
-    { label: 'Activity', icon: <ShowChartIcon />, value: 'activity' },
     { label: 'Inventory', icon: <InventoryIcon />, value: 'inventory' },
     { label: 'Sales', icon: <SellIcon />, value: 'sales' },
     { label: 'Expenses', icon: <ReceiptIcon />, value: 'expenses' },
-    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists' },
-    { label: 'Releases', icon: <NewReleasesIcon />, value: 'releases', dividerAfter: true },
+    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists', dividerAfter: true },
     { label: 'Settings', icon: <SettingsIcon />, value: 'settings' },
   ];
 
