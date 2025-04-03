@@ -53,53 +53,52 @@ const SettingsPage: React.FC = () => {
     lastRatesUpdate
   } = useSettings();
 
-  // Local state for settings
-  const [localDarkMode, setLocalDarkMode] = useState(darkMode);
-  const [localCurrency, setLocalCurrency] = useState(currency);
-  const [localDateFormat, setLocalDateFormat] = useState(dateFormat);
+  // We're tracking changes in local state, but applying them immediately
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
-  const [hasChanges, setHasChanges] = useState(false);
-  const [isRefreshingRates, setIsRefreshingRates] = useState(false);
 
-  // Update local state when context values change
-  useEffect(() => {
-    setLocalDarkMode(darkMode);
-    setLocalCurrency(currency);
-    setLocalDateFormat(dateFormat);
-  }, [darkMode, currency, dateFormat]);
-
-  // Check if any settings have changed
-  useEffect(() => {
-    const settingsChanged = 
-      localDarkMode !== darkMode || 
-      localCurrency !== currency || 
-      localDateFormat !== dateFormat;
-
-    setHasChanges(settingsChanged);
-  }, [localDarkMode, localCurrency, localDateFormat, darkMode, currency, dateFormat]);
-
-  // Handle dark mode toggle
+  // Handle dark mode toggle - apply immediately
   const handleDarkModeToggle = () => {
-    setLocalDarkMode(!localDarkMode);
+    toggleDarkMode();
+    setSnackbar({
+      open: true,
+      message: `Theme changed to ${!darkMode ? 'dark' : 'light'} mode`,
+      severity: 'success'
+    });
   };
 
-  // Handle currency change
+  // Handle currency change - apply immediately
   const handleCurrencyChange = (event: SelectChangeEvent<string>) => {
-    setLocalCurrency(event.target.value);
+    const newCurrency = event.target.value;
+    setCurrency(newCurrency);
+    setSnackbar({
+      open: true,
+      message: `Currency changed to ${newCurrency}`,
+      severity: 'success'
+    });
   };
 
-  // Handle date format change
+  // Handle date format change - apply immediately
   const handleDateFormatChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalDateFormat(event.target.value);
+    const newFormat = event.target.value;
+    setDateFormat(newFormat);
+    setSnackbar({
+      open: true,
+      message: `Date format changed to ${newFormat}`,
+      severity: 'success'
+    });
   };
 
   // Handle refreshing exchange rates
   const handleRefreshRates = async () => {
-    setIsRefreshingRates(true);
+    setSnackbar({
+      open: true,
+      message: 'Refreshing exchange rates...',
+      severity: 'info'
+    });
 
     try {
       const success = await refreshExchangeRates();
@@ -123,37 +122,7 @@ const SettingsPage: React.FC = () => {
         message: 'An error occurred while updating exchange rates',
         severity: 'error'
       });
-    } finally {
-      setIsRefreshingRates(false);
     }
-  };
-
-  // Save all settings
-  const handleSaveSettings = () => {
-    // Apply settings to context
-    if (localDarkMode !== darkMode) {
-      toggleDarkMode();
-    }
-    if (localCurrency !== currency) {
-      setCurrency(localCurrency);
-    }
-    if (localDateFormat !== dateFormat) {
-      setDateFormat(localDateFormat);
-    }
-
-    // Save settings to persistent storage
-    saveSettings({
-      darkMode: localDarkMode,
-      currency: localCurrency,
-      dateFormat: localDateFormat
-    });
-
-    // Show success message
-    setSnackbar({
-      open: true,
-      message: 'Settings saved successfully',
-      severity: 'success'
-    });
   };
 
   // Handle snackbar close
@@ -205,7 +174,7 @@ const SettingsPage: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={localDarkMode}
+                  checked={darkMode}
                   onChange={handleDarkModeToggle}
                   color="primary"
                   icon={<LightModeIcon />}
@@ -215,9 +184,9 @@ const SettingsPage: React.FC = () => {
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   <Typography variant="body1">
-                    {localDarkMode ? 'Dark Mode' : 'Light Mode'}
+                    {darkMode ? 'Dark Mode' : 'Light Mode'}
                   </Typography>
-                  {localDarkMode ? 
+                  {darkMode ? 
                     <DarkModeIcon sx={{ ml: 1, color: theme.palette.primary.main }} /> : 
                     <LightModeIcon sx={{ ml: 1, color: '#f9a825' }} />
                   }
@@ -257,7 +226,7 @@ const SettingsPage: React.FC = () => {
               <Select
                 labelId="currency-select-label"
                 id="currency-select"
-                value={localCurrency}
+                value={currency}
                 onChange={handleCurrencyChange}
                 label="Currency"
               >
@@ -280,10 +249,9 @@ const SettingsPage: React.FC = () => {
                 variant="outlined"
                 size="small"
                 onClick={handleRefreshRates}
-                disabled={isRefreshingRates}
                 startIcon={<RefreshIcon />}
               >
-                {isRefreshingRates ? 'Updating...' : 'Refresh Rates'}
+                Refresh Rates
               </Button>
             </Box>
             
@@ -312,7 +280,7 @@ const SettingsPage: React.FC = () => {
                         .map(([currencyCode, rate]) => (
                         <TableRow key={currencyCode} hover>
                           <TableCell component="th" scope="row">
-                            {currencyCode === localCurrency ? (
+                            {currencyCode === currency ? (
                               <Chip 
                                 size="small" 
                                 label={currencyCode} 
@@ -359,7 +327,7 @@ const SettingsPage: React.FC = () => {
               <RadioGroup
                 aria-label="date-format"
                 name="date-format"
-                value={localDateFormat}
+                value={dateFormat}
                 onChange={handleDateFormatChange}
               >
                 <FormControlLabel value="MM/DD/YYYY" control={<Radio />} label="MM/DD/YYYY (ex: 04/02/2025)" />
@@ -404,9 +372,9 @@ const SettingsPage: React.FC = () => {
                 onClick={() => {
                   // Create settings object
                   const exportData = {
-                    darkMode: localDarkMode,
-                    currency: localCurrency,
-                    dateFormat: localDateFormat,
+                    darkMode: darkMode,
+                    currency: currency,
+                    dateFormat: dateFormat,
                     exportDate: new Date().toISOString()
                   };
                   
@@ -470,17 +438,22 @@ const SettingsPage: React.FC = () => {
                           throw new Error('Invalid settings format');
                         }
                         
-                        // Update local settings
-                        setLocalDarkMode(importedSettings.darkMode);
-                        setLocalCurrency(importedSettings.currency);
-                        setLocalDateFormat(importedSettings.dateFormat);
+                        // Apply the settings immediately
+                        if (importedSettings.darkMode !== darkMode) {
+                          toggleDarkMode();
+                        }
                         
-                        // Set hasChanges to true to enable the save button
-                        setHasChanges(true);
+                        if (importedSettings.currency !== currency) {
+                          setCurrency(importedSettings.currency);
+                        }
+                        
+                        if (importedSettings.dateFormat !== dateFormat) {
+                          setDateFormat(importedSettings.dateFormat);
+                        }
                         
                         setSnackbar({
                           open: true,
-                          message: 'Settings imported successfully. Click Save to apply.',
+                          message: 'Settings imported and applied successfully',
                           severity: 'success'
                         });
                       } catch (error) {
@@ -501,27 +474,6 @@ const SettingsPage: React.FC = () => {
           </Grid>
         </Paper>
       </Grid>
-
-      {/* Save Button */}
-      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<SaveIcon />}
-          onClick={handleSaveSettings}
-          disabled={!hasChanges}
-          sx={{
-            px: 4,
-            py: 1,
-            borderRadius: 2,
-            textTransform: 'none',
-            fontSize: '1rem',
-            fontWeight: 500,
-          }}
-        >
-          Save Settings
-        </Button>
-      </Box>
 
       {/* Notification Snackbar */}
       <Snackbar 

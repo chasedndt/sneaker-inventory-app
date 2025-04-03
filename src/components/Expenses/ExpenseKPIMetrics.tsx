@@ -15,6 +15,7 @@ import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoIcon from '@mui/icons-material/Info';
+import useFormat from '../../hooks/useFormat'; // Import formatting hook
 
 import { ExpenseSummary } from '../../models/expenses';
 
@@ -53,6 +54,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
   dateRange
 }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
   
   // Format data for the pie chart
   const getPieChartData = (): ExpenseTypeData[] => {
@@ -88,7 +90,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
             {data.name}
           </Typography>
           <Typography variant="body2" color="primary.main" sx={{ fontWeight: 'bold' }}>
-            ${data.value.toFixed(2)}
+            {money(data.value)}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {((data.value / totalExpense) * 100).toFixed(1)}% of total
@@ -132,7 +134,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
                 </Tooltip>
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${summary.totalAmount.toFixed(2)}
+                {money(summary.totalAmount)}
               </Typography>
               <Typography variant="caption" color="text.secondary">
                 {summary.expenseCount} expense entries
@@ -165,9 +167,9 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
                 </Tooltip>
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${summary.expenseCount > 0 
-                  ? (summary.totalAmount / summary.expenseCount).toFixed(2) 
-                  : '0.00'
+                {summary.expenseCount > 0 
+                  ? money(summary.totalAmount / summary.expenseCount) 
+                  : money(0)
                 }
               </Typography>
               <Typography variant="caption" color="text.secondary">
@@ -282,7 +284,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
                     {expense.name}
                   </Typography>
                   <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                    ${summary.expenseByType[expense.name].toFixed(2)} ({expense.percentage}%)
+                    {money(summary.expenseByType[expense.name])} ({expense.percentage}%)
                   </Typography>
                 </Box>
                 <Box 

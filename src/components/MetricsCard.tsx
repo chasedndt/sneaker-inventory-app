@@ -33,7 +33,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   value,
   change,
   data,
-  prefix = '$',
+  prefix = '',  // Changed from '$' to empty string, will use the formatter
   suffix = '',
   tooltipText,
   useFormatter = true // Default to true for monetary values
@@ -43,7 +43,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   
   // Format the value using the money formatter if it's a number and useFormatter is true
   const displayValue = useFormatter && typeof value === 'number' 
-    ? money(value).replace(/^\$/, '') // Remove $ since we'll add the prefix
+    ? money(value) 
     : value;
   
   return (
@@ -90,7 +90,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
             color: theme.palette.text.primary
           }}
         >
-          {prefix}{displayValue}{suffix}
+          {/* Remove the prefix and use the formatted money value directly */}
+          {useFormatter && typeof value === 'number' ? displayValue : prefix + displayValue + suffix}
         </Typography>
         <Box sx={{ 
           display: 'flex', 

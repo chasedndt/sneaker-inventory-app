@@ -18,7 +18,8 @@ const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>('dashboard');
   const { darkMode } = useSettings();
 
-  const theme = createTheme({
+  // Create theme based on current darkMode setting
+  const theme = React.useMemo(() => createTheme({
     palette: {
       mode: darkMode ? 'dark' : 'light',
       primary: {
@@ -61,7 +62,12 @@ const AppContent: React.FC = () => {
         },
       },
     },
-  });
+  }), [darkMode]); // Important: re-create theme when darkMode changes
+
+  // Log when theme changes for debugging
+  useEffect(() => {
+    console.log("Theme updated, darkMode:", darkMode);
+  }, [darkMode, theme]);
 
   // Handle navigation
   const handleNavigate = (page: string) => {
