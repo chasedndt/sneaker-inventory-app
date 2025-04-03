@@ -11,6 +11,7 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 
 interface SalesKPIMetricsProps {
   metrics: {
@@ -24,6 +25,7 @@ interface SalesKPIMetricsProps {
 
 const SalesKPIMetrics: React.FC<SalesKPIMetricsProps> = ({ metrics }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
   
   return (
     <Paper 
@@ -57,7 +59,7 @@ const SalesKPIMetrics: React.FC<SalesKPIMetricsProps> = ({ metrics }) => {
                 Total Sales Revenue
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${metrics.totalSalesRevenue.toFixed(2)}
+                {money(metrics.totalSalesRevenue)}
               </Typography>
               <Typography variant="caption" color="textSecondary">
                 From {metrics.totalSales} sales
@@ -88,7 +90,7 @@ const SalesKPIMetrics: React.FC<SalesKPIMetricsProps> = ({ metrics }) => {
                 Avg. Profit per Sale
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${metrics.avgProfitPerSale.toFixed(2)}
+                {money(metrics.avgProfitPerSale)}
               </Typography>
               <Typography variant="caption" color="textSecondary">
                 After fees and taxes

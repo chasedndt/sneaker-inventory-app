@@ -17,6 +17,7 @@ import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // Fo
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // For help/info tooltip
 import { Item } from '../services/api';
 import { getImageUrl, checkImageExists, handleImageLoadError } from '../utils/imageUtils';
+import useFormat from '../hooks/useFormat'; // Import formatting hook
 
 interface EnhancedInventoryDisplayProps {
   items: Item[];
@@ -65,7 +66,7 @@ const getGradientColors = (category: string): { start: string, end: string } => 
 interface ItemWithImage extends Item {
   count: number;
   totalValue: number;
-  imageUrl?: string; // Changed to match the updated type in api.ts
+  imageUrl?: string; 
   imageLoading: boolean;
   imageError: boolean;
   placeholderMessage?: string;
@@ -73,6 +74,7 @@ interface ItemWithImage extends Item {
 
 const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ items }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
   const [groupedItems, setGroupedItems] = useState<ItemWithImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -442,7 +444,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
                             color: 'white'
                           }}
                         >
-                          ${item.count > 1 ? item.totalValue.toFixed(2) : item.purchasePrice.toFixed(2)}
+                          {/* Use the money formatter here */}
+                          {item.count > 1 ? money(item.totalValue) : money(item.purchasePrice)}
                         </Typography>
                         
                         <Box sx={{ 
