@@ -27,7 +27,7 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
-import dayjs from 'dayjs';
+import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 
 import { SalesItem } from '../../pages/SalesPage';
 
@@ -57,6 +57,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
   onRestoreToInventory
 }) => {
   const theme = useTheme();
+  const { money, date } = useFormat(); // Use the formatting hook
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -115,15 +116,6 @@ const SalesTable: React.FC<SalesTableProps> = ({
     );
   };
 
-  // Format date
-  const formatDate = (dateString: string) => {
-    try {
-      return dayjs(dateString).format('DD MMM YYYY');
-    } catch (error) {
-      return '-';
-    }
-  };
-  
   // Render image avatar
   const renderImage = (item: SalesItem) => {
     if (item.imageUrl) {
@@ -243,7 +235,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
                 <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
               )}
               
-              {/* Actions Column - FIX FOR ISSUE 1.2: Added Delete and Return to Inventory */}
+              {/* Actions Column */}
               <TableCell sx={{ minWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -327,29 +319,25 @@ const SalesTable: React.FC<SalesTableProps> = ({
                     
                     {visibleColumns.saleDate && (
                       <TableCell>
-                        {formatDate(sale.saleDate)}
+                        {date(sale.saleDate)}
                       </TableCell>
                     )}
                     
                     {visibleColumns.salePrice && (
                       <TableCell align="right">
-                        ${sale.salePrice.toFixed(2)}
+                        {money(sale.salePrice)}
                       </TableCell>
                     )}
                     
                     {visibleColumns.tax && (
                       <TableCell align="right">
-                        {sale.salesTax 
-                          ? `$${sale.salesTax.toFixed(2)}` 
-                          : '$0.00'}
+                        {sale.salesTax ? money(sale.salesTax) : money(0)}
                       </TableCell>
                     )}
                     
                     {visibleColumns.fees && (
                       <TableCell align="right">
-                        {sale.platformFees 
-                          ? `$${sale.platformFees.toFixed(2)}` 
-                          : '$0.00'}
+                        {sale.platformFees ? money(sale.platformFees) : money(0)}
                       </TableCell>
                     )}
                     
@@ -375,7 +363,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
                           ) : (
                             <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
                           )}
-                          ${Math.abs(sale.profit).toFixed(2)}
+                          {money(Math.abs(sale.profit))}
                         </Box>
                       </TableCell>
                     )}
@@ -390,14 +378,14 @@ const SalesTable: React.FC<SalesTableProps> = ({
                       <TableCell>
                         {/* This would show the purchase date of the item */}
                         <Typography variant="body2" color="text.secondary">
-                          {formatDate(new Date(Date.now() - (sale.daysToSell * 24 * 60 * 60 * 1000)).toISOString())}
+                          {date(new Date(Date.now() - (sale.daysToSell * 24 * 60 * 60 * 1000)).toISOString())}
                         </Typography>
                       </TableCell>
                     )}
                     
                     {visibleColumns.purchasePrice && (
                       <TableCell align="right">
-                        ${sale.purchasePrice.toFixed(2)}
+                        {money(sale.purchasePrice)}
                       </TableCell>
                     )}
                     
@@ -427,7 +415,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
                       </TableCell>
                     )}
                     
-                    {/* Actions Column - FIX FOR ISSUE 1.2: Added Delete and Return to Inventory */}
+                    {/* Actions Column */}
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Tooltip title="Restore to Inventory">

@@ -18,6 +18,7 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import { Item } from '../services/api';
+import useFormat from '../hooks/useFormat'; // Import the formatting hook
 
 // Props interface: the InventorySection now receives real items as a prop.
 interface InventorySectionProps {
@@ -30,6 +31,8 @@ const calculateChange = (purchasePrice: number, currentValue: number): number =>
 };
 
 const InventorySection: React.FC<InventorySectionProps> = ({ items }) => {
+  const { money, date } = useFormat(); // Use the formatting hook
+  
   // If there are no items yet, show a loader
   if (items.length === 0) {
     return (
@@ -74,8 +77,8 @@ const InventorySection: React.FC<InventorySectionProps> = ({ items }) => {
                 <TableRow key={item.id}>
                   <TableCell>{item.productName}</TableCell>
                   <TableCell>{item.brand}</TableCell>
-                  <TableCell align="right">${item.purchasePrice.toFixed(2)}</TableCell>
-                  <TableCell align="right">${currentValue.toFixed(2)}</TableCell>
+                  <TableCell align="right">{money(item.purchasePrice)}</TableCell>
+                  <TableCell align="right">{money(currentValue)}</TableCell>
                   <TableCell 
                     align="right"
                     sx={{ 
@@ -89,7 +92,7 @@ const InventorySection: React.FC<InventorySectionProps> = ({ items }) => {
                     {change >= 0 ? <TrendingUpIcon fontSize="small" /> : <TrendingDownIcon fontSize="small" />}
                     {change.toFixed(1)}%
                   </TableCell>
-                  <TableCell>{new Date(item.purchaseDate).toLocaleDateString()}</TableCell>
+                  <TableCell>{date(item.purchaseDate)}</TableCell>
                 </TableRow>
               );
             })}

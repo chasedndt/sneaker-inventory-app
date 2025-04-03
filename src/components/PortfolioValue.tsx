@@ -18,6 +18,7 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoIcon from '@mui/icons-material/Info';
+import useFormat from '../hooks/useFormat'; // Import the formatting hook
 
 interface PortfolioValueProps {
   currentValue: number;
@@ -37,6 +38,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
   // Use provided theme or default theme
   const defaultTheme = useTheme();
   const theme = propTheme || defaultTheme;
+  const { money } = useFormat(); // Use the formatting hook
 
   // Fixed styling for dark mode
   const isDarkMode = theme.palette.mode === 'dark';
@@ -55,7 +57,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
             color: isDarkMode ? '#fff' : '#1a1a1a', 
             fontWeight: 500 
           }}>
-            ${payload[0].value.toLocaleString()}
+            {money(payload[0].value)}
           </Typography>
           <Typography variant="caption" sx={{ 
             color: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666' 
@@ -94,7 +96,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
             mb: 0.5,
             color: isDarkMode ? '#fff' : '#1a1a1a'
           }}>
-            ${currentValue.toLocaleString()}
+            {money(currentValue)}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
             <Box sx={{ 
@@ -108,7 +110,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
                 <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
               )}
               <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                ${Math.abs(valueChange).toLocaleString()}
+                {money(Math.abs(valueChange))}
               </Typography>
             </Box>
             <Typography variant="body2" sx={{ 
@@ -146,7 +148,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
               axisLine={false}
               tickLine={false}
               width={80}
-              tickFormatter={(value) => `$${value.toLocaleString()}`}
+              tickFormatter={(value) => money(value).replace(/(\.\d\d).*/, '$1')} // Format ticks with currency
               tick={{ 
                 fill: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666', 
                 fontSize: 12 

@@ -7,6 +7,7 @@ import { Sale } from '../services/salesApi';
 import { Expense } from '../models/expenses';
 import { calculateTotalExpenses } from '../utils/expensesUtils';
 import { Dayjs } from 'dayjs';
+import useFormat from '../hooks/useFormat'; // Import formatting hook
 
 // Props to include sales and expenses data and date filters
 interface ReportsSectionProps {
@@ -33,6 +34,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
   endDate 
 }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
   
   // Add direct debugging to see what data is coming in
   useEffect(() => {
@@ -128,12 +130,12 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
     const profit = sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
     
     console.log(`📊 Sale ID ${sale.id}: Profit calculation:
-      Sale Price: $${sale.salePrice}
-      Purchase Price: $${purchasePrice}
-      Sales Tax: $${salesTax}
-      Platform Fees: $${platformFees}
-      Shipping Cost: $${shippingCost}
-      Profit: $${profit.toFixed(2)}
+      Sale Price: ${money(sale.salePrice)}
+      Purchase Price: ${money(purchasePrice)}
+      Sales Tax: ${money(salesTax)}
+      Platform Fees: ${money(platformFees)}
+      Shipping Cost: ${money(shippingCost)}
+      Profit: ${money(profit)}
     `);
     
     return profit;
@@ -162,18 +164,18 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
       saleProfit = calculateSaleProfit(sale, allItems);
       salesProfit += saleProfit;
       
-      console.log(`📊 Sale ID ${sale.id}: Profit = $${saleProfit.toFixed(2)}`);
+      console.log(`📊 Sale ID ${sale.id}: Profit = ${money(saleProfit)}`);
     });
     
-    console.log(`💵 Total sales profit: $${salesProfit.toFixed(2)}`);
+    console.log(`💵 Total sales profit: ${money(salesProfit)}`);
     
     // Calculate total expenses for the period
     const totalExpenses = calculateTotalExpenses(filteredExpenses);
-    console.log(`💸 Total expenses: $${totalExpenses.toFixed(2)}`);
+    console.log(`💸 Total expenses: ${money(totalExpenses)}`);
     
     // Net profit is sales profit minus total expenses in this period
     const netProfit = salesProfit - totalExpenses;
-    console.log(`🧮 Final calculation: $${salesProfit.toFixed(2)} - $${totalExpenses.toFixed(2)} = $${netProfit.toFixed(2)}`);
+    console.log(`🧮 Final calculation: ${money(salesProfit)} - ${money(totalExpenses)} = ${money(netProfit)}`);
     
     return netProfit;
   };
@@ -269,10 +271,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Net Profit"
-            value={metrics.netProfit.toFixed(2)}
+            value={metrics.netProfit}
             change={metrics.netProfitChange}
             data={generateMiniChartData(Math.max(1, metrics.netProfit) * 0.8, Math.max(1, metrics.netProfit) * 0.1, 5)}
             tooltipText="Estimated profit based on market price difference minus purchase price and expenses"
+            useFormatter={true}
           />
         </Grid>
         
@@ -280,10 +283,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Sales Income"
-            value={metrics.salesIncome.toFixed(2)}
+            value={metrics.salesIncome}
             change={metrics.salesIncomeChange}
             data={generateMiniChartData(Math.max(1, metrics.salesIncome) * 0.8, Math.max(1, metrics.salesIncome) * 0.1, 5)}
             tooltipText="Total revenue from all completed sales"
+            useFormatter={true}
           />
         </Grid>
 
@@ -291,10 +295,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Item Spend"
-            value={metrics.itemSpend.toFixed(2)}
+            value={metrics.itemSpend}
             change={metrics.itemSpendChange}
             data={generateMiniChartData(Math.max(1, metrics.itemSpend) * 0.8, Math.max(1, metrics.itemSpend) * 0.1, 5)}
             tooltipText="Total amount spent on items currently in inventory"
+            useFormatter={true}
           />
         </Grid>
 
@@ -308,6 +313,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             prefix=""
             suffix="%"
             tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
+            useFormatter={false}
           />
         </Grid>
 
@@ -315,10 +321,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Expense Spend"
-            value={metrics.expenseSpend.toFixed(2)}
+            value={metrics.expenseSpend}
             change={metrics.expenseSpendChange}
             data={generateMiniChartData(Math.max(1, metrics.expenseSpend) * 0.8, Math.max(1, metrics.expenseSpend) * 0.1, 5)}
             tooltipText="Total expenses excluding inventory purchases"
+            useFormatter={true}
           />
         </Grid>
 
@@ -331,6 +338,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             data={generateMiniChartData(Math.max(1, metrics.itemsPurchased), 2, 5)}
             prefix=""
             tooltipText="Total number of items purchased during the selected period"
+            useFormatter={false}
           />
         </Grid>
 
@@ -343,6 +351,7 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
             data={generateMiniChartData(Math.max(1, metrics.itemsSold), 2, 5)}
             prefix=""
             tooltipText="Total number of items sold during the selected period"
+            useFormatter={false}
           />
         </Grid>
 
@@ -350,10 +359,11 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
         <Grid item xs={12} sm={6} md={3}>
           <MetricsCard
             title="Realized Profit - Expenses"
-            value={metrics.soldItemsProfit.toFixed(2)}
+            value={metrics.soldItemsProfit}
             change={metrics.soldItemsProfitChange}
             data={generateMiniChartData(Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.8, Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.1, 5)}
             tooltipText="Profit from completed sales minus expenses within the period"
+            useFormatter={true}
           />
         </Grid>
       </Grid>

@@ -17,11 +17,12 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 
 interface KPIMetricsProps {
   metrics: {
     totalItems: number;
-    unlistedItems: number; // Changed to use unlistedItems directly
+    unlistedItems: number;
     listedItems: number;
     soldItems: number;
     totalPurchaseValue: number;
@@ -33,6 +34,7 @@ interface KPIMetricsProps {
 
 const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
   
   // Calculate average ROI
   const averageROI = metrics.totalItems > 0
@@ -77,7 +79,7 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
                   <FiberManualRecordIcon 
                     sx={{ 
-                      color: 'text.disabled', // Changed from success.main to text.disabled for gray
+                      color: 'text.disabled',
                       fontSize: 12, 
                       mr: 0.5 
                     }} 
@@ -125,10 +127,10 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 Total Purchase Value
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${metrics.totalPurchaseValue.toFixed(2)}
+                {money(metrics.totalPurchaseValue)}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Avg: ${(metrics.totalPurchaseValue / Math.max(1, metrics.totalItems)).toFixed(2)} per item
+                Avg: {money(metrics.totalPurchaseValue / Math.max(1, metrics.totalItems))} per item
               </Typography>
             </Box>
           </Box>
@@ -156,10 +158,10 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 Total Shipping Value
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${metrics.totalShippingValue.toFixed(2)}
+                {money(metrics.totalShippingValue)}
               </Typography>
               <Typography variant="caption" color="textSecondary">
-                Avg: ${(metrics.totalShippingValue / Math.max(1, metrics.totalItems)).toFixed(2)} per item
+                Avg: {money(metrics.totalShippingValue / Math.max(1, metrics.totalItems))} per item
               </Typography>
             </Box>
           </Box>
@@ -187,7 +189,7 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 Estimated Profit (ROI)
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                ${metrics.totalEstimatedProfit.toFixed(2)}
+                {money(metrics.totalEstimatedProfit)}
               </Typography>
               <Typography 
                 variant="caption" 
