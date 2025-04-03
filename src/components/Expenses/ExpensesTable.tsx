@@ -28,7 +28,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import SortIcon from '@mui/icons-material/Sort';
-import dayjs from 'dayjs';
+import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 
 import { Expense } from '../../models/expenses';
 
@@ -67,6 +67,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
   onSelectAll
 }) => {
   const theme = useTheme();
+  const { money, date } = useFormat(); // Use the formatting hook
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [orderBy, setOrderBy] = useState<keyof Expense>('expenseDate');
@@ -76,13 +77,13 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
   const [actionMenuAnchorEl, setActionMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [actionMenuExpense, setActionMenuExpense] = useState<Expense | null>(null);
   
-  // Define table columns
+  // Define table columns with formatting
   const columns: Column[] = [
     {
       id: 'expenseDate',
       label: 'Date',
       minWidth: 100,
-      format: (value) => dayjs(value).format('MMM D, YYYY'),
+      format: (value) => date(value), // Use date formatter
       sortable: true
     },
     {
@@ -107,7 +108,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
       label: 'Amount',
       minWidth: 100,
       align: 'right',
-      format: (value, row) => `${row?.currency || '$'}${value.toFixed(2)}`,
+      format: (value) => money(value), // Use money formatter
       sortable: true
     },
     {
@@ -234,7 +235,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
   // Handle rows per page change
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
+    setPage(0); // Reset to first page when rows per page changes
   };
   
   // Handle action menu

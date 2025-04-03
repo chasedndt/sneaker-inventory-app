@@ -15,6 +15,7 @@ import {
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoIcon from '@mui/icons-material/Info';
+import useFormat from '../hooks/useFormat'; // Import formatting hook
 
 interface MetricsCardProps {
   title: string;
@@ -24,6 +25,7 @@ interface MetricsCardProps {
   prefix?: string;
   suffix?: string;
   tooltipText?: string;
+  useFormatter?: boolean; // Optional prop to specify whether to use the formatter
 }
 
 const MetricsCard: React.FC<MetricsCardProps> = ({
@@ -33,9 +35,16 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   data,
   prefix = '$',
   suffix = '',
-  tooltipText
+  tooltipText,
+  useFormatter = true // Default to true for monetary values
 }) => {
   const theme = useTheme();
+  const { money } = useFormat(); // Use the formatting hook
+  
+  // Format the value using the money formatter if it's a number and useFormatter is true
+  const displayValue = useFormatter && typeof value === 'number' 
+    ? money(value).replace(/^\$/, '') // Remove $ since we'll add the prefix
+    : value;
   
   return (
     <Paper sx={{ 
@@ -81,7 +90,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
             color: theme.palette.text.primary
           }}
         >
-          {prefix}{value}{suffix}
+          {prefix}{displayValue}{suffix}
         </Typography>
         <Box sx={{ 
           display: 'flex', 

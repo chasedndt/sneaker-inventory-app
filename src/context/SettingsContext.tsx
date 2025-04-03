@@ -119,6 +119,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   useEffect(() => {
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+      console.log('Settings saved to localStorage:', settings);
     } catch (error) {
       console.error('Error saving settings to localStorage:', error);
     }
@@ -130,6 +131,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       ...prev,
       darkMode: !prev.darkMode,
     }));
+    console.log("Dark mode toggled, new value:", !darkMode);
   };
 
   // Set currency
@@ -138,6 +140,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       ...prev,
       currency: newCurrency,
     }));
+    console.log("Currency changed to:", newCurrency);
   };
 
   // Set date format
@@ -146,6 +149,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       ...prev,
       dateFormat: newFormat,
     }));
+    console.log("Date format changed to:", newFormat);
   };
 
   // Refresh exchange rates manually
@@ -170,6 +174,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   // Convert currency using the latest exchange rates
   const convertCurrency = (amount: number, fromCurrency: string = 'USD'): number => {
+    // If amount is 0 or not a number, return 0
+    if (amount === 0 || isNaN(amount)) return 0;
+    
     // If we have exchange rates, use them
     if (exchangeRates) {
       // Quick return if currencies are the same
@@ -193,6 +200,10 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   // Format currency according to selected currency
   const formatCurrency = (amount: number): string => {
+    if (isNaN(amount)) {
+      console.warn('Invalid amount provided to formatCurrency:', amount);
+      amount = 0;
+    }
     const convertedAmount = convertCurrency(amount, 'USD');
     return formatCurrencyWithSymbol(convertedAmount, currency);
   };

@@ -31,6 +31,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import dayjs from 'dayjs';
 
 import { InventoryItem } from '../../pages/InventoryPage';
+import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 
 interface InventoryTableProps {
   items: InventoryItem[];
@@ -56,6 +57,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   onPageChange
 }) => {
   const theme = useTheme();
+  const { money, date } = useFormat(); // Use the formatting hook
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
@@ -154,12 +156,6 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     );
   };
 
-  // Format date for purchase date display
-  const formatDate = (dateString: string) => {
-    if (!dateString) return '-';
-    return dayjs(dateString).format('MMM D, YYYY');
-  };
-  
   return (
     <Paper 
       sx={{ 
@@ -388,7 +384,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                             }}
                           >
                             <Typography>
-                              ${item.marketPrice.toFixed(2)}
+                              {money(item.marketPrice)}
                             </Typography>
                             <IconButton
                               size="small"
@@ -418,7 +414,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                           ) : (
                             <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
                           )}
-                          ${Math.abs(item.estimatedProfit).toFixed(2)}
+                          {money(Math.abs(item.estimatedProfit))}
                         </Box>
                       </TableCell>
                     )}
@@ -441,7 +437,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     
                     {visibleColumns.reference && (
                       <TableCell>
-                        {formatDate(item.purchaseDate)}
+                        {date(item.purchaseDate)}
                       </TableCell>
                     )}
                     
@@ -473,13 +469,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     
                     {visibleColumns.purchaseTotal && (
                       <TableCell align="right">
-                        ${item.purchasePrice.toFixed(2)}
+                        {money(item.purchasePrice)}
                       </TableCell>
                     )}
                     
                     {visibleColumns.shippingAmount && (
                       <TableCell align="right">
-                        ${(item.shippingPrice || 0).toFixed(2)}
+                        {money(item.shippingPrice || 0)}
                       </TableCell>
                     )}
                   </TableRow>
