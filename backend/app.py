@@ -11,6 +11,8 @@ from datetime import datetime
 from models import db, Item, Size, Image, Tag, Sale, Expense
 from config import Config
 from datetime import datetime, timedelta
+from tag_routes import tag_routes
+
 
 
 def create_app():
@@ -29,6 +31,9 @@ def create_app():
 
     db.init_app(app)
     Migrate(app, db)
+
+    # Register the tag routes blueprint
+    app.register_blueprint(tag_routes, url_prefix='/api')
 
     # Set up standard application logging
     logging.basicConfig(

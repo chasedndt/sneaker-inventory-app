@@ -118,6 +118,24 @@ class Image(db.Model):
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
+    color = db.Column(db.String(20), nullable=False, default='#8884d8')  # Default color
+    
+    def to_dict(self):
+        """
+        Create a dictionary representation of the tag for API responses.
+        """
+        try:
+            return {
+                'id': str(self.id),  # Convert to string for consistency with frontend
+                'name': self.name,
+                'color': self.color
+            }
+        except Exception as e:
+            print(f"🏷️ Error in Tag.to_dict(): {str(e)}")
+            return {
+                'id': str(self.id) if hasattr(self, 'id') else 'unknown',
+                'error': f"Failed to serialize tag: {str(e)}"
+            }
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)

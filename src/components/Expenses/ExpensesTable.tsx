@@ -1,5 +1,5 @@
 // src/components/Expenses/ExpensesTable.tsx
-import React, { useState } from 'react';
+import React, { useState, JSX } from 'react';
 import {
   Table,
   TableBody,
@@ -68,14 +68,14 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
 }) => {
   const theme = useTheme();
   const { money, date } = useFormat(); // Use the formatting hook
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [orderBy, setOrderBy] = useState<keyof Expense>('expenseDate');
-  const [order, setOrder] = useState<SortDirection>('desc');
+  const [page, setPage] = React.useState(0);
+  const [rowsPerPage, setRowsPerPage] = React.useState(10);
+  const [orderBy, setOrderBy] = React.useState<keyof Expense>('expenseDate');
+  const [order, setOrder] = React.useState<SortDirection>('desc');
   
   // Action menu state
-  const [actionMenuAnchorEl, setActionMenuAnchorEl] = useState<null | HTMLElement>(null);
-  const [actionMenuExpense, setActionMenuExpense] = useState<Expense | null>(null);
+  const [actionMenuAnchorEl, setActionMenuAnchorEl] = React.useState<null | HTMLElement>(null);
+  const [actionMenuExpense, setActionMenuExpense] = React.useState<Expense | null>(null);
   
   // Define table columns with formatting
   const columns: Column[] = [
