@@ -18,20 +18,25 @@ import {
   Tooltip,
   Avatar,
   Chip,
-  useTheme
+  useTheme,
+  Popover,
+  Card,
+  CardContent,
+  Divider,
+  Badge
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import InventoryIcon from '@mui/icons-material/Inventory';
-import dayjs from 'dayjs';
-
-import { InventoryItem } from '../../pages/InventoryPage';
-import useFormat from '../../hooks/useFormat'; // Import the formatting hook
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import InfoIcon from '@mui/icons-material/Info';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import { InventoryItem, Tag } from '../../pages/InventoryPage';
+import useFormat from '../../hooks/useFormat';
 
 interface InventoryTableProps {
   items: InventoryItem[];
@@ -39,10 +44,13 @@ interface InventoryTableProps {
   selectedItems: number[];
   onSelectItem: (itemId: number, checked: boolean) => void;
   onUpdateMarketPrice: (itemId: number, newPrice: number) => void;
+  onDuplicateItem: (item: InventoryItem) => void;
   page: number;
   rowsPerPage: number;
   totalItems: number;
   onPageChange: (newPage: number) => void;
+  tagColorMap: Record<string, string>;
+  tags: Tag[];
 }
 
 const InventoryTable: React.FC<InventoryTableProps> = ({
@@ -51,16 +59,23 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   selectedItems,
   onSelectItem,
   onUpdateMarketPrice,
+  onDuplicateItem,
   page,
   rowsPerPage,
   totalItems,
-  onPageChange
+  onPageChange,
+  tagColorMap,
+  tags
 }) => {
   const theme = useTheme();
-  const { money, date } = useFormat(); // Use the formatting hook
+  const { money, date } = useFormat();
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
+  
+  // Profit tooltip state
+  const [profitAnchorEl, setProfitAnchorEl] = useState<HTMLElement | null>(null);
+  const [selectedProfitItem, setSelectedProfitItem] = useState<InventoryItem | null>(null);
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -90,39 +105,52 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     setEditingMarketPrice(null);
   };
   
-  // Updated getStatusIcon function with gray color for unlisted items
-  const getStatusIcon = (status: 'unlisted' | 'listed' | 'sold') => {
+  // Get status elements with improved visual design
+  const getStatusElement = (status: 'unlisted' | 'listed' | 'sold') => {
     switch (status) {
       case 'unlisted':
         return (
-          <Tooltip title="Unlisted">
-            <FiberManualRecordIcon 
-              sx={{ 
-                color: 'text.disabled', // Changed from success.main to text.disabled for gray color
-                fontSize: 16
-              }} 
+          <Tooltip title="Unlisted - Not yet listed for sale">
+            <Chip
+              size="small"
+              label="Unlisted"
+              sx={{
+                bgcolor: 'rgba(0, 0, 0, 0.08)',
+                color: theme.palette.text.secondary,
+                fontSize: '0.75rem',
+                height: 24
+              }}
             />
           </Tooltip>
         );
       case 'listed':
         return (
-          <Tooltip title="Listed">
-            <AttachMoneyIcon 
-              sx={{ 
-                color: 'warning.main', 
-                fontSize: 16
-              }} 
+          <Tooltip title="Listed - Available for sale">
+            <Chip
+              size="small"
+              icon={<ShoppingBasketIcon />}
+              label="Listed"
+              sx={{
+                bgcolor: theme.palette.success.main,
+                color: 'white',
+                fontSize: '0.75rem',
+                height: 24
+              }}
             />
           </Tooltip>
         );
       case 'sold':
         return (
-          <Tooltip title="Sold">
-            <FiberManualRecordIcon 
-              sx={{ 
-                color: 'error.main', 
-                fontSize: 16
-              }} 
+          <Tooltip title="Sold - No longer in inventory">
+            <Chip
+              size="small"
+              label="Sold"
+              sx={{
+                bgcolor: theme.palette.error.main,
+                color: 'white',
+                fontSize: '0.75rem',
+                height: 24
+              }}
             />
           </Tooltip>
         );
@@ -155,16 +183,61 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
       </Avatar>
     );
   };
+  
+  // Handle profit info click
+  const handleProfitInfoClick = (event: React.MouseEvent<HTMLElement>, item: InventoryItem) => {
+    setProfitAnchorEl(event.currentTarget);
+    setSelectedProfitItem(item);
+  };
+  
+  const handleProfitInfoClose = () => {
+    setProfitAnchorEl(null);
+    setSelectedProfitItem(null);
+  };
+  
+  // Render tags for an item
+  const renderTags = (item: InventoryItem) => {
+    if (!item.tags || item.tags.length === 0) {
+      return null;
+    }
+    
+    return (
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+        {item.tags.map((tagId, index) => {
+          const tag = tags.find(t => t.id === tagId);
+          if (!tag) return null;
+          
+          return (
+            <Chip
+              key={tagId}
+              label={tag.name}
+              size="small"
+              icon={<LocalOfferIcon style={{ fontSize: '0.75rem' }} />}
+              sx={{
+                bgcolor: `${tag.color}22`,
+                color: tag.color,
+                borderColor: tag.color,
+                fontSize: '0.7rem',
+                height: 20,
+                '& .MuiChip-icon': {
+                  color: tag.color
+                }
+              }}
+              variant="outlined"
+            />
+          );
+        })}
+      </Box>
+    );
+  };
 
   return (
-    <Paper 
-      sx={{ 
-        width: '100%', 
-        overflow: 'hidden',
-        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
-        borderRadius: 2
-      }}
-    >
+    <Paper sx={{ 
+      width: '100%', 
+      overflow: 'hidden',
+      backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
+      borderRadius: 2
+    }}>
       <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
         <Table stickyHeader size="small">
           <TableHead>
@@ -190,11 +263,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               </TableCell>
               
               {visibleColumns.status && (
-                <TableCell sx={{ minWidth: 50 }}>Status</TableCell>
+                <TableCell sx={{ minWidth: 90 }}>Status</TableCell>
               )}
               
               {visibleColumns.image && (
-                <TableCell sx={{ minWidth: 60 }}>Image</TableCell>
+                <TableCell sx={{ minWidth: 70 }}>Image</TableCell>
               )}
               
               {visibleColumns.name && (
@@ -206,11 +279,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               )}
               
               {visibleColumns.marketPrice && (
-                <TableCell align="right" sx={{ minWidth: 120 }}>Market Price</TableCell>
+                <TableCell align="right" sx={{ minWidth: 130 }}>Market Price</TableCell>
               )}
               
               {visibleColumns.estimatedProfit && (
-                <TableCell align="right" sx={{ minWidth: 120 }}>Est. Profit</TableCell>
+                <TableCell align="right" sx={{ minWidth: 130 }}>Est. Profit</TableCell>
               )}
               
               {visibleColumns.size && (
@@ -222,7 +295,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               )}
               
               {visibleColumns.reference && (
-                <TableCell sx={{ minWidth: 100 }}>Purchase Date</TableCell>
+                <TableCell sx={{ minWidth: 120 }}>Purchase Date</TableCell>
               )}
               
               {visibleColumns.sku && (
@@ -230,11 +303,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               )}
               
               {visibleColumns.daysInInventory && (
-                <TableCell align="right" sx={{ minWidth: 80 }}>Days In</TableCell>
+                <TableCell align="right" sx={{ minWidth: 90 }}>Days In</TableCell>
               )}
               
               {visibleColumns.roi && (
-                <TableCell align="right" sx={{ minWidth: 80 }}>ROI</TableCell>
+                <TableCell align="right" sx={{ minWidth: 90 }}>ROI</TableCell>
               )}
               
               {visibleColumns.purchaseTotal && (
@@ -244,6 +317,12 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               {visibleColumns.shippingAmount && (
                 <TableCell align="right" sx={{ minWidth: 120 }}>Shipping</TableCell>
               )}
+              
+              {visibleColumns.tags && (
+                <TableCell sx={{ minWidth: 150 }}>Tags</TableCell>
+              )}
+              
+              <TableCell sx={{ minWidth: 100 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           
@@ -251,7 +330,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             {items.length === 0 ? (
               <TableRow>
                 <TableCell 
-                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 1} 
+                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} 
                   align="center" 
                   sx={{ py: 3 }}
                 >
@@ -298,7 +377,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     
                     {visibleColumns.status && (
                       <TableCell>
-                        {getStatusIcon(item.status)}
+                        {getStatusElement(item.status)}
                       </TableCell>
                     )}
                     
@@ -317,6 +396,17 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                         }}
                       >
                         {item.productName}
+                        
+                        {/* Badges for listings */}
+                        {item.listings && item.listings.length > 0 && (
+                          <Badge
+                            badgeContent={item.listings.length}
+                            color="primary"
+                            sx={{ ml: 1 }}
+                          >
+                            <ShoppingBasketIcon sx={{ fontSize: '0.875rem' }} />
+                          </Badge>
+                        )}
                       </TableCell>
                     )}
                     
@@ -408,13 +498,28 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                           fontWeight: 'medium'
                         }}
                       >
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'flex-end',
+                          cursor: 'pointer'
+                        }}>
                           {item.estimatedProfit >= 0 ? (
                             <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
                           ) : (
                             <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
                           )}
-                          {money(Math.abs(item.estimatedProfit))}
+                          <Typography
+                            onClick={(e) => handleProfitInfoClick(e, item)}
+                          >
+                            {money(Math.abs(item.estimatedProfit))}
+                          </Typography>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => handleProfitInfoClick(e, item)}
+                          >
+                            <InfoIcon fontSize="small" />
+                          </IconButton>
                         </Box>
                       </TableCell>
                     )}
@@ -478,6 +583,26 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                         {money(item.shippingPrice || 0)}
                       </TableCell>
                     )}
+                    
+                    {visibleColumns.tags && (
+                      <TableCell>
+                        {renderTags(item)}
+                      </TableCell>
+                    )}
+                    
+                    {/* Actions Column */}
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <Tooltip title="Duplicate Item">
+                          <IconButton
+                            size="small"
+                            onClick={() => onDuplicateItem(item)}
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -504,6 +629,99 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           }`,
         }}
       />
+      
+      {/* Profit Breakdown Popover */}
+      <Popover
+        open={Boolean(profitAnchorEl)}
+        anchorEl={profitAnchorEl}
+        onClose={handleProfitInfoClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+      >
+        {selectedProfitItem && (
+          <Card sx={{ 
+            width: 280,
+            p: 0.5,
+            bgcolor: theme.palette.background.paper,
+          }}>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>
+                Profit Breakdown
+              </Typography>
+              <Typography variant="caption" color="text.secondary" paragraph>
+                {selectedProfitItem.productName}
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Market Price</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                    {money(selectedProfitItem.marketPrice)}
+                  </Typography>
+                </Box>
+                <Divider sx={{ my: 0.5 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Purchase Price</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    - {money(selectedProfitItem.purchasePrice)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Shipping Cost</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    - {money(selectedProfitItem.shippingPrice || 0)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                  <Typography variant="body2">Est. Platform Fees (10%)</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    - {money(selectedProfitItem.marketPrice * 0.1)}
+                  </Typography>
+                </Box>
+                <Divider sx={{ my: 0.5 }} />
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                  <Typography variant="subtitle2">Estimated Profit</Typography>
+                  <Typography 
+                    variant="subtitle2" 
+                    sx={{ 
+                      fontWeight: 'bold',
+                      color: selectedProfitItem.estimatedProfit >= 0 
+                        ? theme.palette.success.main 
+                        : theme.palette.error.main
+                    }}
+                  >
+                    {money(selectedProfitItem.estimatedProfit)}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">ROI</Typography>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      fontWeight: 'medium',
+                      color: selectedProfitItem.roi >= 0 
+                        ? theme.palette.success.main 
+                        : theme.palette.error.main
+                    }}
+                  >
+                    {selectedProfitItem.roi.toFixed(1)}%
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Typography variant="caption" color="text.secondary">
+                Note: Actual profit may vary based on final sale price and platform fees.
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
+      </Popover>
     </Paper>
   );
 };

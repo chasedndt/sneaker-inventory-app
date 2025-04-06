@@ -115,7 +115,7 @@ const ColumnCustomizationMenu: React.FC<ColumnCustomizationMenuProps> = ({
         </ListItem>
         
         {essentialColumns.map((column) => (
-          <ListItem key={column} dense button onClick={() => onToggleColumn(column)}>
+          <ListItem key={column} dense component="div" onClick={() => onToggleColumn(column)}>
             <ListItemIcon sx={{ minWidth: 36 }}>
               <Checkbox
                 edge="start"
@@ -136,7 +136,7 @@ const ColumnCustomizationMenu: React.FC<ColumnCustomizationMenuProps> = ({
         </ListItem>
         
         {pricingColumns.map((column) => (
-          <ListItem key={column} dense button onClick={() => onToggleColumn(column)}>
+          <ListItem key={column} dense component="div" onClick={() => onToggleColumn(column)}>
             <ListItemIcon sx={{ minWidth: 36 }}>
               <Checkbox
                 edge="start"
@@ -157,7 +157,7 @@ const ColumnCustomizationMenu: React.FC<ColumnCustomizationMenuProps> = ({
         </ListItem>
         
         {detailColumns.map((column) => (
-          <ListItem key={column} dense button onClick={() => onToggleColumn(column)}>
+          <ListItem key={column} dense component="div" onClick={() => onToggleColumn(column)}>
             <ListItemIcon sx={{ minWidth: 36 }}>
               <Checkbox
                 edge="start"

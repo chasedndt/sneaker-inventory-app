@@ -1,5 +1,4 @@
 // src/pages/InventoryPage.tsx
-// src/pages/InventoryPage.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Box, 
@@ -15,12 +14,18 @@ import {
   MenuItem,
   Select,
   FormControl,
-  InputLabel,
+  FormControlLabel,
+  Checkbox,
   IconButton,
   Tooltip,
-  Chip,
-  Checkbox,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stack,
   SelectChangeEvent,
+  Collapse,
+  Badge,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -28,13 +33,16 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import EditIcon from '@mui/icons-material/Edit';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
-import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -44,8 +52,14 @@ import ColumnCustomizationMenu from '../components/Inventory/ColumnCustomization
 import EditItemModal from '../components/EditItemModal';
 import RecordSaleModal from '../components/Sales/RecordSaleModal';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
+import StockInsights from '../components/Inventory/StockInsights';
+import TagManager from '../components/Inventory/TagManager';
+import ListItemModal from '../components/Inventory/ListItemModal';
+import BatchTagsModal from '../components/Inventory/BatchTagsModal';
 
 import { api, Item } from '../services/api';
+import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
+import { tagService } from '../services/tagService';
 
 export interface InventoryItem extends Item {
   marketPrice: number;
@@ -57,6 +71,20 @@ export interface InventoryItem extends Item {
   sizeSystem?: string;
   reference?: string;
   shippingPrice?: number;
+  tags?: string[];
+  listings?: Array<{
+    platform: string;
+    price: number;
+    url?: string;
+    date: string;
+    status: 'active' | 'sold' | 'expired';
+  }>;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
 }
 
 const calculateDaysInInventory = (purchaseDate: string): number => {
@@ -89,7 +117,8 @@ const InventoryPage: React.FC = () => {
     roi: true,
     purchaseTotal: true,
     shippingAmount: true,
-    status: true
+    status: true,
+    tags: true
   });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [snackbar, setSnackbar] = useState({
@@ -98,17 +127,34 @@ const InventoryPage: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
   
+  // Stock insights state
+  const [showInsights, setShowInsights] = useState<boolean>(false);
+  
+  // Tags state
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [tagManagerOpen, setTagManagerOpen] = useState<boolean>(false);
+  const [batchTagsOpen, setBatchTagsOpen] = useState<boolean>(false);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  
   // Edit modal state
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [itemToEdit, setItemToEdit] = useState<InventoryItem | undefined>(undefined);
   
-  // Record Sale modal state (FIX FOR ISSUE 3.1)
+  // Record Sale modal state
   const [isRecordSaleModalOpen, setIsRecordSaleModalOpen] = useState<boolean>(false);
   const [itemsToSell, setItemsToSell] = useState<Item[]>([]);
   
-  // Confirmation dialog state (FIX FOR ISSUE 3.2)
+  // List Item modal state
+  const [isListItemModalOpen, setIsListItemModalOpen] = useState<boolean>(false);
+  const [itemsToList, setItemsToList] = useState<InventoryItem[]>([]);
+  
+  // Confirmation dialog state
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
   const [itemsToDelete, setItemsToDelete] = useState<number[]>([]);
+  
+  // Duplicate dialog state
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState<boolean>(false);
+  const [itemToDuplicate, setItemToDuplicate] = useState<InventoryItem | undefined>(undefined);
 
   // Fetch items from API
   useEffect(() => {
@@ -117,7 +163,7 @@ const InventoryPage: React.FC = () => {
         setLoading(true);
         const data = await api.getItems();
         
-        // Filter out sold items for inventory page (FIX FOR ISSUE 1.1)
+        // Filter out sold items for inventory page
         const filteredItems = data.filter((item: Item) => item.status !== 'sold');
         
         // Enhance items with additional calculated fields
@@ -140,7 +186,8 @@ const InventoryPage: React.FC = () => {
             status: status as 'unlisted' | 'listed' | 'sold',
             // Make sure to include size and sizeSystem - may be undefined
             size: item.size,
-            sizeSystem: item.sizeSystem
+            sizeSystem: item.sizeSystem,
+            tags: item.tags || []
           };
         });
         
@@ -156,6 +203,18 @@ const InventoryPage: React.FC = () => {
     };
 
     fetchItems();
+
+    // Also fetch tags
+    const fetchTags = async () => {
+      try {
+        const tags = await tagService.getTags();
+        setTags(tags);
+      } catch (err: any) {
+        console.error('Error fetching tags:', err);
+      }
+    };
+
+    fetchTags();
   }, []);
 
   const handleRefresh = async () => {
@@ -163,7 +222,7 @@ const InventoryPage: React.FC = () => {
     try {
       const data = await api.getItems();
       
-      // Filter out sold items (FIX FOR ISSUE 1.1)
+      // Filter out sold items
       const filteredItems = data.filter((item: Item) => item.status !== 'sold');
       
       // Enhance items with additional calculated fields (similar to useEffect)
@@ -183,9 +242,14 @@ const InventoryPage: React.FC = () => {
           daysInInventory,
           status: status as 'unlisted' | 'listed' | 'sold',
           size: item.size,
-          sizeSystem: item.sizeSystem
+          sizeSystem: item.sizeSystem,
+          tags: item.tags || []
         };
       });
+      
+      // Also refresh tags
+      const tags = await tagService.getTags();
+      setTags(tags);
       
       setItems(enhancedItems);
       setSnackbar({
@@ -249,12 +313,20 @@ const InventoryPage: React.FC = () => {
 
   const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
     try {
-      // If marking as sold, open RecordSaleModal (FIX FOR ISSUE 3.1)
+      // If marking as sold, open RecordSaleModal
       if (newStatus === 'sold') {
         // Get the selected items to sell
         const itemsToSell = items.filter(item => itemIds.includes(item.id));
         setItemsToSell(itemsToSell);
         setIsRecordSaleModalOpen(true);
+        return;
+      }
+      
+      // If marking as listed, open ListItemModal
+      if (newStatus === 'listed') {
+        const itemsToList = items.filter(item => itemIds.includes(item.id));
+        setItemsToList(itemsToList);
+        setIsListItemModalOpen(true);
         return;
       }
       
@@ -361,7 +433,7 @@ const InventoryPage: React.FC = () => {
     handleRefresh();
   };
   
-  // FIX FOR ISSUE 3.2: Delete functionality
+  // Delete functionality
   const handleDeleteClick = () => {
     if (selectedItems.length === 0) return;
     setItemsToDelete(selectedItems);
@@ -403,27 +475,191 @@ const InventoryPage: React.FC = () => {
     setDeleteConfirmOpen(false);
     setItemsToDelete([]);
   };
-
-  // FIX FOR ISSUE 3.1: Record Sale modal handlers
+  
+  // Record Sale modal handlers
   const handleRecordSaleModalClose = (refresh = false) => {
     setIsRecordSaleModalOpen(false);
     if (refresh) {
       handleRefresh();
     }
   };
-
-  // Filter items based on search query
-  const filteredItems = useMemo(() => {
-    if (!searchQuery) return items;
+  
+  // List Item modal handlers
+  const handleListItemModalClose = (refresh = false) => {
+    setIsListItemModalOpen(false);
+    if (refresh) {
+      handleRefresh();
+    }
+  };
+  
+  // Duplicate item functionality
+  const handleDuplicateItem = (item: InventoryItem) => {
+    setItemToDuplicate(item);
+    setDuplicateConfirmOpen(true);
+  };
+  
+  const handleDuplicateConfirm = async () => {
+    if (!itemToDuplicate) return;
     
-    const lowerCaseQuery = searchQuery.toLowerCase();
-    return items.filter(item => 
-      item.productName.toLowerCase().includes(lowerCaseQuery) ||
-      item.category.toLowerCase().includes(lowerCaseQuery) ||
-      item.brand.toLowerCase().includes(lowerCaseQuery) ||
-      (item.reference && item.reference.toLowerCase().includes(lowerCaseQuery))
-    );
-  }, [items, searchQuery]);
+    try {
+      // Clone the item without the id
+      const { id, ...itemWithoutId } = itemToDuplicate;
+      
+      // Set the new name to indicate it's a duplicate
+      const newItem = {
+        productDetails: {
+          category: itemToDuplicate.category as any,
+          productName: `${itemToDuplicate.productName} (Copy)`,
+          reference: itemToDuplicate.reference || '',
+          colorway: itemToDuplicate.colorway || '',
+          brand: itemToDuplicate.brand
+        },
+        sizesQuantity: {
+          sizeSystem: itemToDuplicate.sizeSystem || '',
+          selectedSizes: [{
+            system: itemToDuplicate.sizeSystem || '',
+            size: itemToDuplicate.size || '',
+            quantity: '1'
+          }]
+        },
+        purchaseDetails: {
+          purchasePrice: itemToDuplicate.purchasePrice.toString(),
+          purchaseCurrency: 'USD',
+          shippingPrice: (itemToDuplicate.shippingPrice || 0).toString(),
+          shippingCurrency: 'USD',
+          marketPrice: (itemToDuplicate.marketPrice || 0).toString(),
+          purchaseDate: itemToDuplicate.purchaseDate,
+          purchaseLocation: itemToDuplicate.purchaseLocation || '',
+          condition: itemToDuplicate.condition || '',
+          notes: itemToDuplicate.notes || '',
+          orderID: itemToDuplicate.orderID || '',
+          tags: itemToDuplicate.tags || [],
+          taxType: 'none' as 'none' | 'vat' | 'salesTax',
+          vatPercentage: '0',
+          salesTaxPercentage: '0'
+        }
+      };
+      
+      // Call the API to create a new item
+      const result = await api.addItem(newItem, []); // Empty array for images (we're not copying images)
+      
+      // Update the UI
+      handleRefresh();
+      
+      setSnackbar({
+        open: true,
+        message: 'Item duplicated successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      console.error('Error duplicating item:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to duplicate item: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setDuplicateConfirmOpen(false);
+      setItemToDuplicate(undefined);
+    }
+  };
+  
+  const handleDuplicateCancel = () => {
+    setDuplicateConfirmOpen(false);
+    setItemToDuplicate(undefined);
+  };
+  
+  // Tag management
+  const handleOpenTagManager = () => {
+    setTagManagerOpen(true);
+  };
+  
+  const handleCloseTagManager = (tagsChanged = false) => {
+    setTagManagerOpen(false);
+    if (tagsChanged) {
+      handleRefresh();
+    }
+  };
+  
+  // Batch tags functionality
+  const handleOpenBatchTags = () => {
+    if (selectedItems.length === 0) {
+      setSnackbar({
+        open: true,
+        message: 'Please select items to manage tags',
+        severity: 'warning'
+      });
+      return;
+    }
+    
+    setBatchTagsOpen(true);
+  };
+  
+  const handleCloseBatchTags = (tagsChanged = false) => {
+    setBatchTagsOpen(false);
+    if (tagsChanged) {
+      handleRefresh();
+    }
+  };
+  
+  // Tag filtering
+  const handleTagFilter = (tagId: string | null) => {
+    setSelectedTag(tagId);
+    setPage(0); // Reset to first page when filter changes
+  };
+
+  // Export functionality
+  const handleExportCSV = () => {
+    exportToCSV(filteredItems, 'inventory');
+    setSnackbar({
+      open: true,
+      message: 'Inventory exported to CSV successfully',
+      severity: 'success'
+    });
+  };
+  
+  const handleExportExcel = () => {
+    exportToExcel(filteredItems, 'inventory');
+    setSnackbar({
+      open: true,
+      message: 'Inventory exported to Excel successfully',
+      severity: 'success'
+    });
+  };
+  
+  const handleExportPDF = () => {
+    exportToPDF(filteredItems, 'inventory');
+    setSnackbar({
+      open: true,
+      message: 'Inventory exported to PDF successfully',
+      severity: 'success'
+    });
+  };
+
+  // Filter items based on search query and selected tag
+  const filteredItems = useMemo(() => {
+    let filtered = items;
+    
+    // Apply search filter
+    if (searchQuery) {
+      const lowerCaseQuery = searchQuery.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.productName.toLowerCase().includes(lowerCaseQuery) ||
+        item.category.toLowerCase().includes(lowerCaseQuery) ||
+        item.brand.toLowerCase().includes(lowerCaseQuery) ||
+        (item.reference && item.reference.toLowerCase().includes(lowerCaseQuery))
+      );
+    }
+    
+    // Apply tag filter
+    if (selectedTag) {
+      filtered = filtered.filter(item => 
+        item.tags && item.tags.includes(selectedTag)
+      );
+    }
+    
+    return filtered;
+  }, [items, searchQuery, selectedTag]);
 
   // Calculate KPI metrics with 'unlisted' status
   const kpiMetrics = useMemo(() => {
@@ -454,6 +690,15 @@ const InventoryPage: React.FC = () => {
     const startIndex = page * rowsPerPage;
     return filteredItems.slice(startIndex, startIndex + rowsPerPage);
   }, [filteredItems, page, rowsPerPage]);
+
+  // Get tag colors map
+  const tagColorMap = useMemo(() => {
+    const colorMap: Record<string, string> = {};
+    tags.forEach(tag => {
+      colorMap[tag.id] = tag.color;
+    });
+    return colorMap;
+  }, [tags]);
 
   if (loading) {
     return (
@@ -496,8 +741,25 @@ const InventoryPage: React.FC = () => {
         </Box>
       </Box>
       
-      {/* KPI Metrics Section - using updated KPIMetrics component */}
+      {/* KPI Metrics Section */}
       <KPIMetrics metrics={kpiMetrics} />
+      
+      {/* Stock Insights Toggle */}
+      <Box sx={{ mb: 2 }}>
+        <Button 
+          variant="outlined"
+          startIcon={showInsights ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          onClick={() => setShowInsights(!showInsights)}
+          fullWidth
+        >
+          {showInsights ? 'Hide Stock Insights' : 'Show Stock Insights'}
+        </Button>
+      </Box>
+      
+      {/* Stock Insights */}
+      <Collapse in={showInsights}>
+        <StockInsights items={items} />
+      </Collapse>
       
       {/* Search and Actions Section */}
       <Paper 
@@ -519,6 +781,7 @@ const InventoryPage: React.FC = () => {
                 variant="outlined" 
                 startIcon={<FileDownloadIcon />}
                 size="small"
+                onClick={handleExportCSV}
               >
                 Export CSV
               </Button>
@@ -527,6 +790,7 @@ const InventoryPage: React.FC = () => {
                 variant="outlined" 
                 startIcon={<InsertDriveFileIcon />}
                 size="small"
+                onClick={handleExportExcel}
               >
                 Export Excel
               </Button>
@@ -535,6 +799,7 @@ const InventoryPage: React.FC = () => {
                 variant="outlined" 
                 startIcon={<PictureAsPdfIcon />}
                 size="small"
+                onClick={handleExportPDF}
               >
                 Export PDF
               </Button>
@@ -550,16 +815,62 @@ const InventoryPage: React.FC = () => {
         
         <Divider sx={{ my: 2 }} />
         
+        {/* Tag filter row */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+          <Button 
+            variant={selectedTag === null ? "contained" : "outlined"}
+            size="small"
+            onClick={() => handleTagFilter(null)}
+          >
+            All Items
+          </Button>
+          
+          {tags.map(tag => (
+            <Button
+              key={tag.id}
+              variant={selectedTag === tag.id ? "contained" : "outlined"}
+              size="small"
+              onClick={() => handleTagFilter(tag.id)}
+              sx={{ 
+                backgroundColor: selectedTag === tag.id ? tag.color : 'transparent',
+                borderColor: tag.color,
+                color: selectedTag === tag.id ? 'white' : tag.color,
+                '&:hover': {
+                  backgroundColor: selectedTag === tag.id ? tag.color : `${tag.color}22`,
+                }
+              }}
+              startIcon={<LocalOfferIcon />}
+            >
+              {tag.name}
+            </Button>
+          ))}
+          
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleOpenTagManager}
+            startIcon={<LocalOfferIcon />}
+          >
+            Manage Tags
+          </Button>
+        </Box>
+        
         <Grid container spacing={2} alignItems="center">
           <Grid item>
-            <Checkbox 
-              checked={selectedItems.length > 0 && selectedItems.length === filteredItems.length}
-              indeterminate={selectedItems.length > 0 && selectedItems.length < filteredItems.length}
-              onChange={(e) => handleSelectAll(e.target.checked)}
+            <FormControlLabel
+              control={
+                <Checkbox 
+                  checked={selectedItems.length > 0 && selectedItems.length === filteredItems.length}
+                  indeterminate={selectedItems.length > 0 && selectedItems.length < filteredItems.length}
+                  onChange={(e) => handleSelectAll(e.target.checked)}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {selectedItems.length > 0 ? `${selectedItems.length} selected` : 'Select all'}
+                </Typography>
+              }
             />
-            <Typography variant="body2" component="span">
-              {selectedItems.length > 0 ? `${selectedItems.length} selected` : 'Select all'}
-            </Typography>
           </Grid>
           
           {selectedItems.length > 0 && (
@@ -579,7 +890,18 @@ const InventoryPage: React.FC = () => {
                 <Button 
                   variant="contained" 
                   size="small"
-                  startIcon={<AttachMoneyIcon />}
+                  startIcon={<LocalOfferIcon />}
+                  onClick={handleOpenBatchTags}
+                >
+                  Manage Tags
+                </Button>
+              </Grid>
+              
+              <Grid item>
+                <Button 
+                  variant="contained" 
+                  size="small"
+                  startIcon={<ShoppingBasketIcon />}
                   onClick={() => handleUpdateStatus(selectedItems, 'listed')}
                 >
                   Mark as Listed
@@ -597,7 +919,22 @@ const InventoryPage: React.FC = () => {
                 </Button>
               </Grid>
               
-              {/* FIX FOR ISSUE 3.2: Delete Button */}
+              {selectedItems.length === 1 && (
+                <Grid item>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ContentCopyIcon />}
+                    onClick={() => {
+                      const item = items.find(item => item.id === selectedItems[0]);
+                      if (item) handleDuplicateItem(item);
+                    }}
+                  >
+                    Duplicate Item
+                  </Button>
+                </Grid>
+              )}
+              
               <Grid item>
                 <Button 
                   variant="contained" 
@@ -632,17 +969,20 @@ const InventoryPage: React.FC = () => {
         </Grid>
       </Paper>
       
-      {/* Inventory Table - using updated InventoryTable component */}
+      {/* Inventory Table */}
       <InventoryTable 
         items={paginatedItems}
         visibleColumns={visibleColumns}
         selectedItems={selectedItems}
         onSelectItem={handleSelectItem}
         onUpdateMarketPrice={handleUpdateMarketPrice}
+        onDuplicateItem={handleDuplicateItem}
         page={page}
         rowsPerPage={rowsPerPage}
         totalItems={filteredItems.length}
         onPageChange={handlePageChange}
+        tagColorMap={tagColorMap}
+        tags={tags}
       />
       
       {/* Column Customization Menu */}
@@ -662,14 +1002,36 @@ const InventoryPage: React.FC = () => {
         isMultiple={selectedItems.length > 1}
       />
       
-      {/* FIX FOR ISSUE 3.1: Record Sale Modal */}
+      {/* Record Sale Modal */}
       <RecordSaleModal
         open={isRecordSaleModalOpen}
         onClose={handleRecordSaleModalClose}
         items={itemsToSell}
       />
       
-      {/* FIX FOR ISSUE 3.2: Confirmation Dialog for Delete */}
+      {/* List Item Modal */}
+      <ListItemModal
+        open={isListItemModalOpen}
+        onClose={handleListItemModalClose}
+        items={itemsToList}
+      />
+      
+      {/* Tag Manager Dialog */}
+      <TagManager
+        open={tagManagerOpen}
+        onClose={handleCloseTagManager}
+        tags={tags}
+      />
+      
+      {/* Batch Tags Modal */}
+      <BatchTagsModal
+        open={batchTagsOpen}
+        onClose={handleCloseBatchTags}
+        itemIds={selectedItems}
+        tags={tags}
+      />
+      
+      {/* Confirmation Dialog for Delete */}
       <ConfirmationDialog
         open={deleteConfirmOpen}
         title="Confirm Delete"
@@ -679,6 +1041,18 @@ const InventoryPage: React.FC = () => {
         confirmButtonColor="error"
         onConfirm={handleDeleteConfirm}
         onCancel={handleDeleteCancel}
+      />
+      
+      {/* Confirmation Dialog for Duplicate */}
+      <ConfirmationDialog
+        open={duplicateConfirmOpen}
+        title="Confirm Duplicate"
+        message={`Are you sure you want to duplicate "${itemToDuplicate?.productName}"? This will create a new unlisted item with the same details.`}
+        confirmButtonText="Duplicate"
+        cancelButtonText="Cancel"
+        confirmButtonColor="primary"
+        onConfirm={handleDuplicateConfirm}
+        onCancel={handleDuplicateCancel}
       />
       
       {/* Snackbar for notifications */}
