@@ -250,8 +250,15 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
     try {
       const currentItem = items[selectedItemIndex];
       
+      // Format the listings properly for storage
+      const formattedListings = listings.map(listing => ({
+        ...listing,
+        // Ensure date is stored as ISO string
+        date: listing.date.toISOString()
+      }));
+      
       // Update the item with new listings
-      await api.updateItemField(currentItem.id, 'listings', listings);
+      await api.updateItemField(currentItem.id, 'listings', formattedListings);
       
       // If item is not already marked as listed, update its status
       if (currentItem.status !== 'listed' && listings.length > 0) {
@@ -545,7 +552,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
               </Grid>
               
               <Grid item xs={12}>
-                <TextField
+              <TextField
                   label="Listing URL (Optional)"
                   value={newListing.url || ''}
                   onChange={(e) => setNewListing({ ...newListing, url: e.target.value })}

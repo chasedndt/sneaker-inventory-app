@@ -321,8 +321,6 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               {visibleColumns.tags && (
                 <TableCell sx={{ minWidth: 150 }}>Tags</TableCell>
               )}
-              
-              <TableCell sx={{ minWidth: 100 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           
@@ -589,20 +587,6 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                         {renderTags(item)}
                       </TableCell>
                     )}
-                    
-                    {/* Actions Column */}
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Tooltip title="Duplicate Item">
-                          <IconButton
-                            size="small"
-                            onClick={() => onDuplicateItem(item)}
-                          >
-                            <ContentCopyIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
                   </TableRow>
                 );
               })
@@ -699,7 +683,9 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     {money(selectedProfitItem.estimatedProfit)}
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}>
+                <Box sx={{ justifyContent: 'space-between', 
+                  mt: 0.5
+                }}>
                   <Typography variant="caption" color="text.secondary">ROI</Typography>
                   <Typography 
                     variant="caption" 
