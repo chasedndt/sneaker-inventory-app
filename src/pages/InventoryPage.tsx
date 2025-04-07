@@ -43,6 +43,7 @@ import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import InventoryIcon from '@mui/icons-material/Inventory';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -311,6 +312,49 @@ const InventoryPage: React.FC = () => {
     }
   };
 
+  // New handler for marking items as unlisted
+  const handleMarkAsUnlisted = async () => {
+    try {
+      // First update UI for immediate feedback
+      setItems(prevItems => 
+        prevItems.map(item => {
+          if (selectedItems.includes(item.id)) {
+            return {
+              ...item,
+              status: 'unlisted',
+              listings: [] // Clear any listings
+            };
+          }
+          return item;
+        })
+      );
+      
+      // Then persist to backend
+      for (const itemId of selectedItems) {
+        // Update item status to unlisted
+        await api.updateItemField(itemId, 'status', 'unlisted');
+        // Clear listings
+        await api.updateItemField(itemId, 'listings', []);
+      }
+      
+      setSnackbar({
+        open: true,
+        message: `${selectedItems.length} item(s) marked as unlisted`,
+        severity: 'success'
+      });
+      
+      // Clear selection after status update
+      setSelectedItems([]);
+    } catch (error: any) {
+      console.error('Error marking as unlisted:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to mark as unlisted: ${error.message}`,
+        severity: 'error'
+      });
+    }
+  };
+
   const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
     try {
       // If marking as sold, open RecordSaleModal
@@ -442,6 +486,7 @@ const InventoryPage: React.FC = () => {
 
   const handleDeleteConfirm = async () => {
     try {
+      setLoading(true);
       // Delete items from backend
       for (const itemId of itemsToDelete) {
         await api.deleteItem(itemId);
@@ -466,6 +511,7 @@ const InventoryPage: React.FC = () => {
         severity: 'error'
       });
     } finally {
+      setLoading(false);
       setDeleteConfirmOpen(false);
       setItemsToDelete([]);
     }
@@ -905,6 +951,17 @@ const InventoryPage: React.FC = () => {
                   onClick={() => handleUpdateStatus(selectedItems, 'listed')}
                 >
                   Mark as Listed
+                </Button>
+              </Grid>
+              
+              <Grid item>
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  startIcon={<InventoryIcon />}
+                  onClick={handleMarkAsUnlisted}
+                >
+                  Mark as Unlisted
                 </Button>
               </Grid>
               

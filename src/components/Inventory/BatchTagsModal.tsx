@@ -133,21 +133,22 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
       
       // Apply changes to each item
       for (const itemId of itemIds) {
+        // Get current item tags
         const item = await api.getItem(itemId);
-        let itemTags = item.tags || [];
+        let currentTags = item.tags || [];
         
-        // Add tags
+        // Add new tags
         for (const tagId of tagsToAdd) {
-          if (!itemTags.includes(tagId)) {
-            itemTags.push(tagId);
+          if (!currentTags.includes(tagId)) {
+            currentTags.push(tagId);
           }
         }
         
         // Remove tags
-        itemTags = itemTags.filter((tag: string) => !tagsToRemove.includes(tag));
+        currentTags = currentTags.filter((tag: string) => !tagsToRemove.includes(tag));
         
         // Update the item
-        await api.updateItemField(itemId, 'tags', itemTags);
+        await api.updateItemField(itemId, 'tags', currentTags);
       }
       
       setSuccess(`Applied tag changes to ${itemIds.length} item(s)`);

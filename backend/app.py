@@ -385,7 +385,29 @@ def create_app():
                     item.market_price = float(value)
                 except ValueError:
                     return jsonify({'error': 'Invalid market price value'}), 400
-            # Add other fields as needed
+            elif field == 'tags':
+                # Handle tags updates - value should be an array of tag IDs
+                if not isinstance(value, list):
+                    logger.error(f"❌ Invalid tags value: {value}")
+                    return jsonify({'error': 'Tags value must be an array'}), 400
+                
+                # Clear existing tags
+                item.tags = []
+                
+                # Add new tags
+                for tag_id in value:
+                    tag = Tag.query.get(tag_id)
+                    if tag:
+                        item.tags.append(tag)
+            elif field == 'listings':
+                # Handle listings updates
+                if not isinstance(value, list):
+                    logger.error(f"❌ Invalid listings value: {value}")
+                    return jsonify({'error': 'Listings value must be an array'}), 400
+                
+                # Store listings as JSON in a notes field or similar
+                # This is a workaround until you have a proper listings table
+                item.listings = json.dumps(value)
             else:
                 logger.error(f"❌ Invalid field name: {field}")
                 return jsonify({'error': f'Invalid field name: {field}'}), 400

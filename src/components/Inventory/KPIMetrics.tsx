@@ -94,12 +94,6 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                     {metrics.listedItems} Listed
                   </Typography>
                 </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  <FiberManualRecordIcon sx={{ color: 'error.main', fontSize: 12, mr: 0.5 }} />
-                  <Typography variant="caption">
-                    {metrics.soldItems} Sold
-                  </Typography>
-                </Box>
               </Box>
             </Box>
           </Box>
