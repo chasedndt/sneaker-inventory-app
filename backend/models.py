@@ -1,6 +1,7 @@
 # backend/models.py
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+import json
 
 db = SQLAlchemy()
 
@@ -33,12 +34,31 @@ class Item(db.Model):
     
     # Status - field for tracking item status
     status = db.Column(db.String(20), default='unlisted')  # 'unlisted', 'listed', or 'sold'
-
+    
+    # Listings - stored as JSON string
+    _listings = db.Column(db.Text, name='listings')
+    
     # Relationships
     sizes = db.relationship('Size', backref='item', lazy=True, cascade="all, delete-orphan")
     images = db.relationship('Image', backref='item', lazy=True, cascade="all, delete-orphan")
     tags = db.relationship('Tag', secondary='item_tags', backref='items', lazy=True)
     sales = db.relationship('Sale', backref='item', lazy=True, cascade="all, delete-orphan")
+
+    @property
+    def listings(self):
+        if self._listings:
+            try:
+                return json.loads(self._listings)
+            except (json.JSONDecodeError, TypeError):
+                return []
+        return []
+        
+    @listings.setter
+    def listings(self, value):
+        if value is not None:
+            self._listings = json.dumps(value)
+        else:
+            self._listings = None
 
     def to_dict(self):
         """
@@ -53,6 +73,9 @@ class Item(db.Model):
             size_info = self.sizes[0] if self.sizes else None
             size = size_info.size if size_info else None
             size_system = size_info.system if size_info else None
+            
+            # Get tags for this item
+            item_tags = [tag.id for tag in self.tags] if self.tags else []
             
             return {
                 'id': self.id,
@@ -72,6 +95,8 @@ class Item(db.Model):
                 'size': size,
                 'sizeSystem': size_system,
                 'status': self.status,
+                'tags': item_tags,
+                'listings': self.listings,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }

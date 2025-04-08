@@ -144,7 +144,7 @@ def update_tag(tag_id):
             
             # Check for duplicate name
             existing_tag = Tag.query.filter_by(name=name).first()
-            if existing_tag and existing_tag.id != tag.id:
+            if existing_tag and str(existing_tag.id) != str(tag_id):
                 logger.error(f"❌ Tag with name '{name}' already exists")
                 return jsonify({'error': f"Tag with name '{name}' already exists"}), 400
             
@@ -208,6 +208,14 @@ def delete_tag(tag_id):
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
+            # Remove tag from all items first
+            for item in tag.items:
+                if tag in item.tags:
+                    item.tags.remove(tag)
+            
+            # Flush the session to ensure the item-tag relationships are updated
+            db.session.flush()
+            
             # Delete tag
             db.session.delete(tag)
             db.session.commit()
@@ -269,19 +277,18 @@ def apply_tags_to_item(item_id):
             logger.error(f"❌ Item with ID {item_id} not found")
             return jsonify({'error': f"Item with ID {item_id} not found"}), 404
         
-        # Check if all tags exist
+        # Remove existing tags
+        item.tags = []
+        db.session.flush()
+        
+        # Check if all tags exist and add them
         for tag_id in tag_ids:
             tag = Tag.query.get(tag_id)
             if not tag:
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
-        
-        # Clear existing tags for the item
-        item.tags = []  # This will clear the association in item_tags table
-        
-        # Add new tags
-        for tag_id in tag_ids:
-            tag = Tag.query.get(tag_id)
+            
+            # Add tag to item
             item.tags.append(tag)
         
         db.session.commit()

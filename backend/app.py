@@ -405,12 +405,18 @@ def create_app():
                     logger.error(f"❌ Invalid listings value: {value}")
                     return jsonify({'error': 'Listings value must be an array'}), 400
                 
-                # Store listings as JSON in a notes field or similar
-                # This is a workaround until you have a proper listings table
-                item.listings = json.dumps(value)
+                # Store listings as JSON
+                item.listings = value
+                
+                # If there are listings, ensure the item is marked as listed
+                if value and len(value) > 0 and item.status != 'sold':
+                    item.status = 'listed'
             else:
                 logger.error(f"❌ Invalid field name: {field}")
                 return jsonify({'error': f'Invalid field name: {field}'}), 400
+            
+            # Update the updated_at timestamp
+            item.updated_at = datetime.utcnow()
             
             # Commit changes
             db.session.commit()
@@ -460,6 +466,11 @@ def create_app():
                         logger.info(f"✅ Deleted image file: {file_path}")
                 except Exception as img_err:
                     logger.error(f"❌ Failed to delete image file: {str(img_err)}")
+            
+            # First remove the item from the many-to-many relationship
+            # This prevents the error about the tag.color column during deletion
+            item.tags = []
+            db.session.flush()
             
             # Delete the item (cascade should handle associated records)
             db.session.delete(item)
