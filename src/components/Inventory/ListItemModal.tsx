@@ -101,10 +101,18 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   useEffect(() => {
     if (open && items.length > 0) {
       setSelectedItemIndex(0);
-      setListings((items[0].listings || []).map(listing => ({
-        ...listing,
-        date: dayjs(listing.date as string)
-      })) as Listing[]);
+      
+      // Initialize listings from the current item
+      const currentItem = items[0];
+      if (currentItem.listings && Array.isArray(currentItem.listings)) {
+        setListings(currentItem.listings.map(listing => ({
+          ...listing,
+          date: dayjs(listing.date)
+        })));
+      } else {
+        setListings([]);
+      }
+      
       setNewListing({
         platform: '',
         price: 0,
@@ -117,10 +125,28 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
       setSuccess(null);
       setChangesDetected(false);
       
-      // Load stored platforms from API or localStorage
+      // Load stored platforms
       loadPlatforms();
     }
   }, [open, items]);
+
+  // Update listings when selected item changes
+  useEffect(() => {
+    if (open && items.length > 0 && selectedItemIndex < items.length) {
+      const currentItem = items[selectedItemIndex];
+      
+      if (currentItem.listings && Array.isArray(currentItem.listings)) {
+        setListings(currentItem.listings.map(listing => ({
+          ...listing,
+          date: dayjs(listing.date)
+        })));
+      } else {
+        setListings([]);
+      }
+      
+      setChangesDetected(false);
+    }
+  }, [selectedItemIndex, items, open]);
 
   // Load saved platforms
   const loadPlatforms = async () => {
@@ -151,11 +177,6 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   const handleItemChange = (event: SelectChangeEvent<number>) => {
     const index = event.target.value as number;
     setSelectedItemIndex(index);
-    setListings((items[index].listings || []).map(listing => ({
-      ...listing,
-      date: dayjs(listing.date as string)
-    })) as Listing[]);
-    setChangesDetected(false);
   };
 
   // Add a new listing
@@ -254,7 +275,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
       const formattedListings = listings.map(listing => ({
         ...listing,
         // Ensure date is stored as ISO string
-        date: listing.date.toISOString()
+        date: typeof listing.date === 'object' ? listing.date.toISOString() : listing.date
       }));
       
       // Update the item with new listings
@@ -434,7 +455,9 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
                             Price: {money(listing.price)}
                           </Typography>
                           <Typography variant="caption" display="block">
-                            Listed: {dayjs(listing.date as any).format('MM/DD/YYYY')}
+                            Listed: {typeof listing.date === 'object' 
+                              ? listing.date.format('MM/DD/YYYY') 
+                              : dayjs(listing.date).format('MM/DD/YYYY')}
                           </Typography>
                           {listing.url && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
