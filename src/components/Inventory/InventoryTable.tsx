@@ -35,8 +35,11 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import InfoIcon from '@mui/icons-material/Info';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
+import StorefrontIcon from '@mui/icons-material/Storefront';
+import LinkIcon from '@mui/icons-material/Link';
 import { InventoryItem, Tag } from '../../pages/InventoryPage';
 import useFormat from '../../hooks/useFormat';
+import dayjs from 'dayjs';
 
 interface InventoryTableProps {
   items: InventoryItem[];
@@ -68,14 +71,19 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   tags
 }) => {
   const theme = useTheme();
-  const { money, date } = useFormat();
+  const { money, date, getCurrentCurrency } = useFormat();
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
+  const currencySymbol = getCurrentCurrency();
   
   // Profit tooltip state
   const [profitAnchorEl, setProfitAnchorEl] = useState<HTMLElement | null>(null);
   const [selectedProfitItem, setSelectedProfitItem] = useState<InventoryItem | null>(null);
+  
+  // Listing tooltip state
+  const [listingAnchorEl, setListingAnchorEl] = useState<HTMLElement | null>(null);
+  const [selectedListingItem, setSelectedListingItem] = useState<InventoryItem | null>(null);
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -195,6 +203,19 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     setSelectedProfitItem(null);
   };
   
+  // Handle listings info click
+  const handleListingsInfoClick = (event: React.MouseEvent<HTMLElement>, item: InventoryItem) => {
+    if (item.listings && item.listings.length > 0) {
+      setListingAnchorEl(event.currentTarget);
+      setSelectedListingItem(item);
+    }
+  };
+  
+  const handleListingsInfoClose = () => {
+    setListingAnchorEl(null);
+    setSelectedListingItem(null);
+  };
+  
   // Render tags for an item
   const renderTags = (item: InventoryItem) => {
     if (!item.tags || item.tags.length === 0) {
@@ -228,6 +249,28 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           );
         })}
       </Box>
+    );
+  };
+
+  // Count item's listings
+  const getListingsBadge = (item: InventoryItem) => {
+    if (!item.listings || item.listings.length === 0) {
+      return null;
+    }
+    
+    const activeListings = item.listings.filter(listing => listing.status === 'active').length;
+    
+    return (
+      <Tooltip title={`${activeListings} active listing(s)`}>
+        <Badge
+          badgeContent={activeListings}
+          color="primary"
+          sx={{ ml: 1 }}
+          onClick={(e) => handleListingsInfoClick(e, item)}
+        >
+          <ShoppingBasketIcon fontSize="small" sx={{ color: theme.palette.primary.main }} />
+        </Badge>
+      </Tooltip>
     );
   };
 
@@ -393,18 +436,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                           cursor: 'pointer',
                         }}
                       >
-                        {item.productName}
-                        
-                        {/* Badges for listings */}
-                        {item.listings && item.listings.length > 0 && (
-                          <Badge
-                            badgeContent={item.listings.length}
-                            color="primary"
-                            sx={{ ml: 1 }}
-                          >
-                            <ShoppingBasketIcon sx={{ fontSize: '0.875rem' }} />
-                          </Badge>
-                        )}
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <Typography color="inherit">{item.productName}</Typography>
+                          {/* Display listings badge if item has listings */}
+                          {item.status === 'listed' && getListingsBadge(item)}
+                        </Box>
                       </TableCell>
                     )}
                     
@@ -440,7 +476,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                               }}
                               InputProps={{
                                 startAdornment: (
-                                  <InputAdornment position="start">$</InputAdornment>
+                                  <InputAdornment position="start">{currencySymbol}</InputAdornment>
                                 ),
                                 endAdornment: (
                                   <InputAdornment position="end">
@@ -683,7 +719,9 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                     {money(selectedProfitItem.estimatedProfit)}
                   </Typography>
                 </Box>
-                <Box sx={{ justifyContent: 'space-between', 
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
                   mt: 0.5
                 }}>
                   <Typography variant="caption" color="text.secondary">ROI</Typography>
@@ -704,6 +742,103 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               <Typography variant="caption" color="text.secondary">
                 Note: Actual profit may vary based on final sale price and platform fees.
               </Typography>
+            </CardContent>
+          </Card>
+        )}
+      </Popover>
+
+      {/* Listings Info Popover */}
+      <Popover
+        open={Boolean(listingAnchorEl)}
+        anchorEl={listingAnchorEl}
+        onClose={handleListingsInfoClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'center',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'center',
+        }}
+      >
+        {selectedListingItem && selectedListingItem.listings && (
+          <Card sx={{ 
+            width: 320,
+            p: 0.5,
+            bgcolor: theme.palette.background.paper,
+          }}>
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>
+                Active Listings
+              </Typography>
+              <Typography variant="caption" color="text.secondary" paragraph>
+                {selectedListingItem.productName}
+              </Typography>
+              
+              <Divider sx={{ my: 1 }} />
+              
+              {selectedListingItem.listings.map((listing, index) => (
+                <Box key={index} sx={{ mb: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <StorefrontIcon fontSize="small" />
+                        {listing.platform}
+                      </Box>
+                    </Typography>
+                    <Chip 
+                      label={listing.status.charAt(0).toUpperCase() + listing.status.slice(1)} 
+                      size="small"
+                      color={
+                        listing.status === 'active' ? 'success' : 
+                        listing.status === 'sold' ? 'warning' : 
+                        'error'
+                      }
+                      sx={{ height: 20, fontSize: '0.7rem' }}
+                    />
+                  </Box>
+
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2">Price:</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                      {money(listing.price)}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                    <Typography variant="body2">Date Listed:</Typography>
+                    <Typography variant="body2">
+                      {typeof listing.date === 'string' 
+                        ? date(listing.date) 
+                        : dayjs(listing.date).format('MM/DD/YYYY')}
+                    </Typography>
+                  </Box>
+
+                  {listing.url && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography 
+                        variant="body2" 
+                        component="a" 
+                        href={listing.url} 
+                        target="_blank"
+                        sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: 0.5,
+                          color: theme.palette.primary.main
+                        }}
+                      >
+                        <LinkIcon fontSize="small" />
+                        View Listing
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {index < (selectedListingItem.listings?.length || 0) - 1 && (
+                    <Divider sx={{ my: 1 }} />
+                  )}
+                </Box>
+              ))}
             </CardContent>
           </Card>
         )}

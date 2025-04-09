@@ -48,8 +48,9 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   
-  // Track tag actions: add, remove, or no change
+  // Track tag actions: add, remove, or no change (null)
   const [tagActions, setTagActions] = useState<TagActionState>({});
   
   // Current tags for selected items
@@ -61,7 +62,7 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
       setLoading(true);
       setError(null);
       setSuccess(null);
-      setTagActions({});
+      setDebugInfo(null);
       
       // Initialize with empty tag actions
       const initialTagActions: TagActionState = {};
@@ -77,12 +78,14 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
           
           for (const itemId of itemIds) {
             const item = await api.getItem(itemId);
+            console.log(`Current tags for item ${itemId}:`, item.tags);
             itemTagsData[itemId] = item.tags || [];
           }
           
           setItemTags(itemTagsData);
           setLoading(false);
         } catch (err: any) {
+          console.error('Failed to fetch item tags:', err);
           setError(`Failed to fetch item tags: ${err.message}`);
           setLoading(false);
         }
@@ -106,17 +109,26 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
         nextAction = null;
       }
       
+      console.log(`Toggled tag ${tagId} from ${currentAction} to ${nextAction}`);
       return { ...prev, [tagId]: nextAction };
     });
   };
   
   // Apply tag changes to all selected items
   const handleApplyChanges = async () => {
+    // Check if any changes have been made
+    const hasChanges = Object.values(tagActions).some(action => action !== null);
+    if (!hasChanges) {
+      setError('No tag changes to apply');
+      return;
+    }
+    
     setLoading(true);
     setError(null);
+    setDebugInfo(null);
     
     try {
-      // Get active tag changes
+      // Get tags to add and remove
       const tagsToAdd = Object.entries(tagActions)
         .filter(([_, action]) => action === 'add')
         .map(([tagId]) => tagId);
@@ -124,41 +136,53 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
       const tagsToRemove = Object.entries(tagActions)
         .filter(([_, action]) => action === 'remove')
         .map(([tagId]) => tagId);
-        
-      if (tagsToAdd.length === 0 && tagsToRemove.length === 0) {
-        setError('No tag changes to apply');
-        setLoading(false);
-        return;
-      }
       
-      // Apply changes to each item
+      console.log('Tags to add:', tagsToAdd);
+      console.log('Tags to remove:', tagsToRemove);
+      
+      // Apply changes to each item one by one
       for (const itemId of itemIds) {
-        // Get current item tags
-        const item = await api.getItem(itemId);
-        let currentTags = item.tags || [];
-        
-        // Add new tags
-        for (const tagId of tagsToAdd) {
-          if (!currentTags.includes(tagId)) {
-            currentTags.push(tagId);
+        try {
+          console.log(`Processing item ${itemId}`);
+          // Get current item tags
+          const item = await api.getItem(itemId);
+          console.log(`Current tags for item ${itemId}:`, item.tags);
+          
+          let currentTags = Array.isArray(item.tags) ? [...item.tags] : [];
+          console.log(`Current tags array:`, currentTags);
+          
+          // Add new tags
+          for (const tagId of tagsToAdd) {
+            if (!currentTags.includes(tagId)) {
+              currentTags.push(tagId);
+              console.log(`Added tag ${tagId} to item ${itemId}`);
+            }
           }
+          
+          // Remove tags
+          currentTags = currentTags.filter(tag => !tagsToRemove.includes(tag));
+          console.log(`Updated tags for item ${itemId}:`, currentTags);
+          
+          // Update the item using the updateItemField method
+          const result = await api.updateItemField(itemId, 'tags', currentTags);
+          console.log(`Update result for item ${itemId}:`, result);
+        } catch (itemError: any) {
+          console.error(`Error updating item ${itemId}:`, itemError);
+          throw new Error(`Error updating item ${itemId}: ${itemError.message}`);
         }
-        
-        // Remove tags
-        currentTags = currentTags.filter((tag: string) => !tagsToRemove.includes(tag));
-        
-        // Update the item
-        await api.updateItemField(itemId, 'tags', currentTags);
       }
       
       setSuccess(`Applied tag changes to ${itemIds.length} item(s)`);
+      setDebugInfo(`Tags to add: ${tagsToAdd.join(', ')}\nTags to remove: ${tagsToRemove.join(', ')}`);
       
-      // Close the modal after a brief delay
+      // Close the modal after a brief delay to show the success message
       setTimeout(() => {
         onClose(true);
       }, 1500);
     } catch (err: any) {
+      console.error('Failed to apply tag changes:', err);
       setError(`Failed to apply tag changes: ${err.message}`);
+      setDebugInfo(`Error occurred during tag application. Check browser console for details.`);
     } finally {
       setLoading(false);
     }
@@ -166,11 +190,25 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   
   // Check if tag is on all items, some items, or no items
   const getTagStatus = (tagId: string): 'all' | 'some' | 'none' => {
-    const itemsWithTag = Object.values(itemTags).filter(tags => tags.includes(tagId)).length;
+    if (Object.keys(itemTags).length === 0) {
+      return 'none';
+    }
+    
+    const itemCount = Object.keys(itemTags).length;
+    const itemsWithTag = Object.values(itemTags).filter(tags => 
+      Array.isArray(tags) && tags.includes(tagId)
+    ).length;
     
     if (itemsWithTag === 0) return 'none';
-    if (itemsWithTag === itemIds.length) return 'all';
+    if (itemsWithTag === itemCount) return 'all';
     return 'some';
+  };
+
+  // Get color for tag display based on status
+  const getTagColor = (tagId: string, status: 'all' | 'some' | 'none'): string => {
+    const tag = tags.find(t => t.id === tagId);
+    if (!tag) return '#888888';
+    return status === 'all' ? tag.color : status === 'some' ? `${tag.color}80` : '#888888';
   };
 
   return (
@@ -212,6 +250,15 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
         {success && (
           <Alert severity="success" sx={{ mb: 2 }}>
             {success}
+          </Alert>
+        )}
+        
+        {debugInfo && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="subtitle2">Debug Information:</Typography>
+            <Typography variant="body2" component="pre" sx={{ whiteSpace: 'pre-wrap' }}>
+              {debugInfo}
+            </Typography>
           </Alert>
         )}
         
@@ -268,10 +315,10 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
                               ? theme.palette.error.light 
                               : `${tag.color}60`,
                           },
-                          color: tagStatus === 'all' ? '#fff' : undefined,
-                          fontWeight: tagStatus !== 'none' ? 'bold' : 'normal'
+                          color: tagStatus === 'all' && !action ? '#fff' : undefined,
+                          fontWeight: tagStatus !== 'none' || action ? 'bold' : 'normal'
                         }}
-                        variant={tagStatus === 'none' ? 'outlined' : 'filled'}
+                        variant={tagStatus === 'none' && !action ? 'outlined' : 'filled'}
                       />
                     </Grid>
                   );
