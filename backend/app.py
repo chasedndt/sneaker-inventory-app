@@ -5,6 +5,7 @@ from flask_migrate import Migrate
 import os
 import json
 import time
+import traceback
 from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
@@ -12,8 +13,12 @@ from models import db, Item, Size, Image, Tag, Sale, Expense
 from config import Config
 from datetime import datetime, timedelta
 from tag_routes import tag_routes
+import re
 
-
+def convert_to_snake_case(name):
+    """Convert a string from camelCase to snake_case."""
+    pattern = re.compile(r'(?<!^)(?=[A-Z])')
+    return pattern.sub('_', name).lower()
 
 def create_app():
     app = Flask(__name__)
@@ -356,7 +361,19 @@ def create_app():
         """
         try:
             logger.info(f"🔄 Updating field for item {item_id}")
-            data = request.json
+            
+            # Log request data for debugging
+            logger.info(f"Request data: {request.data}")
+            
+            # Parse request data and handle potential JSON errors
+            try:
+                data = request.json
+                if not data:
+                    logger.error("Empty request data")
+                    return jsonify({'error': 'Empty request data'}), 400
+            except Exception as json_err:
+                logger.error(f"Invalid JSON in request: {str(json_err)}")
+                return jsonify({'error': f'Invalid JSON in request: {str(json_err)}'}), 400
             
             # Validate request
             if 'field' not in data or 'value' not in data:
@@ -366,14 +383,67 @@ def create_app():
             field = data['field']
             value = data['value']
             
+            logger.info(f"Field: {field}, Value: {value}")
+            
             # Check if item exists
             item = Item.query.get(item_id)
             if not item:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
-            # Update the specific field
-            if field == 'status':
+            # Special handling for tags field
+            if field == 'tags':
+                try:
+                    # Validate that value is a list
+                    if not isinstance(value, list):
+                        logger.error(f"❌ Tags value must be a list, got: {type(value)}")
+                        return jsonify({'error': 'Tags value must be a list'}), 400
+                    
+                    # Clear existing tags
+                    item.tags = []
+                    db.session.flush()
+                    
+                    # Find and add each tag
+                    for tag_id in value:
+                        # Try to convert to int if it's a numeric string
+                        tag_id_to_use = tag_id
+                        if isinstance(tag_id, str) and tag_id.isdigit():
+                            tag_id_to_use = int(tag_id)
+                        
+                        # Try to find the tag
+                        tag = Tag.query.get(tag_id_to_use)
+                        
+                        if tag:
+                            item.tags.append(tag)
+                            logger.info(f"Added tag {tag.id} to item {item_id}")
+                        else:
+                            logger.warning(f"Tag with ID {tag_id} not found")
+                    
+                    # Log the updated tags
+                    logger.info(f"Updated tags for item {item_id}: {[t.id for t in item.tags]}")
+                except Exception as tag_err:
+                    db.session.rollback()
+                    logger.error(f"❌ Error updating tags: {str(tag_err)}")
+                    return jsonify({'error': f'Error updating tags: {str(tag_err)}'}), 500
+            
+            # Special handling for listings field
+            elif field == 'listings':
+                try:
+                    # Validate listings format
+                    if not isinstance(value, list):
+                        logger.error(f"❌ Listings value must be a list, got: {type(value)}")
+                        return jsonify({'error': 'Listings value must be a list'}), 400
+                    
+                    # Store listings as JSON string
+                    item._listings = json.dumps(value)
+                    logger.info(f"Updated listings for item {item_id}")
+                except Exception as listings_err:
+                    db.session.rollback()
+                    logger.error(f"❌ Error updating listings: {str(listings_err)}")
+                    return jsonify({'error': f'Error updating listings: {str(listings_err)}'}), 500
+            
+            # Update the standard fields
+            elif field == 'status':
                 # Validate status
                 valid_statuses = ['unlisted', 'listed', 'sold']
                 if value not in valid_statuses:
@@ -383,56 +453,57 @@ def create_app():
             elif field == 'marketPrice':
                 try:
                     item.market_price = float(value)
-                except ValueError:
+                except (ValueError, TypeError):
                     return jsonify({'error': 'Invalid market price value'}), 400
-            elif field == 'tags':
-                # Handle tags updates - value should be an array of tag IDs
-                if not isinstance(value, list):
-                    logger.error(f"❌ Invalid tags value: {value}")
-                    return jsonify({'error': 'Tags value must be an array'}), 400
-                
-                # Clear existing tags
-                item.tags = []
-                
-                # Add new tags
-                for tag_id in value:
-                    tag = Tag.query.get(tag_id)
-                    if tag:
-                        item.tags.append(tag)
-            elif field == 'listings':
-                # Handle listings updates
-                if not isinstance(value, list):
-                    logger.error(f"❌ Invalid listings value: {value}")
-                    return jsonify({'error': 'Listings value must be an array'}), 400
-                
-                # Store listings as JSON
-                item.listings = value
-                
-                # If there are listings, ensure the item is marked as listed
-                if value and len(value) > 0 and item.status != 'sold':
-                    item.status = 'listed'
             else:
-                logger.error(f"❌ Invalid field name: {field}")
-                return jsonify({'error': f'Invalid field name: {field}'}), 400
+                # Handle standard field updates
+                try:
+                    if hasattr(item, field):
+                        setattr(item, field, value)
+                    elif hasattr(item, convert_to_snake_case(field)):
+                        # Convert camelCase to snake_case for database fields
+                        snake_field = convert_to_snake_case(field)
+                        setattr(item, snake_field, value)
+                    else:
+                        logger.error(f"❌ Invalid field name: {field}")
+                        return jsonify({'error': f'Invalid field name: {field}'}), 400
+                except Exception as field_err:
+                    logger.error(f"❌ Error setting field {field}: {str(field_err)}")
+                    return jsonify({'error': f'Error setting field {field}: {str(field_err)}'}), 400
             
             # Update the updated_at timestamp
             item.updated_at = datetime.utcnow()
             
             # Commit changes
-            db.session.commit()
-            
-            logger.info(f"✅ Updated {field} for item {item_id}")
-            
-            # Return success message
-            return jsonify({
-                'message': f'Field {field} updated successfully',
-                'id': item_id,
-                'field': field,
-                'value': value
-            }), 200
+            try:
+                db.session.commit()
+                logger.info(f"✅ Updated {field} for item {item_id}")
+                
+                # Get the updated item data for response
+                updated_item = Item.query.get(item_id)
+                if field == 'tags':
+                    updated_value = [tag.id for tag in updated_item.tags]
+                elif field == 'listings':
+                    updated_value = updated_item.listings
+                else:
+                    updated_value = getattr(updated_item, field, None)
+                
+                # Return success message
+                return jsonify({
+                    'message': f'Field {field} updated successfully',
+                    'id': item_id,
+                    'field': field,
+                    'value': updated_value
+                }), 200
+            except Exception as commit_err:
+                db.session.rollback()
+                logger.error(f"❌ Error committing changes: {str(commit_err)}")
+                return jsonify({'error': f'Error committing changes: {str(commit_err)}'}), 500
+                
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error updating field for item {item_id}: {str(e)}")
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
     # Delete an item

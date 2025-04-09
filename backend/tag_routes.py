@@ -5,9 +5,15 @@ import json
 import time
 import logging
 from models import db, Tag, Item, item_tags
+import traceback
 
-# Set up logging
+# Set up logging with more details
 logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 # Create blueprint
 tag_routes = Blueprint('tag_routes', __name__)
@@ -44,6 +50,7 @@ def get_tags():
             return jsonify(tags_list), 200
         except Exception as db_err:
             logger.warning(f"⚠️ Failed to fetch tags from database: {str(db_err)}")
+            logger.warning(traceback.format_exc())
             
             # Fall back to file-based storage
             ensure_tags_file_exists()
@@ -54,6 +61,7 @@ def get_tags():
             return jsonify(tags), 200
     except Exception as e:
         logger.error(f"💥 Error fetching tags: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -89,6 +97,7 @@ def create_tag():
             return jsonify(new_tag.to_dict()), 201
         except Exception as db_err:
             logger.warning(f"⚠️ Failed to create tag in database: {str(db_err)}")
+            logger.warning(traceback.format_exc())
             
             # Fall back to file-based storage
             ensure_tags_file_exists()
@@ -116,6 +125,7 @@ def create_tag():
             return jsonify(new_tag), 201
     except Exception as e:
         logger.error(f"💥 Error creating tag: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -157,6 +167,7 @@ def update_tag(tag_id):
             return jsonify(tag.to_dict()), 200
         except Exception as db_err:
             logger.warning(f"⚠️ Failed to update tag in database: {str(db_err)}")
+            logger.warning(traceback.format_exc())
             
             # Fall back to file-based storage
             ensure_tags_file_exists()
@@ -191,6 +202,7 @@ def update_tag(tag_id):
             return jsonify(tags[tag_index]), 200
     except Exception as e:
         logger.error(f"💥 Error updating tag: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -224,6 +236,7 @@ def delete_tag(tag_id):
             return jsonify({'message': f"Tag {tag_id} deleted successfully"}), 200
         except Exception as db_err:
             logger.warning(f"⚠️ Failed to delete tag from database: {str(db_err)}")
+            logger.warning(traceback.format_exc())
             
             # Fall back to file-based storage
             ensure_tags_file_exists()
@@ -251,6 +264,7 @@ def delete_tag(tag_id):
             return jsonify({'message': f"Tag {tag_id} deleted successfully"}), 200
     except Exception as e:
         logger.error(f"💥 Error deleting tag: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -259,14 +273,27 @@ def apply_tags_to_item(item_id):
     """Apply tags to an item"""
     try:
         logger.info(f"🏷️ Applying tags to item {item_id}")
-        data = request.json
+        logger.info(f"Request data: {request.data}")
+        
+        # Parse request data and handle potential JSON errors
+        try:
+            data = request.json
+            if not data:
+                logger.error("Empty request data")
+                return jsonify({'error': 'Empty request data'}), 400
+        except Exception as json_err:
+            logger.error(f"Invalid JSON in request: {str(json_err)}")
+            return jsonify({'error': f'Invalid JSON in request: {str(json_err)}'}), 400
         
         # Validate request
-        if not data or 'tagIds' not in data:
+        if 'tagIds' not in data:
             logger.error("❌ Missing required field: tagIds")
             return jsonify({'error': 'Missing required field: tagIds'}), 400
         
         tag_ids = data['tagIds']
+        logger.info(f"Tag IDs received: {tag_ids}")
+        
+        # Validate tag_ids is a list
         if not isinstance(tag_ids, list):
             logger.error("❌ tagIds must be a list")
             return jsonify({'error': 'tagIds must be a list'}), 400
@@ -277,27 +304,74 @@ def apply_tags_to_item(item_id):
             logger.error(f"❌ Item with ID {item_id} not found")
             return jsonify({'error': f"Item with ID {item_id} not found"}), 404
         
-        # Remove existing tags
-        item.tags = []
-        db.session.flush()
+        # Log current tags before changes
+        logger.info(f"Current tags for item {item_id}: {[t.id for t in item.tags]}")
         
-        # Check if all tags exist and add them
-        for tag_id in tag_ids:
-            tag = Tag.query.get(tag_id)
-            if not tag:
-                logger.error(f"❌ Tag with ID {tag_id} not found")
-                return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
+        try:
+            # Remove existing tags
+            item.tags = []
+            db.session.flush()
+            logger.info(f"Cleared existing tags for item {item_id}")
             
-            # Add tag to item
-            item.tags.append(tag)
-        
-        db.session.commit()
-        
-        logger.info(f"✅ Tags applied to item {item_id}: {tag_ids}")
-        return jsonify({'message': f"Tags applied to item {item_id}", 'tagIds': tag_ids}), 200
+            # Check if all tags exist and add them
+            valid_tags = []
+            for tag_id in tag_ids:
+                # Try both string and int conversion as needed
+                try:
+                    if isinstance(tag_id, str) and tag_id.isdigit():
+                        tag_id_int = int(tag_id)
+                    else:
+                        tag_id_int = tag_id
+                except (ValueError, TypeError):
+                    tag_id_int = tag_id
+                
+                # Try to find tag using different ID formats
+                tag = None
+                try:
+                    tag = Tag.query.get(tag_id_int)
+                except Exception:
+                    pass
+                
+                if not tag and isinstance(tag_id, str):
+                    try:
+                        tag = Tag.query.get(tag_id)
+                    except Exception:
+                        pass
+                
+                if tag:
+                    valid_tags.append(tag)
+                    logger.info(f"Found tag: {tag.id} - {tag.name}")
+                else:
+                    logger.warning(f"❓ Tag with ID {tag_id} not found")
+            
+            # Add valid tags to item
+            for tag in valid_tags:
+                item.tags.append(tag)
+                logger.info(f"Added tag {tag.id} to item {item_id}")
+            
+            # Commit the changes
+            db.session.commit()
+            logger.info(f"✅ Committed tag changes to database")
+            
+            # Get updated tags for confirmation
+            updated_item = Item.query.get(item_id)
+            updated_tag_ids = [t.id for t in updated_item.tags]
+            logger.info(f"✅ Updated tags for item {item_id}: {updated_tag_ids}")
+            
+            return jsonify({
+                'message': f"Tags applied to item {item_id}", 
+                'tagIds': updated_tag_ids,
+                'itemId': item_id
+            }), 200
+            
+        except Exception as db_err:
+            db.session.rollback()
+            logger.error(f"💥 Database error while applying tags: {str(db_err)}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': str(db_err)}), 500
     except Exception as e:
-        db.session.rollback()
         logger.error(f"💥 Error applying tags to item: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 
@@ -325,16 +399,44 @@ def remove_tags_from_item(item_id):
             return jsonify({'error': f"Item with ID {item_id} not found"}), 404
         
         # Remove specified tags
-        for tag_id in tag_ids:
-            tag = Tag.query.get(tag_id)
-            if tag and tag in item.tags:
+        try:
+            # Log current tags
+            logger.info(f"Current tags for item {item_id}: {[t.id for t in item.tags]}")
+            
+            # Convert all tag_ids to strings for consistent comparison
+            str_tag_ids = [str(tid) for tid in tag_ids]
+            
+            # Remove tags that match the provided IDs
+            tags_to_remove = []
+            for tag in item.tags:
+                if str(tag.id) in str_tag_ids:
+                    tags_to_remove.append(tag)
+                    logger.info(f"Marking tag {tag.id} for removal")
+            
+            # Remove the tags
+            for tag in tags_to_remove:
                 item.tags.remove(tag)
-        
-        db.session.commit()
-        
-        logger.info(f"✅ Tags removed from item {item_id}: {tag_ids}")
-        return jsonify({'message': f"Tags removed from item {item_id}", 'tagIds': tag_ids}), 200
+                logger.info(f"Removed tag {tag.id} from item {item_id}")
+            
+            db.session.commit()
+            
+            # Get updated tags for confirmation
+            updated_item = Item.query.get(item_id)
+            updated_tag_ids = [t.id for t in updated_item.tags]
+            logger.info(f"✅ Updated tags for item {item_id} after removal: {updated_tag_ids}")
+            
+            return jsonify({
+                'message': f"Tags removed from item {item_id}", 
+                'tagIds': str_tag_ids,
+                'remainingTags': updated_tag_ids
+            }), 200
+        except Exception as db_err:
+            db.session.rollback()
+            logger.error(f"💥 Database error while removing tags: {str(db_err)}")
+            logger.error(traceback.format_exc())
+            return jsonify({'error': str(db_err)}), 500
     except Exception as e:
         db.session.rollback()
         logger.error(f"💥 Error removing tags from item: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500

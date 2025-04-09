@@ -78,7 +78,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   items
 }) => {
   const theme = useTheme();
-  const { money } = useFormat();
+  const { money, getCurrentCurrency } = useFormat();
   
   const [selectedItemIndex, setSelectedItemIndex] = useState<number>(0);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -96,6 +96,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [changesDetected, setChangesDetected] = useState<boolean>(false);
+  const currencySymbol = getCurrentCurrency();
 
   // Reset state when modal opens or selected item changes
   useEffect(() => {
@@ -114,7 +115,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
       }
       
       setNewListing({
-        platform: '',
+        platform: platforms[0] || '',
         price: 0,
         url: '',
         date: dayjs(),
@@ -190,6 +191,26 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
       status: 'active'
     });
     setError(null);
+  };
+
+  // Handle price input change with proper formatting
+  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+    
+    // Remove any non-numeric characters except decimal point
+    let cleanValue = inputValue.replace(/[^0-9.]/g, '');
+    
+    // Ensure only one decimal point
+    const decimalCount = (cleanValue.match(/\./g) || []).length;
+    if (decimalCount > 1) {
+      const parts = cleanValue.split('.');
+      cleanValue = parts[0] + '.' + parts.slice(1).join('');
+    }
+    
+    // Convert to number or use 0 if empty/invalid
+    const numValue = cleanValue ? parseFloat(cleanValue) : 0;
+    
+    setNewListing({ ...newListing, price: numValue });
   };
 
   // Save the new listing
@@ -537,10 +558,10 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
                 <TextField
                   label="Price"
                   type="number"
-                  value={newListing.price}
-                  onChange={(e) => setNewListing({ ...newListing, price: parseFloat(e.target.value) || 0 })}
+                  value={newListing.price === 0 ? '' : newListing.price} // Prevent displaying "0"
+                  onChange={handlePriceChange}
                   InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>,
+                    startAdornment: <InputAdornment position="start">{currencySymbol}</InputAdornment>,
                   }}
                   fullWidth
                   sx={{ mb: 2 }}
