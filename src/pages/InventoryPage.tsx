@@ -579,7 +579,8 @@ const InventoryPage: React.FC = () => {
           condition: itemToDuplicate.condition || '',
           notes: itemToDuplicate.notes || '',
           orderID: itemToDuplicate.orderID || '',
-          tags: itemToDuplicate.tags || [],
+          // Important fix: Don't copy tags from the original item
+          tags: [], // Set empty array to prevent tag inheritance
           taxType: 'none' as 'none' | 'vat' | 'salesTax',
           vatPercentage: '0',
           salesTaxPercentage: '0'
