@@ -40,6 +40,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import { InventoryItem, Tag } from '../../pages/InventoryPage';
 import useFormat from '../../hooks/useFormat';
 import dayjs from 'dayjs';
+import ImageViewer from '../common/ImageViewer';
 
 interface InventoryTableProps {
   items: InventoryItem[];
@@ -84,6 +85,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   // Listing tooltip state
   const [listingAnchorEl, setListingAnchorEl] = useState<HTMLElement | null>(null);
   const [selectedListingItem, setSelectedListingItem] = useState<InventoryItem | null>(null);
+  
+  // Image viewer state
+  const [imageViewerOpen, setImageViewerOpen] = useState<boolean>(false);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -168,28 +173,37 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   };
   
   const renderImage = (item: InventoryItem) => {
-    if (item.imageUrl) {
-      return (
-        <Avatar 
-          src={item.imageUrl} 
-          alt={item.productName}
-          variant="rounded"
-          sx={{ width: 48, height: 48 }}
-        />
-      );
-    }
     return (
       <Avatar 
+        src={item.imageUrl} 
+        alt={item.productName}
         variant="rounded"
         sx={{ 
           width: 48, 
-          height: 48, 
-          bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+          height: 48,
+          cursor: 'pointer',
+          '&:hover': {
+            opacity: 0.8,
+            boxShadow: '0 0 0 2px ' + theme.palette.primary.main
+          }
         }}
+        onClick={() => handleImageClick(item)}
       >
         <InventoryIcon />
       </Avatar>
     );
+  };
+  
+  // Handle image click to open the image viewer
+  const handleImageClick = (item: InventoryItem) => {
+    setSelectedItemId(item.id);
+    setImageViewerOpen(true);
+  };
+  
+  // Handle closing the image viewer
+  const handleCloseImageViewer = () => {
+    setImageViewerOpen(false);
+    setSelectedItemId(null);
   };
   
   // Handle profit info click
@@ -275,380 +289,382 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   };
 
   return (
-    <Paper sx={{ 
-      width: '100%', 
-      overflow: 'hidden',
-      backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
-      borderRadius: 2
-    }}>
-      <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
-        <Table stickyHeader size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell padding="checkbox">
-                <Checkbox 
-                  indeterminate={selectedItems.length > 0 && selectedItems.length < items.length}
-                  checked={items.length > 0 && selectedItems.length === items.length}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      items.forEach(item => onSelectItem(item.id, true));
-                    } else {
-                      items.forEach(item => onSelectItem(item.id, false));
-                    }
-                  }}
-                  sx={{
-                    color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
-                    '&.Mui-checked': {
-                      color: theme.palette.primary.main,
-                    },
-                  }}
-                />
-              </TableCell>
-              
-              {visibleColumns.status && (
-                <TableCell sx={{ minWidth: 90 }}>Status</TableCell>
-              )}
-              
-              {visibleColumns.image && (
-                <TableCell sx={{ minWidth: 70 }}>Image</TableCell>
-              )}
-              
-              {visibleColumns.name && (
-                <TableCell sx={{ minWidth: 150 }}>Product Name</TableCell>
-              )}
-              
-              {visibleColumns.category && (
-                <TableCell sx={{ minWidth: 100 }}>Category</TableCell>
-              )}
-              
-              {visibleColumns.marketPrice && (
-                <TableCell align="right" sx={{ minWidth: 130 }}>Market Price</TableCell>
-              )}
-              
-              {visibleColumns.estimatedProfit && (
-                <TableCell align="right" sx={{ minWidth: 130 }}>Est. Profit</TableCell>
-              )}
-              
-              {visibleColumns.size && (
-                <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
-              )}
-              
-              {visibleColumns.brand && (
-                <TableCell sx={{ minWidth: 100 }}>Brand</TableCell>
-              )}
-              
-              {visibleColumns.reference && (
-                <TableCell sx={{ minWidth: 120 }}>Purchase Date</TableCell>
-              )}
-              
-              {visibleColumns.sku && (
-                <TableCell sx={{ minWidth: 100 }}>SKU/ID</TableCell>
-              )}
-              
-              {visibleColumns.daysInInventory && (
-                <TableCell align="right" sx={{ minWidth: 90 }}>Days In</TableCell>
-              )}
-              
-              {visibleColumns.roi && (
-                <TableCell align="right" sx={{ minWidth: 90 }}>ROI</TableCell>
-              )}
-              
-              {visibleColumns.purchaseTotal && (
-                <TableCell align="right" sx={{ minWidth: 120 }}>Purchase Total</TableCell>
-              )}
-              
-              {visibleColumns.shippingAmount && (
-                <TableCell align="right" sx={{ minWidth: 120 }}>Shipping</TableCell>
-              )}
-              
-              {visibleColumns.tags && (
-                <TableCell sx={{ minWidth: 150 }}>Tags</TableCell>
-              )}
-            </TableRow>
-          </TableHead>
-          
-          <TableBody>
-            {items.length === 0 ? (
+    <>
+      <Paper sx={{ 
+        width: '100%', 
+        overflow: 'hidden',
+        backgroundColor: theme.palette.mode === 'dark' ? '#1e1e2d' : '#fff',
+        borderRadius: 2
+      }}>
+        <TableContainer sx={{ maxHeight: 'calc(100vh - 350px)' }}>
+          <Table stickyHeader size="small">
+            <TableHead>
               <TableRow>
-                <TableCell 
-                  colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} 
-                  align="center" 
-                  sx={{ py: 3 }}
-                >
-                  <Typography variant="body2" color="textSecondary">
-                    No items found
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              items.map((item) => {
-                const isSelected = selectedItems.includes(item.id);
-                const isEditing = editingMarketPrice === item.id;
-                
-                return (
-                  <TableRow
-                    hover
-                    key={item.id}
-                    selected={isSelected}
+                <TableCell padding="checkbox">
+                  <Checkbox 
+                    indeterminate={selectedItems.length > 0 && selectedItems.length < items.length}
+                    checked={items.length > 0 && selectedItems.length === items.length}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        items.forEach(item => onSelectItem(item.id, true));
+                      } else {
+                        items.forEach(item => onSelectItem(item.id, false));
+                      }
+                    }}
                     sx={{
-                      '&:hover': {
-                        backgroundColor: theme.palette.mode === 'dark' 
-                          ? 'rgba(255,255,255,0.05)' 
-                          : 'rgba(0,0,0,0.04)',
-                      },
-                      '&.Mui-selected': {
-                        backgroundColor: theme.palette.mode === 'dark' 
-                          ? 'rgba(66, 165, 245, 0.1)' 
-                          : 'rgba(25, 118, 210, 0.08)',
+                      color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
+                      '&.Mui-checked': {
+                        color: theme.palette.primary.main,
                       },
                     }}
+                  />
+                </TableCell>
+                
+                {visibleColumns.status && (
+                  <TableCell sx={{ minWidth: 90 }}>Status</TableCell>
+                )}
+                
+                {visibleColumns.image && (
+                  <TableCell sx={{ minWidth: 70 }}>Image</TableCell>
+                )}
+                
+                {visibleColumns.name && (
+                  <TableCell sx={{ minWidth: 150 }}>Product Name</TableCell>
+                )}
+                
+                {visibleColumns.category && (
+                  <TableCell sx={{ minWidth: 100 }}>Category</TableCell>
+                )}
+                
+                {visibleColumns.marketPrice && (
+                  <TableCell align="right" sx={{ minWidth: 130 }}>Market Price</TableCell>
+                )}
+                
+                {visibleColumns.estimatedProfit && (
+                  <TableCell align="right" sx={{ minWidth: 130 }}>Est. Profit</TableCell>
+                )}
+                
+                {visibleColumns.size && (
+                  <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
+                )}
+                
+                {visibleColumns.brand && (
+                  <TableCell sx={{ minWidth: 100 }}>Brand</TableCell>
+                )}
+                
+                {visibleColumns.reference && (
+                  <TableCell sx={{ minWidth: 120 }}>Purchase Date</TableCell>
+                )}
+                
+                {visibleColumns.sku && (
+                  <TableCell sx={{ minWidth: 100 }}>SKU/ID</TableCell>
+                )}
+                
+                {visibleColumns.daysInInventory && (
+                  <TableCell align="right" sx={{ minWidth: 90 }}>Days In</TableCell>
+                )}
+                
+                {visibleColumns.roi && (
+                  <TableCell align="right" sx={{ minWidth: 90 }}>ROI</TableCell>
+                )}
+                
+                {visibleColumns.purchaseTotal && (
+                  <TableCell align="right" sx={{ minWidth: 120 }}>Purchase Total</TableCell>
+                )}
+                
+                {visibleColumns.shippingAmount && (
+                  <TableCell align="right" sx={{ minWidth: 120 }}>Shipping</TableCell>
+                )}
+                
+                {visibleColumns.tags && (
+                  <TableCell sx={{ minWidth: 150 }}>Tags</TableCell>
+                )}
+              </TableRow>
+            </TableHead>
+            
+            <TableBody>
+              {items.length === 0 ? (
+                <TableRow>
+                  <TableCell 
+                    colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} 
+                    align="center" 
+                    sx={{ py: 3 }}
                   >
-                    <TableCell padding="checkbox">
-                      <Checkbox 
-                        checked={isSelected}
-                        onChange={(event) => onSelectItem(item.id, event.target.checked)}
-                        sx={{
-                          color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
-                          '&.Mui-checked': {
-                            color: theme.palette.primary.main,
-                          },
-                        }}
-                      />
-                    </TableCell>
-                    
-                    {visibleColumns.status && (
-                      <TableCell>
-                        {getStatusElement(item.status)}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.image && (
-                      <TableCell>
-                        {renderImage(item)}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.name && (
-                      <TableCell
-                        sx={{
-                          fontWeight: 'medium',
-                          color: theme.palette.primary.main,
-                          cursor: 'pointer',
-                        }}
-                      >
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Typography color="inherit">{item.productName}</Typography>
-                          {/* Display listings badge if item has listings */}
-                          {item.status === 'listed' && getListingsBadge(item)}
-                        </Box>
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.category && (
-                      <TableCell>
-                        <Chip 
-                          label={item.category} 
-                          size="small"
-                          sx={{ 
-                            fontSize: '0.75rem',
-                            height: 24
+                    <Typography variant="body2" color="textSecondary">
+                      No items found
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                items.map((item) => {
+                  const isSelected = selectedItems.includes(item.id);
+                  const isEditing = editingMarketPrice === item.id;
+                  
+                  return (
+                    <TableRow
+                      hover
+                      key={item.id}
+                      selected={isSelected}
+                      sx={{
+                        '&:hover': {
+                          backgroundColor: theme.palette.mode === 'dark' 
+                            ? 'rgba(255,255,255,0.05)' 
+                            : 'rgba(0,0,0,0.04)',
+                        },
+                        '&.Mui-selected': {
+                          backgroundColor: theme.palette.mode === 'dark' 
+                            ? 'rgba(66, 165, 245, 0.1)' 
+                            : 'rgba(25, 118, 210, 0.08)',
+                        },
+                      }}
+                    >
+                      <TableCell padding="checkbox">
+                        <Checkbox 
+                          checked={isSelected}
+                          onChange={(event) => onSelectItem(item.id, event.target.checked)}
+                          sx={{
+                            color: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : undefined,
+                            '&.Mui-checked': {
+                              color: theme.palette.primary.main,
+                            },
                           }}
                         />
                       </TableCell>
-                    )}
-                    
-                    {visibleColumns.marketPrice && (
-                      <TableCell align="right">
-                        {isEditing ? (
+                      
+                      {visibleColumns.status && (
+                        <TableCell>
+                          {getStatusElement(item.status)}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.image && (
+                        <TableCell>
+                          {renderImage(item)}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.name && (
+                        <TableCell
+                          sx={{
+                            fontWeight: 'medium',
+                            color: theme.palette.primary.main,
+                            cursor: 'pointer',
+                          }}
+                        >
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <TextField
-                              inputRef={marketPriceInputRef}
-                              variant="outlined"
-                              size="small"
-                              value={marketPriceValue}
-                              onChange={(e) => setMarketPriceValue(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveMarketPrice(item.id);
-                                } else if (e.key === 'Escape') {
-                                  handleCancelEditing();
-                                }
-                              }}
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">{currencySymbol}</InputAdornment>
-                                ),
-                                endAdornment: (
-                                  <InputAdornment position="end">
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleSaveMarketPrice(item.id)}
-                                    >
-                                      <SaveIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton
-                                      size="small"
-                                      onClick={handleCancelEditing}
-                                    >
-                                      <CancelIcon fontSize="small" />
-                                    </IconButton>
-                                  </InputAdornment>
-                                ),
-                                sx: { py: 0.5 }
-                              }}
-                              sx={{ maxWidth: 160 }}
-                            />
+                            <Typography color="inherit">{item.productName}</Typography>
+                            {/* Display listings badge if item has listings */}
+                            {item.status === 'listed' && getListingsBadge(item)}
                           </Box>
-                        ) : (
-                          <Box 
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.category && (
+                        <TableCell>
+                          <Chip 
+                            label={item.category} 
+                            size="small"
                             sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'flex-end' 
+                              fontSize: '0.75rem',
+                              height: 24
                             }}
-                          >
-                            <Typography>
-                              {money(item.marketPrice)}
+                          />
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.marketPrice && (
+                        <TableCell align="right">
+                          {isEditing ? (
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                              <TextField
+                                inputRef={marketPriceInputRef}
+                                variant="outlined"
+                                size="small"
+                                value={marketPriceValue}
+                                onChange={(e) => setMarketPriceValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleSaveMarketPrice(item.id);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditing();
+                                  }
+                                }}
+                                InputProps={{
+                                  startAdornment: (
+                                    <InputAdornment position="start">{currencySymbol}</InputAdornment>
+                                  ),
+                                  endAdornment: (
+                                    <InputAdornment position="end">
+                                      <IconButton
+                                        size="small"
+                                        onClick={() => handleSaveMarketPrice(item.id)}
+                                      >
+                                        <SaveIcon fontSize="small" />
+                                      </IconButton>
+                                      <IconButton
+                                        size="small"
+                                        onClick={handleCancelEditing}
+                                      >
+                                        <CancelIcon fontSize="small" />
+                                      </IconButton>
+                                    </InputAdornment>
+                                  ),
+                                  sx: { py: 0.5 }
+                                }}
+                                sx={{ maxWidth: 160 }}
+                              />
+                            </Box>
+                          ) : (
+                            <Box 
+                              sx={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'flex-end' 
+                              }}
+                            >
+                              <Typography>
+                                {money(item.marketPrice)}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleStartEditing(item)}
+                                sx={{ ml: 1 }}
+                              >
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          )}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.estimatedProfit && (
+                        <TableCell 
+                          align="right"
+                          sx={{
+                            color: item.estimatedProfit >= 0 
+                              ? theme.palette.success.main 
+                              : theme.palette.error.main,
+                            fontWeight: 'medium'
+                          }}
+                        >
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'flex-end',
+                            cursor: 'pointer'
+                          }}>
+                            {item.estimatedProfit >= 0 ? (
+                              <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
+                            ) : (
+                              <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
+                            )}
+                            <Typography
+                              onClick={(e) => handleProfitInfoClick(e, item)}
+                            >
+                              {money(Math.abs(item.estimatedProfit))}
                             </Typography>
                             <IconButton
                               size="small"
-                              onClick={() => handleStartEditing(item)}
-                              sx={{ ml: 1 }}
+                              onClick={(e) => handleProfitInfoClick(e, item)}
                             >
-                              <EditIcon fontSize="small" />
+                              <InfoIcon fontSize="small" />
                             </IconButton>
                           </Box>
-                        )}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.estimatedProfit && (
-                      <TableCell 
-                        align="right"
-                        sx={{
-                          color: item.estimatedProfit >= 0 
-                            ? theme.palette.success.main 
-                            : theme.palette.error.main,
-                          fontWeight: 'medium'
-                        }}
-                      >
-                        <Box sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'flex-end',
-                          cursor: 'pointer'
-                        }}>
-                          {item.estimatedProfit >= 0 ? (
-                            <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.size && (
+                        <TableCell>
+                          {item.size ? (
+                            item.sizeSystem ? `${item.sizeSystem} ${item.size}` : item.size
                           ) : (
-                            <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
+                            <Typography color="text.disabled" variant="body2">-</Typography>
                           )}
-                          <Typography
-                            onClick={(e) => handleProfitInfoClick(e, item)}
-                          >
-                            {money(Math.abs(item.estimatedProfit))}
-                          </Typography>
-                          <IconButton
-                            size="small"
-                            onClick={(e) => handleProfitInfoClick(e, item)}
-                          >
-                            <InfoIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.size && (
-                      <TableCell>
-                        {item.size ? (
-                          item.sizeSystem ? `${item.sizeSystem} ${item.size}` : item.size
-                        ) : (
-                          <Typography color="text.disabled" variant="body2">-</Typography>
-                        )}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.brand && (
-                      <TableCell>
-                        {item.brand}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.reference && (
-                      <TableCell>
-                        {date(item.purchaseDate)}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.sku && (
-                      <TableCell>
-                        {item.reference || '-'}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.daysInInventory && (
-                      <TableCell align="right">
-                        {item.daysInInventory} days
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.roi && (
-                      <TableCell 
-                        align="right"
-                        sx={{
-                          color: item.roi >= 0 
-                            ? theme.palette.success.main 
-                            : theme.palette.error.main,
-                          fontWeight: 'medium'
-                        }}
-                      >
-                        {item.roi.toFixed(1)}%
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.purchaseTotal && (
-                      <TableCell align="right">
-                        {money(item.purchasePrice)}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.shippingAmount && (
-                      <TableCell align="right">
-                        {money(item.shippingPrice || 0)}
-                      </TableCell>
-                    )}
-                    
-                    {visibleColumns.tags && (
-                      <TableCell>
-                        {renderTags(item)}
-                      </TableCell>
-                    )}
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-      
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50]}
-        component="div"
-        count={totalItems}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={(e) => {
-          // This will be handled by the parent component
-        }}
-        sx={{
-          borderTop: `1px solid ${
-            theme.palette.mode === 'dark' 
-              ? 'rgba(255, 255, 255, 0.1)'
-              : theme.palette.divider
-          }`,
-        }}
-      />
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.brand && (
+                        <TableCell>
+                          {item.brand}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.reference && (
+                        <TableCell>
+                          {date(item.purchaseDate)}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.sku && (
+                        <TableCell>
+                          {item.reference || '-'}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.daysInInventory && (
+                        <TableCell align="right">
+                          {item.daysInInventory} days
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.roi && (
+                        <TableCell 
+                          align="right"
+                          sx={{
+                            color: item.roi >= 0 
+                              ? theme.palette.success.main 
+                              : theme.palette.error.main,
+                            fontWeight: 'medium'
+                          }}
+                        >
+                          {item.roi.toFixed(1)}%
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.purchaseTotal && (
+                        <TableCell align="right">
+                          {money(item.purchasePrice)}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.shippingAmount && (
+                        <TableCell align="right">
+                          {money(item.shippingPrice || 0)}
+                        </TableCell>
+                      )}
+                      
+                      {visibleColumns.tags && (
+                        <TableCell>
+                          {renderTags(item)}
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={totalItems}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={(e) => {
+            // This will be handled by the parent component
+          }}
+          sx={{
+            borderTop: `1px solid ${
+              theme.palette.mode === 'dark' 
+                ? 'rgba(255, 255, 255, 0.1)'
+                : theme.palette.divider
+            }`,
+          }}
+        />
+      </Paper>
       
       {/* Profit Breakdown Popover */}
       <Popover
@@ -843,7 +859,15 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           </Card>
         )}
       </Popover>
-    </Paper>
+
+      {/* Image Viewer Modal */}
+      <ImageViewer
+        open={imageViewerOpen}
+        onClose={handleCloseImageViewer}
+        itemId={selectedItemId}
+        initialImageIndex={0}
+      />
+    </>
   );
 };
 

@@ -118,6 +118,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   });
 
   const [images, setImages] = useState<ImageFile[]>([]);
+  const [existingImages, setExistingImages] = useState<string[]>([]);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   // Load item data when the modal opens
@@ -168,12 +169,13 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
         salesTaxPercentage: ''
       });
 
-      // For existing images, we'd need to fetch them or use URLs as placeholders
+      // Store existing images separately to better handle them
       if (item.images && item.images.length > 0) {
         console.log('Item has images:', item.images);
-        // This approach depends on your backend implementation
-        // For now, leaving images empty to avoid errors
+        setExistingImages(item.images);
         setImages([]);
+      } else {
+        setExistingImages([]);
       }
     }
   }, [open, item]);
@@ -319,7 +321,13 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               sizesQuantity,
               purchaseDetails: {
                 ...purchaseDetails,
-                purchaseDate: purchaseDetails.purchaseDate?.toISOString() || null
+                // Ensure purchaseDate is properly formatted
+                purchaseDate: purchaseDetails.purchaseDate?.toISOString() || null,
+                // Handle possible empty strings for numeric fields
+                shippingPrice: purchaseDetails.shippingPrice || '0',
+                marketPrice: purchaseDetails.marketPrice || '0',
+                vatPercentage: purchaseDetails.vatPercentage || '0',
+                salesTaxPercentage: purchaseDetails.salesTaxPercentage || '0'
               },
               status: item?.status || 'unlisted' // Preserve the current status
             };
@@ -424,6 +432,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
     });
     
     setImages([]);
+    setExistingImages([]);
     setErrors({});
     
     onClose();
@@ -500,6 +509,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               images={images}
               onChange={setImages}
               errors={errors}
+              existingImages={existingImages}
             />
           )}
         </Box>

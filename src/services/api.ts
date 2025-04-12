@@ -174,18 +174,37 @@ export const api = {
       // Create a FormData object for multipart request
       const multipartFormData = new FormData();
       
+      // Clean up empty strings that should be null or zero in numeric fields
+      // This prevents the "could not convert string to float: ''" error
+      const cleanedFormData = {
+        ...formData,
+        purchaseDetails: {
+          ...formData.purchaseDetails,
+          // Convert empty strings to '0' for number fields
+          shippingPrice: formData.purchaseDetails.shippingPrice === '' ? '0' : formData.purchaseDetails.shippingPrice,
+          marketPrice: formData.purchaseDetails.marketPrice === '' ? '0' : formData.purchaseDetails.marketPrice,
+          vatPercentage: formData.purchaseDetails.vatPercentage === '' ? '0' : formData.purchaseDetails.vatPercentage,
+          salesTaxPercentage: formData.purchaseDetails.salesTaxPercentage === '' ? '0' : formData.purchaseDetails.salesTaxPercentage
+        }
+      };
+      
       // Add the JSON data as a string field named 'data'
-      multipartFormData.append('data', JSON.stringify(formData));
+      multipartFormData.append('data', JSON.stringify(cleanedFormData));
       
       // Add all image files if provided
       if (images && images.length > 0) {
         images.forEach((file, index) => {
-          console.log(`📸 Adding image ${index + 1}/${images.length} to form data:`, file.name);
-          multipartFormData.append('images', file);
+          // Check if file is a valid File object (not just a reference to an existing file)
+          if (file instanceof File) {
+            console.log(`📸 Adding image ${index + 1}/${images.length} to form data:`, file.name);
+            multipartFormData.append('images', file);
+          } else {
+            console.warn(`⚠️ Skipping invalid image at index ${index} - not a valid File object`);
+          }
         });
       }
       
-      console.log('📦 Submitting update data:', formData);
+      console.log('📦 Submitting update data:', cleanedFormData);
       console.log(`📊 Submitting ${images?.length || 0} images`);
       
       // Make the request - Fix: Ensure the endpoint exists on the backend
@@ -276,6 +295,15 @@ export const api = {
         
         // Log the listings being updated
         console.log(`📋 Updating listings for item ${itemId}:`, value);
+      }
+
+      // Special handling for numeric fields to prevent empty string errors
+      if (field === 'marketPrice' || field === 'shippingPrice') {
+        // Convert empty string to 0 
+        if (value === '') {
+          value = 0;
+          console.log(`⚠️ Converting empty string to 0 for ${field}`);
+        }
       }
       
       // Prepare the update data
@@ -612,6 +640,25 @@ export const api = {
     } catch (error) {
       console.error(`💥 Error checking image existence for ${filename}:`, error);
       return false;
+    }
+  },
+  
+  // Get all images for an item
+  getItemImages: async (itemId: number): Promise<string[]> => {
+    try {
+      console.log(`🔄 Fetching images for item ${itemId}...`);
+      const item = await api.getItem(itemId);
+      
+      if (item.images && item.images.length > 0) {
+        console.log(`✅ Retrieved ${item.images.length} images for item ${itemId}`);
+        return item.images;
+      }
+      
+      console.log(`⚠️ No images found for item ${itemId}`);
+      return [];
+    } catch (error) {
+      console.error(`💥 Error fetching images for item ${itemId}:`, error);
+      return [];
     }
   },
   
