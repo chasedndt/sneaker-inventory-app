@@ -1,33 +1,31 @@
-# Virtual Environment
-backend/.venv/
-
-# Environment Files
-*.env
-*.env.local
-*.env.*.local
+# General - System Files
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
 
 # Python
-__pycache__/
-*.py[cod]
 *.pyc
-*.pyd
-*.pyo
-
-# SQLite
+__pycache__/
+backend/venv/
 *.sqlite
-*.sqlite3
+backend/instance/  # Corrected path for instance directory
 
 # Flask
-instance/
-
-# Logs
 *.log
 backend/image_requests.log
 
 # Uploads
 backend/uploads/*
 
-# System Files
-.DS_Store
-Thumbs.db
-node_modules
+# React
+/node_modules
+/build
+
+# Env Files
+*.env
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
