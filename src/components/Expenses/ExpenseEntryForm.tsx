@@ -2,39 +2,31 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Paper,
-  Typography,
-  TextField,
-  Grid,
   Button,
+  TextField,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
   FormControlLabel,
   Switch,
-  InputAdornment,
-  Chip,
-  IconButton,
-  useTheme,
-  FormHelperText,
-  SelectChangeEvent,
+  Typography,
+  Grid,
+  Paper,
   Alert,
-  CircularProgress
+  InputAdornment,
+  SelectChangeEvent,
+  IconButton,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
-import DescriptionIcon from '@mui/icons-material/Description';
-import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-import DeleteIcon from '@mui/icons-material/Delete';
-import CloseIcon from '@mui/icons-material/Close';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 
+import { ExpenseFormData, Expense } from '../../models/expenses';
 import { expensesApi } from '../../services/expensesApi';
-import { Expense, ExpenseFormData, RecurrencePeriod } from '../../models/expenses';
 
 interface ExpenseEntryFormProps {
   initialExpense?: Expense;
@@ -47,14 +39,9 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   initialExpense,
   onSave,
   onCancel,
-  isEditing = false
+  isEditing = false,
 }) => {
-  const theme = useTheme();
-  
-  // State for expense types dropdown options
   const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
-  
-  // Form data state
   const [formData, setFormData] = useState<ExpenseFormData>({
     expenseType: '',
     amount: '',
@@ -63,38 +50,43 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
     vendor: '',
     notes: '',
     isRecurring: false,
-    recurrencePeriod: 'none'
+    recurrencePeriod: 'monthly',
   });
-  
-  // Selected receipt file state
-  const [selectedReceipt, setSelectedReceipt] = useState<File | null>(null);
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
-  const [existingReceiptFilename, setExistingReceiptFilename] = useState<string | null>(null);
-  
-  // Status states
+  const [receipt, setReceipt] = useState<File | undefined>(undefined);
+  const [receiptName, setReceiptName] = useState<string>('');
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  
+
   // Fetch expense types on component mount
   useEffect(() => {
     const fetchExpenseTypes = async () => {
-      setLoading(true);
       try {
         const types = await expensesApi.getExpenseTypes();
         setExpenseTypes(types);
       } catch (error) {
-        console.error('Error fetching expense types:', error);
-      } finally {
-        setLoading(false);
+        console.error('Failed to fetch expense types:', error);
+        setExpenseTypes([
+          'Shipping',
+          'Packaging',
+          'Platform Fees',
+          'Storage',
+          'Supplies',
+          'Software',
+          'Marketing',
+          'Travel',
+          'Utilities',
+          'Rent',
+          'Insurance',
+          'Taxes',
+          'Other',
+        ]);
       }
     };
-    
+
     fetchExpenseTypes();
   }, []);
-  
-  // Initialize form with initial expense data if editing
+
+  // Initialize form with existing expense data if editing
   useEffect(() => {
     if (initialExpense) {
       setFormData({
@@ -105,173 +97,139 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         vendor: initialExpense.vendor,
         notes: initialExpense.notes,
         isRecurring: initialExpense.isRecurring,
-        recurrencePeriod: initialExpense.recurrencePeriod || 'none'
+        recurrencePeriod: initialExpense.recurrencePeriod || 'monthly',
       });
       
       if (initialExpense.receiptFilename) {
-        setExistingReceiptFilename(initialExpense.receiptFilename);
+        setReceiptName(initialExpense.receiptFilename);
       }
     }
   }, [initialExpense]);
-  
-  // Handle form field changes
-  const handleChange = (field: keyof ExpenseFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // Clear any error for the field
-    if (errors[field]) {
-      setErrors(prev => ({
-        ...prev,
-        [field]: ''
-      }));
+
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (e: SelectChangeEvent<string>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleDateChange = (value: dayjs.Dayjs | null) => {
+    setFormData((prev) => ({ ...prev, expenseDate: value || dayjs() }));
+  };
+
+  const handleRecurringToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData((prev) => ({ ...prev, isRecurring: e.target.checked }));
+  };
+
+  const handleRecurrencePeriodChange = (e: SelectChangeEvent<string>) => {
+    setFormData((prev) => ({ ...prev, recurrencePeriod: e.target.value }));
+  };
+
+  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      setReceipt(file);
+      setReceiptName(file.name);
     }
   };
-  
-  // Handle receipt file selection
-  const handleReceiptChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      setSelectedReceipt(file);
-      
-      // Create a preview URL for image files
-      if (file.type.startsWith('image/')) {
-        const previewUrl = URL.createObjectURL(file);
-        setReceiptPreview(previewUrl);
-      } else {
-        setReceiptPreview(null);
-      }
-      
-      // Clear any receipt error
-      if (errors.receipt) {
-        setErrors(prev => ({
-          ...prev,
-          receipt: ''
-        }));
-      }
-    }
+
+  const clearReceipt = () => {
+    setReceipt(undefined);
+    setReceiptName('');
   };
-  
-  // Handle removing the receipt
-  const handleRemoveReceipt = () => {
-    setSelectedReceipt(null);
-    setReceiptPreview(null);
-    setExistingReceiptFilename(null);
-    
-    // Reset the file input
-    const fileInput = document.getElementById('receipt-upload') as HTMLInputElement;
-    if (fileInput) {
-      fileInput.value = '';
-    }
-  };
-  
-  // Validate form data
+
   const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
-    
     if (!formData.expenseType) {
-      newErrors.expenseType = 'Expense type is required';
+      setError('Expense type is required');
+      return false;
     }
     
-    if (!formData.amount) {
-      newErrors.amount = 'Amount is required';
-    } else if (isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
-      newErrors.amount = 'Amount must be a positive number';
+    if (!formData.amount || isNaN(parseFloat(formData.amount)) || parseFloat(formData.amount) <= 0) {
+      setError('Valid amount is required');
+      return false;
     }
     
     if (!formData.expenseDate) {
-      newErrors.expenseDate = 'Date is required';
+      setError('Expense date is required');
+      return false;
     }
     
-    if (formData.isRecurring && formData.recurrencePeriod === 'none') {
-      newErrors.recurrencePeriod = 'Please select a recurrence period';
+    if (formData.isRecurring && !formData.recurrencePeriod) {
+      setError('Recurrence period is required for recurring expenses');
+      return false;
     }
     
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return true;
   };
-  
-  // Handle form submission
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
     
-    // Validate form
     if (!validateForm()) {
       return;
     }
     
-    setIsSubmitting(true);
-    setSubmitError(null);
+    setLoading(true);
     
     try {
-      // Prepare the expense data
+      // Prepare expense data for API
       const expenseData = {
         ...formData,
         amount: parseFloat(formData.amount),
+        expenseDate: formData.expenseDate.toISOString(),
+        receipt
       };
       
-      // Add receipt if selected
-      if (selectedReceipt) {
-        expenseData.receipt = selectedReceipt;
-      }
+      let savedExpense: Expense;
       
-      let result;
       if (isEditing && initialExpense) {
         // Update existing expense
-        result = await expensesApi.updateExpense(initialExpense.id, expenseData);
+        savedExpense = await expensesApi.updateExpense(initialExpense.id, expenseData);
       } else {
         // Create new expense
-        result = await expensesApi.createExpense(expenseData);
+        savedExpense = await expensesApi.createExpense(expenseData);
       }
       
-      // Call the onSave callback with the result
-      onSave(result);
+      // Call the onSave callback with the saved expense
+      onSave(savedExpense);
     } catch (error: any) {
-      console.error('Error submitting expense:', error);
-      setSubmitError(`Failed to save expense: ${error.message}`);
+      console.error('Error saving expense:', error);
+      setError(`Failed to save expense: ${error.message}`);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
-  
-  // Clean up objects URLs when component unmounts
-  useEffect(() => {
-    return () => {
-      if (receiptPreview) {
-        URL.revokeObjectURL(receiptPreview);
-      }
-    };
-  }, [receiptPreview]);
-  
+
   return (
-    <Paper sx={{ 
-      p: 3, 
-      borderRadius: 2,
-      backgroundColor: theme.palette.background.paper,
-      boxShadow: theme.shadows[3]
-    }}>
-      <Typography variant="h6" sx={{ mb: 2, color: theme.palette.text.primary }}>
-        {isEditing ? 'Edit Expense' : 'Add New Expense'}
-      </Typography>
-      
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Paper sx={{ p: 3, m: 0 }}>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Typography variant="h6" mb={3}>
+            {isEditing ? 'Edit Expense' : 'Add New Expense'}
+          </Typography>
+          
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )} // src/components/Expenses/ExpenseEntryForm.tsx (continued)
+          
+          <Grid container spacing={2}>
             {/* Expense Type */}
             <Grid item xs={12} sm={6}>
-              <FormControl fullWidth error={!!errors.expenseType}>
-                <InputLabel>Expense Type *</InputLabel>
+              <FormControl fullWidth required>
+                <InputLabel>Expense Type</InputLabel>
                 <Select
+                  name="expenseType"
                   value={formData.expenseType}
-                  label="Expense Type *"
-                  onChange={(e: SelectChangeEvent) => handleChange('expenseType', e.target.value)}
+                  onChange={handleSelectChange}
+                  label="Expense Type"
                 >
                   {expenseTypes.map((type) => (
                     <MenuItem key={type} value={type}>
@@ -279,7 +237,6 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
                     </MenuItem>
                   ))}
                 </Select>
-                {errors.expenseType && <FormHelperText>{errors.expenseType}</FormHelperText>}
               </FormControl>
             </Grid>
             
@@ -287,48 +244,29 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Amount *"
-                type="number"
+                required
+                label="Amount"
+                name="amount"
                 value={formData.amount}
-                onChange={(e) => handleChange('amount', e.target.value)}
-                error={!!errors.amount}
-                helperText={errors.amount}
+                onChange={handleInputChange}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <Select
-                        value={formData.currency}
-                        onChange={(e) => handleChange('currency', e.target.value)}
-                        sx={{ width: 50 }}
-                        variant="standard"
-                      >
-                        <MenuItem value="$">$</MenuItem>
-                        <MenuItem value="€">€</MenuItem>
-                        <MenuItem value="£">£</MenuItem>
-                        <MenuItem value="¥">¥</MenuItem>
-                      </Select>
+                      {formData.currency}
                     </InputAdornment>
-                  )
+                  ),
                 }}
               />
             </Grid>
             
             {/* Date */}
             <Grid item xs={12} sm={6}>
-              <LocalizationProvider dateAdapter={AdapterDayjs}>
-                <DatePicker
-                  label="Date *"
-                  value={formData.expenseDate}
-                  onChange={(newValue) => handleChange('expenseDate', newValue)}
-                  slotProps={{
-                    textField: {
-                      fullWidth: true,
-                      error: !!errors.expenseDate,
-                      helperText: errors.expenseDate
-                    }
-                  }}
-                />
-              </LocalizationProvider>
+              <DatePicker
+                label="Expense Date"
+                value={formData.expenseDate}
+                onChange={handleDateChange}
+                slotProps={{ textField: { fullWidth: true, required: true } }}
+              />
             </Grid>
             
             {/* Vendor */}
@@ -336,134 +274,85 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
               <TextField
                 fullWidth
                 label="Vendor/Payee"
+                name="vendor"
                 value={formData.vendor}
-                onChange={(e) => handleChange('vendor', e.target.value)}
+                onChange={handleInputChange}
               />
             </Grid>
             
-            {/* Recurring Expense */}
+            {/* Recurring Expense Toggle */}
             <Grid item xs={12}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={formData.isRecurring}
-                      onChange={(e) => handleChange('isRecurring', e.target.checked)}
-                      color="primary"
-                    />
-                  }
-                  label="Recurring Expense"
-                />
-                
-                {formData.isRecurring && (
-                  <FormControl sx={{ minWidth: 200 }} error={!!errors.recurrencePeriod}>
-                    <InputLabel>Recurrence Period</InputLabel>
-                    <Select
-                      value={formData.recurrencePeriod}
-                      label="Recurrence Period"
-                      onChange={(e) => handleChange('recurrencePeriod', e.target.value)}
-                    >
-                      <MenuItem value="weekly">Weekly</MenuItem>
-                      <MenuItem value="monthly">Monthly</MenuItem>
-                      <MenuItem value="quarterly">Quarterly</MenuItem>
-                      <MenuItem value="annually">Annually</MenuItem>
-                    </Select>
-                    {errors.recurrencePeriod && <FormHelperText>{errors.recurrencePeriod}</FormHelperText>}
-                  </FormControl>
-                )}
-              </Box>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={formData.isRecurring}
+                    onChange={handleRecurringToggle}
+                    name="isRecurring"
+                    color="primary"
+                  />
+                }
+                label="Recurring Expense"
+              />
             </Grid>
+            
+            {/* Recurrence Period (visible only if isRecurring is true) */}
+            {formData.isRecurring && (
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth required>
+                  <InputLabel>Recurrence Period</InputLabel>
+                  <Select
+                    name="recurrencePeriod"
+                    value={formData.recurrencePeriod}
+                    onChange={handleRecurrencePeriodChange}
+                    label="Recurrence Period"
+                  >
+                    <MenuItem value="weekly">Weekly</MenuItem>
+                    <MenuItem value="monthly">Monthly</MenuItem>
+                    <MenuItem value="quarterly">Quarterly</MenuItem>
+                    <MenuItem value="annually">Annually</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            )}
             
             {/* Receipt Upload */}
             <Grid item xs={12}>
-              <Box sx={{ 
-                border: `1px dashed ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.2)'}`,
-                borderRadius: 1,
-                p: 2,
-                position: 'relative'
-              }}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'center',
-                  gap: 1
-                }}>
-                  <input
-                    id="receipt-upload"
-                    type="file"
-                    accept="image/jpeg,image/png,image/gif,application/pdf"
-                    style={{ display: 'none' }}
-                    onChange={handleReceiptChange}
-                  />
+              <Box sx={{ border: '1px dashed #ccc', p: 2, borderRadius: 1, mb: 2 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <Button
+                    component="label"
+                    variant="outlined"
+                    startIcon={<AttachFileIcon />}
+                  >
+                    Upload Receipt
+                    <input
+                      type="file"
+                      hidden
+                      accept=".jpg,.jpeg,.png,.gif,.pdf"
+                      onChange={handleReceiptChange}
+                    />
+                  </Button>
                   
-                  {!selectedReceipt && !existingReceiptFilename ? (
-                    <label htmlFor="receipt-upload">
-                      <Button
-                        variant="outlined"
-                        component="span"
-                        startIcon={<AttachFileIcon />}
-                        sx={{ mb: 1 }}
-                      >
-                        Upload Receipt
-                      </Button>
-                    </label>
-                  ) : (
-                    <Box sx={{ 
-                      width: '100%', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between'
-                    }}>
-                      <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 1,
-                        maxWidth: '80%'
-                      }}>
-                        {receiptPreview ? (
-                          <Box
-                            component="img"
-                            src={receiptPreview}
-                            sx={{
-                              height: 60,
-                              width: 60,
-                              borderRadius: 1,
-                              objectFit: 'cover'
-                            }}
-                          />
-                        ) : (
-                          <DescriptionIcon 
-                            sx={{ 
-                              color: theme.palette.primary.main,
-                              fontSize: 40
-                            }} 
-                          />
-                        )}
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            wordBreak: 'break-all',
-                            color: theme.palette.text.secondary
-                          }}
-                        >
-                          {selectedReceipt ? selectedReceipt.name : existingReceiptFilename}
-                        </Typography>
-                      </Box>
-                      
-                      <IconButton 
-                        onClick={handleRemoveReceipt} 
-                        size="small"
-                        sx={{ color: 'error.main' }}
-                      >
-                        <DeleteIcon />
+                  {receiptName && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+                      <Typography variant="body2" sx={{ ml: 1 }}>
+                        {receiptName}
+                      </Typography>
+                      <IconButton size="small" onClick={clearReceipt}>
+                        <CancelIcon />
                       </IconButton>
                     </Box>
                   )}
-                  
-                  <Typography variant="caption" color="text.secondary">
-                    Supported file types: JPG, PNG, GIF, PDF (Max 5MB)
-                  </Typography>
                 </Box>
+                <Typography variant="caption" color="text.secondary">
+                  Supported file types: JPG, PNG, GIF, PDF (Max 5MB)
+                </Typography>
               </Box>
             </Grid>
             
@@ -472,50 +361,36 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
               <TextField
                 fullWidth
                 label="Notes"
+                name="notes"
+                value={formData.notes}
+                onChange={handleInputChange}
                 multiline
                 rows={4}
-                value={formData.notes}
-                onChange={(e) => handleChange('notes', e.target.value)}
-                placeholder="Add any additional notes about this expense..."
               />
             </Grid>
           </Grid>
           
-          {/* Error message if submit fails */}
-          {submitError && (
-            <Alert severity="error" sx={{ mt: 3 }}>
-              {submitError}
-            </Alert>
-          )}
-          
-          {/* Form buttons */}
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'flex-end', 
-            mt: 3,
-            gap: 2
-          }}>
-            <Button
-              variant="outlined"
+          {/* Form Actions */}
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+            <Button 
+              variant="outlined" 
               onClick={onCancel}
-              startIcon={<CancelIcon />}
-              disabled={isSubmitting}
+              disabled={loading}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
+            <Button 
+              type="submit" 
+              variant="contained" 
               color="primary"
-              startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
-              disabled={isSubmitting}
+              disabled={loading}
             >
-              {isSubmitting ? 'Saving...' : isEditing ? 'Update Expense' : 'Save Expense'}
+              {loading ? 'Saving...' : isEditing ? 'Update Expense' : 'Save Expense'}
             </Button>
           </Box>
-        </form>
-      )}
-    </Paper>
+        </Box>
+      </Paper>
+    </LocalizationProvider>
   );
 };
 

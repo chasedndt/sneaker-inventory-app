@@ -1,7 +1,8 @@
 // src/services/expensesApi.ts
-import { Expense, ExpenseSummary } from '../models/expenses';
+import { Expense, ExpenseSummary, ExpenseFormData } from '../models/expenses';
+import { generateRecurringExpenseEntries } from '../utils/recurringExpensesUtils';
 
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
+export const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 /**
  * Service for interacting with the expenses API
@@ -17,7 +18,7 @@ export const expensesApi = {
     try {
       console.log('🔄 Fetching expenses from API...');
       
-      // Construct URL with query parameters for date filtering
+      // Build query parameters
       let url = `${API_BASE_URL}/expenses`;
       const params = new URLSearchParams();
       
@@ -42,9 +43,7 @@ export const expensesApi = {
       });
       
       if (!response.ok) {
-        console.error(`❌ API getExpenses failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return mock data
+        // Only use mock data if we get a 404 (endpoint not found)
         if (response.status === 404) {
           console.warn('⚠️ Expenses endpoint not found, using mock data');
           return getMockExpenses();
@@ -58,10 +57,7 @@ export const expensesApi = {
       return expenses;
     } catch (error: any) {
       console.error('💥 Error in getExpenses:', error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock expenses data due to error');
-      return getMockExpenses();
+      throw error; // Rethrow the error instead of always returning mock data
     }
   },
   
@@ -98,18 +94,13 @@ export const expensesApi = {
       return expense;
     } catch (error: any) {
       console.error(`💥 Error fetching expense ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock expense data due to error');
-      const mockExpenses = getMockExpenses();
-      const expense = mockExpenses.find(e => e.id === id);
-      if (!expense) throw new Error(`Expense with ID ${id} not found`);
-      return expense;
+      throw error;
     }
   },
   
   /**
-   * Create a new expense
+   * Create a new expense record.
+   * If the expense is recurring, also generates recurring entries
    * @param expenseData Expense data to create
    * @returns Promise<Expense> Created expense data
    */
@@ -132,7 +123,7 @@ export const expensesApi = {
         formData.append('data', JSON.stringify(expenseData));
       }
       
-      // Make the request
+      // Make the request to create the base expense
       const response = await fetch(`${API_BASE_URL}/expenses`, {
         method: 'POST',
         credentials: 'include',
@@ -143,40 +134,68 @@ export const expensesApi = {
       if (!response.ok) {
         console.error(`❌ API createExpense failed with status: ${response.status}`);
         
-        // If the API is not yet implemented, return mock data
+        // If the API is not yet implemented, use mock data for the base expense
         if (response.status === 404) {
           console.warn('⚠️ Expenses endpoint not found, using mock response');
-          return {
+          const mockExpense = {
             id: Math.floor(Math.random() * 1000) + 100,
             ...expenseData,
-            expenseDate: expenseData.expenseDate.toISOString(),
+            expenseDate: expenseData.expenseDate,
             amount: parseFloat(expenseData.amount),
             isRecurring: Boolean(expenseData.isRecurring),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
+          
+          // If this is a recurring expense and we're using mock data,
+          // handle recurring entries here
+          if (expenseData.isRecurring && expenseData.recurrencePeriod) {
+            const recurringEntries = generateRecurringExpenseEntries(mockExpense);
+            console.log(`Generated ${recurringEntries.length} recurring entries for mock data`);
+            
+            // For mock data, we'll just generate the entries and log them,
+            // but not actually create them since we're just returning mock data
+            console.log('Recurring entries:', recurringEntries);
+          }
+          
+          return mockExpense;
         }
         
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const expense = await response.json();
-      console.log(`✅ Expense created successfully:`, expense);
-      return expense;
-    } catch (error: any) {
-      console.error('💥 Error in createExpense:', error);
+      // Get the created expense from the response
+      const createdExpense = await response.json();
+      console.log(`✅ Expense created successfully:`, createdExpense);
       
-      // Return mock data for development
-      console.warn('⚠️ Using mock response due to error');
-      return {
-        id: Math.floor(Math.random() * 1000) + 100,
-        ...expenseData,
-        expenseDate: expenseData.expenseDate.toISOString(),
-        amount: parseFloat(expenseData.amount),
-        isRecurring: Boolean(expenseData.isRecurring),
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+      // Handle recurring entries if needed
+      if (expenseData.isRecurring && expenseData.recurrencePeriod) {
+        try {
+          // Generate recurring entries
+          const recurringEntries = generateRecurringExpenseEntries(createdExpense);
+          console.log(`Generated ${recurringEntries.length} recurring entries`);
+          
+          // Create each recurring entry (but don't wait for them to complete)
+          // This is a fire-and-forget approach for better UX
+          Promise.all(
+            recurringEntries.map(entry => 
+              // Set isRecurring to false for the generated entries to avoid infinite recursion
+              expensesApi.createExpense({ ...entry, isRecurring: false })
+            )
+          ).then(results => {
+            console.log(`✅ Created ${results.length} recurring entries`);
+          }).catch(err => {
+            console.error('Error creating recurring entries:', err);
+          });
+        } catch (err) {
+          console.error('Error generating recurring entries:', err);
+        }
+      }
+      
+      return createdExpense;
+    } catch (error) {
+      console.error('💥 Error in createExpense:', error);
+      throw error;
     }
   },
   
@@ -210,7 +229,7 @@ export const expensesApi = {
         method: 'PUT',
         credentials: 'include',
         body: formData,
-        // Don't set Content-Type header, it will be set automatically for multipart/form-data
+        // Don't set Content-Type header, it will be set automatically with boundary
       });
       
       if (!response.ok) {
@@ -237,17 +256,7 @@ export const expensesApi = {
       return expense;
     } catch (error: any) {
       console.error(`💥 Error updating expense ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response due to error');
-      return {
-        id,
-        ...expenseData,
-        expenseDate: expenseData.expenseDate.toISOString(),
-        amount: parseFloat(expenseData.amount),
-        isRecurring: Boolean(expenseData.isRecurring),
-        updated_at: new Date().toISOString()
-      };
+      throw error;
     }
   },
   
@@ -280,10 +289,7 @@ export const expensesApi = {
       return { success: true };
     } catch (error: any) {
       console.error(`💥 Error deleting expense ${id}:`, error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock response for delete due to error');
-      return { success: true };
+      throw error;
     }
   },
   
@@ -338,13 +344,10 @@ export const expensesApi = {
       return summary;
     } catch (error: any) {
       console.error('💥 Error fetching expense summary:', error);
-      
-      // Return mock data for development
-      console.warn('⚠️ Using mock expense summary data due to error');
-      return getMockExpenseSummary();
+      throw error; // Rethrow the error instead of returning mock data
     }
   },
-  
+
   /**
    * Get expense types
    * @returns Promise<string[]> List of expense types
@@ -374,10 +377,7 @@ export const expensesApi = {
       return types;
     } catch (error: any) {
       console.error('💥 Error fetching expense types:', error);
-      
-      // Return default types for development
-      console.warn('⚠️ Using default expense types due to error');
-      return getDefaultExpenseTypes();
+      throw error;
     }
   },
 
@@ -442,14 +442,43 @@ export const expensesApi = {
       };
     } catch (error: any) {
       console.error('💥 Error fetching total expenses data:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Generate missing recurring expense entries
+   * @returns Promise<{ count: number }> Number of entries generated
+   */
+  generateRecurringExpenses: async (): Promise<{ count: number }> => {
+    try {
+      console.log('🔄 Generating missing recurring expense entries...');
+      const response = await fetch(`${API_BASE_URL}/expenses/generate-recurring`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       
-      // Return mock data for development
-      console.warn('⚠️ Using mock total expenses data due to error');
-      return { 
-        totalExpenses: 408.23, 
-        percentageChange: 7.0, 
-        expenseCount: 5 
-      };
+      if (!response.ok) {
+        console.error(`❌ API generateRecurringExpenses failed with status: ${response.status}`);
+        
+        // If the API is not yet implemented, return mock data
+        if (response.status === 404) {
+          console.warn('⚠️ Generate recurring expenses endpoint not found, using mock response');
+          return { count: 0 };
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`✅ Generated ${result.entries?.length || 0} recurring expense entries`);
+      return { count: result.entries?.length || 0 };
+    } catch (error: any) {
+      console.error('💥 Error generating recurring expenses:', error);
+      throw error;
     }
   }
 };

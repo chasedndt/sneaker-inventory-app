@@ -28,6 +28,7 @@ import ExpenseEntryForm from '../components/Expenses/ExpenseEntryForm';
 import ExpensesTable from '../components/Expenses/ExpensesTable';
 import ExpenseFilters from '../components/Expenses/ExpenseFilters';
 import ExpenseKPIMetrics from '../components/Expenses/ExpenseKPIMetrics';
+import RecurringExpensesManager from '../components/Expenses/RecurringExpensesManager';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 import { expensesApi } from '../services/expensesApi';
@@ -140,6 +141,7 @@ const ExpensesPage: React.FC = () => {
           severity: 'error'
         });
       }
+      // Don't reset the state with mock data here
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -252,7 +254,7 @@ const ExpensesPage: React.FC = () => {
       severity: 'success'
     });
   };
-  
+
   // Handle editing an expense
   const handleEditExpense = (expense: Expense) => {
     setCurrentExpense(expense);
@@ -443,6 +445,12 @@ const ExpensesPage: React.FC = () => {
           startDate: filters.startDate ? dayjs(filters.startDate).format() : null,
           endDate: filters.endDate ? dayjs(filters.endDate).format() : null
         }}
+      />
+      
+      {/* Recurring Expenses Manager - Now collapsible */}
+      <RecurringExpensesManager 
+        expenses={expenses}
+        onRefresh={handleRefresh}
       />
       
       {/* Filters */}

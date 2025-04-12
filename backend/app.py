@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, current_app
 from flask_cors import CORS
 from flask_migrate import Migrate
 import os
@@ -14,6 +14,10 @@ from config import Config
 from datetime import datetime, timedelta
 from tag_routes import tag_routes
 import re
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
+import uuid
+import calendar
 
 def convert_to_snake_case(name):
     """Convert a string from camelCase to snake_case."""
@@ -1059,70 +1063,20 @@ def create_app():
     @app.route('/api/expenses', methods=['GET'])
     def get_expenses():
         """
-        Get all expenses with optional date filtering.
+        Get all expenses.
         """
         try:
-            logger.info("📊 Fetching all expenses")
-            
-            # Get query parameters for date filtering
-            start_date_str = request.args.get('start_date')
-            end_date_str = request.args.get('end_date')
-            
-            # Base query
-            query = Expense.query
-            
-            # Apply date filters if provided
-            if start_date_str:
-                try:
-                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date >= start_date)
-                    logger.info(f"🗓️ Filtering expenses after {start_date}")
-                except ValueError:
-                    logger.warning(f"❌ Invalid start date format: {start_date_str}")
-            
-            if end_date_str:
-                try:
-                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date <= end_date)
-                    logger.info(f"🗓️ Filtering expenses before {end_date}")
-                except ValueError:
-                    logger.warning(f"❌ Invalid end date format: {end_date_str}")
-            
-            # Get all expenses matching the query
-            expenses = query.order_by(Expense.expense_date.desc()).all()
-            
-            # Convert to dictionary format
-            expenses_data = [expense.to_dict() for expense in expenses]
-            
-            logger.info(f"✅ Retrieved {len(expenses_data)} expenses")
-            return jsonify(expenses_data), 200
+            logger.info("📋 Fetching all expenses")
+            expenses = Expense.query.order_by(Expense.expense_date.desc()).all()
+            return jsonify([expense.to_dict() for expense in expenses])
         except Exception as e:
             logger.error(f"💥 Error fetching expenses: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/expenses/<int:expense_id>', methods=['GET'])
-    def get_expense(expense_id):
-        """
-        Get a single expense by ID.
-        """
-        try:
-            logger.info(f"🔍 Fetching expense {expense_id}")
-            
-            expense = Expense.query.get(expense_id)
-            if not expense:
-                logger.warning(f"❌ Expense with ID {expense_id} not found")
-                return jsonify({'error': 'Expense not found'}), 404
-            
-            logger.info(f"✅ Retrieved expense {expense_id}")
-            return jsonify(expense.to_dict()), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching expense {expense_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses', methods=['POST'])
     def create_expense():
         """
-        Create a new expense record.
+        Create a new expense record with proper handling of recurring expenses.
         """
         try:
             logger.info("📝 Creating new expense record")
@@ -1168,7 +1122,7 @@ def create_app():
                     receipt_filename = timestamped_filename
                     logger.info(f"📄 Saved receipt: {timestamped_filename}")
             
-            # Create the expense record
+            # Create the base expense record
             new_expense = Expense(
                 expense_type=expense_data['expenseType'],
                 amount=float(expense_data['amount']),
@@ -1182,13 +1136,159 @@ def create_app():
             )
             
             db.session.add(new_expense)
+            db.session.flush()  # Get the ID without committing
+            
+            # Create any additional recurring expense entries if needed
+            # The frontend will handle this to avoid blocking this request
+            
+            # Commit the transaction
             db.session.commit()
             
             logger.info(f"✅ Created expense with ID {new_expense.id}")
             return jsonify(new_expense.to_dict()), 201
+            
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error creating expense: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+        
+    @app.route('/api/expenses/generate-recurring', methods=['POST'])
+    def generate_missing_recurring_expenses():
+        """
+        Generate missing recurring expense entries up to the current date.
+        """
+        try:
+            logger.info("🔄 Generating missing recurring expense entries")
+            
+            # Get all recurring expenses
+            recurring_expenses = Expense.query.filter_by(is_recurring=True).all()
+            logger.info(f"Found {len(recurring_expenses)} recurring expenses")
+            
+            generated_entries = []
+            
+            # For each recurring expense, generate missing entries
+            for base_expense in recurring_expenses:
+                # Skip if no recurrence period
+                if not base_expense.recurrence_period:
+                    continue
+                    
+                # Define the current date and time
+                current_date = datetime.utcnow()
+                
+                # Calculate the next recurrence date from the expense date
+                next_date = get_next_recurrence_date(
+                    base_expense.expense_date, 
+                    base_expense.recurrence_period
+                )
+                
+                # Keep generating entries until we reach the current date
+                while next_date <= current_date:
+                    # Check if an entry already exists for this date
+                    existing_entry = Expense.query.filter(
+                        Expense.expense_type == base_expense.expense_type,
+                        Expense.amount == base_expense.amount,
+                        Expense.vendor == base_expense.vendor,
+                        func.date(Expense.expense_date) == func.date(next_date)
+                    ).first()
+                    
+                    # Skip if an entry already exists
+                    if existing_entry:
+                        # Move to the next date
+                        next_date = get_next_recurrence_date(
+                            next_date, 
+                            base_expense.recurrence_period
+                        )
+                        continue
+                    
+                    # Create a new entry based on the base expense
+                    new_entry = Expense(
+                        expense_type=base_expense.expense_type,
+                        amount=base_expense.amount,
+                        currency=base_expense.currency,
+                        expense_date=next_date,
+                        vendor=base_expense.vendor,
+                        notes=f"{base_expense.notes} (Auto-generated from recurring expense {base_expense.id})" if base_expense.notes else f"Auto-generated from recurring expense {base_expense.id}",
+                        is_recurring=False,  # Mark as not recurring to avoid infinite recursion
+                        receipt_filename=None  # Don't copy receipt
+                    )
+                    
+                    db.session.add(new_entry)
+                    db.session.flush()
+                    
+                    generated_entries.append(new_entry.to_dict())
+                    
+                    # Calculate the next date
+                    next_date = get_next_recurrence_date(
+                        next_date, 
+                        base_expense.recurrence_period
+                    )
+                
+            # Commit all changes
+            db.session.commit()
+            
+            logger.info(f"✅ Generated {len(generated_entries)} recurring expense entries")
+            
+            return jsonify({
+                'message': f'Generated {len(generated_entries)} recurring expense entries',
+                'entries': generated_entries
+            }), 201
+            
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error generating recurring expenses: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+
+    def get_next_recurrence_date(current_date, recurrence_period):
+        """
+        Calculate the next date based on a recurrence period.
+        """
+        if recurrence_period == 'weekly':
+            return current_date + timedelta(days=7)
+        elif recurrence_period == 'monthly':
+            # Handle month boundary cases properly
+            year = current_date.year + ((current_date.month + 1) // 12)
+            month = ((current_date.month + 1) % 12) or 12
+            day = min(current_date.day, calendar.monthrange(year, month)[1])
+            return datetime(year, month, day, 
+                        current_date.hour, current_date.minute, current_date.second)
+        elif recurrence_period == 'quarterly':
+            # Add 3 months
+            year = current_date.year + ((current_date.month + 3) // 12) 
+            month = ((current_date.month + 3) % 12) or 12
+            day = min(current_date.day, calendar.monthrange(year, month)[1])
+            return datetime(year, month, day,
+                        current_date.hour, current_date.minute, current_date.second)
+        elif recurrence_period == 'annually':
+            # Add 1 year
+            year = current_date.year + 1
+            # Check for leap year (February 29th)
+            if current_date.month == 2 and current_date.day == 29 and not calendar.isleap(year):
+                day = 28
+            else:
+                day = current_date.day
+            return datetime(year, current_date.month, day,
+                       current_date.hour, current_date.minute, current_date.second)
+        else:
+            raise ValueError(f"Unknown recurrence period: {recurrence_period}") 
+
+    @app.route('/api/expenses/<int:expense_id>', methods=['GET'])
+    def get_expense(expense_id):
+        """
+        Get a single expense by ID.
+        """
+        try:
+            logger.info(f"🔍 Fetching expense {expense_id}")
+            
+            expense = Expense.query.get(expense_id)
+            if not expense:
+                logger.warning(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': 'Expense not found'}), 404
+            
+            logger.info(f"✅ Retrieved expense {expense_id}")
+            return jsonify(expense.to_dict()), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching expense {expense_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses/<int:expense_id>', methods=['PUT'])
