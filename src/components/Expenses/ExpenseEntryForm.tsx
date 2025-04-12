@@ -218,7 +218,7 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
-          )} // src/components/Expenses/ExpenseEntryForm.tsx (continued)
+          )} 
           
           <Grid container spacing={2}>
             {/* Expense Type */}
