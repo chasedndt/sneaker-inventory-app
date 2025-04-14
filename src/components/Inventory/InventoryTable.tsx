@@ -37,10 +37,31 @@ import InfoIcon from '@mui/icons-material/Info';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import LinkIcon from '@mui/icons-material/Link';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { InventoryItem, Tag } from '../../pages/InventoryPage';
 import useFormat from '../../hooks/useFormat';
 import dayjs from 'dayjs';
 import ImageViewer from '../common/ImageViewer';
+
+// Sort order type
+type SortOrder = 'asc' | 'desc' | null;
+
+// Sort field type - represents all sortable fields in our inventory
+type SortField = 
+  | 'status' 
+  | 'productName'
+  | 'category' 
+  | 'marketPrice' 
+  | 'estimatedProfit' 
+  | 'size' 
+  | 'brand' 
+  | 'purchaseDate' 
+  | 'reference' 
+  | 'daysInInventory' 
+  | 'roi' 
+  | 'purchaseTotal' 
+  | 'shippingAmount';
 
 interface InventoryTableProps {
   items: InventoryItem[];
@@ -78,6 +99,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
   const currencySymbol = getCurrentCurrency();
   
+  // Sorting state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>(null);
+  
   // Profit tooltip state
   const [profitAnchorEl, setProfitAnchorEl] = useState<HTMLElement | null>(null);
   const [selectedProfitItem, setSelectedProfitItem] = useState<InventoryItem | null>(null);
@@ -89,6 +114,98 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   // Image viewer state
   const [imageViewerOpen, setImageViewerOpen] = useState<boolean>(false);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  
+  // Field types classification for initial sort direction
+  const numericFields = ['marketPrice', 'estimatedProfit', 'purchaseTotal', 'shippingAmount', 'roi'];
+  const dateFields = ['purchaseDate', 'daysInInventory'];
+  const textFields = ['status', 'productName', 'category', 'size', 'brand', 'reference'];
+  
+  // Handle column header click for sorting
+  const handleSortClick = (field: SortField) => {
+    if (sortField === field) {
+      // If already sorting by this field, cycle through sort orders: asc -> desc -> null
+      if (sortOrder === 'asc') {
+        setSortOrder('desc');
+      } else if (sortOrder === 'desc') {
+        setSortOrder(null);
+        setSortField(null);
+      } else {
+        setSortOrder('asc');
+      }
+    } else {
+      // If sorting by a new field, start with the appropriate initial sort order
+      setSortField(field);
+      
+      // Set initial sort order based on field type
+      if (dateFields.includes(field)) {
+        // For dates and days in inventory, default to newest first
+        setSortOrder('desc');
+      } else if (numericFields.includes(field)) {
+        // For numeric values, default to highest first
+        setSortOrder('desc');
+      } else {
+        // For text fields, default to A-Z
+        setSortOrder('asc');
+      }
+    }
+  };
+  
+  // Sort items based on current sort field and order
+  const sortedItems = React.useMemo(() => {
+    if (!sortField || !sortOrder) return items;
+    
+    return [...items].sort((a, b) => {
+      let comparison = 0;
+      
+      // Sort based on field type
+      switch (sortField) {
+        case 'status':
+          comparison = a.status.localeCompare(b.status);
+          break;
+        case 'productName':
+          comparison = a.productName.localeCompare(b.productName);
+          break;
+        case 'category':
+          comparison = a.category.localeCompare(b.category);
+          break;
+        case 'marketPrice':
+          comparison = (a.marketPrice || 0) - (b.marketPrice || 0);
+          break;
+        case 'estimatedProfit':
+          comparison = a.estimatedProfit - b.estimatedProfit;
+          break;
+        case 'size':
+          comparison = (a.size || '').localeCompare(b.size || '');
+          break;
+        case 'brand':
+          comparison = a.brand.localeCompare(b.brand);
+          break;
+        case 'purchaseDate':
+          comparison = new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime();
+          break;
+        case 'reference':
+          comparison = (a.reference || '').localeCompare(b.reference || '');
+          break;
+        case 'daysInInventory':
+          comparison = a.daysInInventory - b.daysInInventory;
+          break;
+        case 'roi':
+          comparison = a.roi - b.roi;
+          break;
+        case 'purchaseTotal':
+          comparison = a.purchasePrice - b.purchasePrice;
+          break;
+        case 'shippingAmount':
+          comparison = (a.shippingPrice || 0) - (b.shippingPrice || 0);
+          break;
+        default:
+          break;
+      }
+      
+      // Apply sort order
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [items, sortField, sortOrder]);
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -116,6 +233,17 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   
   const handleCancelEditing = () => {
     setEditingMarketPrice(null);
+  };
+  
+  // Render sort icon for column headers
+  const renderSortIcon = (field: SortField) => {
+    if (sortField !== field || !sortOrder) return null;
+    
+    return sortOrder === 'asc' ? (
+      <ArrowUpwardIcon fontSize="small" sx={{ ml: 0.5, fontSize: '0.9rem' }} />
+    ) : (
+      <ArrowDownwardIcon fontSize="small" sx={{ ml: 0.5, fontSize: '0.9rem' }} />
+    );
   };
   
   // Get status elements with improved visual design
@@ -184,7 +312,9 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           cursor: 'pointer',
           '&:hover': {
             opacity: 0.8,
-            boxShadow: '0 0 0 2px ' + theme.palette.primary.main
+            boxShadow: `0 0 0 2px ${theme.palette.primary.main}`,
+            transform: 'scale(1.05)',
+            transition: 'all 0.2s ease-in-out'
           }
         }}
         onClick={() => handleImageClick(item)}
@@ -254,6 +384,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                 borderColor: tag.color,
                 fontSize: '0.7rem',
                 height: 20,
+                '&:hover': {
+                  bgcolor: `${tag.color}44`,
+                  transition: 'background-color 0.2s ease-in-out'
+                },
                 '& .MuiChip-icon': {
                   color: tag.color
                 }
@@ -285,6 +419,58 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           <ShoppingBasketIcon fontSize="small" sx={{ color: theme.palette.primary.main }} />
         </Badge>
       </Tooltip>
+    );
+  };
+
+  // Create sortable column header
+  const SortableColumnHeader = ({ 
+    field, 
+    label, 
+    align = 'left',
+    minWidth
+  }: { 
+    field: SortField, 
+    label: string, 
+    align?: 'left' | 'right' | 'center',
+    minWidth?: number | string
+  }) => {
+    return (
+      <TableCell 
+        align={align} 
+        sx={{ 
+          minWidth: minWidth,
+          cursor: 'pointer',
+          userSelect: 'none',
+          position: 'relative',
+          transition: 'background-color 0.2s ease',
+          '&:hover': {
+            bgcolor: theme.palette.mode === 'dark' 
+              ? 'rgba(255, 255, 255, 0.05)' 
+              : 'rgba(0, 0, 0, 0.04)',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              left: 0,
+              bottom: 0,
+              width: '100%',
+              height: '2px',
+              backgroundColor: theme.palette.primary.main,
+              transform: 'scaleX(1)',
+              transition: 'transform 0.2s ease-in-out'
+            }
+          }
+        }}
+        onClick={() => handleSortClick(field)}
+      >
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center'
+        }}>
+          {label}
+          {renderSortIcon(field)}
+        </Box>
+      </TableCell>
     );
   };
 
@@ -321,7 +507,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                 </TableCell>
                 
                 {visibleColumns.status && (
-                  <TableCell sx={{ minWidth: 90 }}>Status</TableCell>
+                  <SortableColumnHeader field="status" label="Status" minWidth={90} />
                 )}
                 
                 {visibleColumns.image && (
@@ -329,51 +515,51 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                 )}
                 
                 {visibleColumns.name && (
-                  <TableCell sx={{ minWidth: 150 }}>Product Name</TableCell>
+                  <SortableColumnHeader field="productName" label="Product Name" minWidth={150} />
                 )}
                 
                 {visibleColumns.category && (
-                  <TableCell sx={{ minWidth: 100 }}>Category</TableCell>
+                  <SortableColumnHeader field="category" label="Category" minWidth={100} />
                 )}
                 
                 {visibleColumns.marketPrice && (
-                  <TableCell align="right" sx={{ minWidth: 130 }}>Market Price</TableCell>
+                  <SortableColumnHeader field="marketPrice" label="Market Price" minWidth={130} align="right" />
                 )}
                 
                 {visibleColumns.estimatedProfit && (
-                  <TableCell align="right" sx={{ minWidth: 130 }}>Est. Profit</TableCell>
+                  <SortableColumnHeader field="estimatedProfit" label="Est. Profit" minWidth={130} align="right" />
                 )}
                 
                 {visibleColumns.size && (
-                  <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
+                  <SortableColumnHeader field="size" label="Size" minWidth={80} />
                 )}
                 
                 {visibleColumns.brand && (
-                  <TableCell sx={{ minWidth: 100 }}>Brand</TableCell>
+                  <SortableColumnHeader field="brand" label="Brand" minWidth={100} />
                 )}
                 
                 {visibleColumns.reference && (
-                  <TableCell sx={{ minWidth: 120 }}>Purchase Date</TableCell>
+                  <SortableColumnHeader field="purchaseDate" label="Purchase Date" minWidth={120} />
                 )}
                 
                 {visibleColumns.sku && (
-                  <TableCell sx={{ minWidth: 100 }}>SKU/ID</TableCell>
+                  <SortableColumnHeader field="reference" label="SKU/ID" minWidth={100} />
                 )}
                 
                 {visibleColumns.daysInInventory && (
-                  <TableCell align="right" sx={{ minWidth: 90 }}>Days In</TableCell>
+                  <SortableColumnHeader field="daysInInventory" label="Days In" minWidth={90} align="right" />
                 )}
                 
                 {visibleColumns.roi && (
-                  <TableCell align="right" sx={{ minWidth: 90 }}>ROI</TableCell>
+                  <SortableColumnHeader field="roi" label="ROI" minWidth={90} align="right" />
                 )}
                 
                 {visibleColumns.purchaseTotal && (
-                  <TableCell align="right" sx={{ minWidth: 120 }}>Purchase Total</TableCell>
+                  <SortableColumnHeader field="purchaseTotal" label="Purchase Total" minWidth={120} align="right" />
                 )}
                 
                 {visibleColumns.shippingAmount && (
-                  <TableCell align="right" sx={{ minWidth: 120 }}>Shipping</TableCell>
+                  <SortableColumnHeader field="shippingAmount" label="Shipping" minWidth={120} align="right" />
                 )}
                 
                 {visibleColumns.tags && (
@@ -383,7 +569,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             </TableHead>
             
             <TableBody>
-              {items.length === 0 ? (
+              {sortedItems.length === 0 ? (
                 <TableRow>
                   <TableCell 
                     colSpan={Object.values(visibleColumns).filter(Boolean).length + 2} 
@@ -396,7 +582,7 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                   </TableCell>
                 </TableRow>
               ) : (
-                items.map((item) => {
+                sortedItems.map((item) => {
                   const isSelected = selectedItems.includes(item.id);
                   const isEditing = editingMarketPrice === item.id;
                   
@@ -406,15 +592,24 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                       key={item.id}
                       selected={isSelected}
                       sx={{
+                        transition: 'background-color 0.2s ease-in-out',
                         '&:hover': {
                           backgroundColor: theme.palette.mode === 'dark' 
-                            ? 'rgba(255,255,255,0.05)' 
-                            : 'rgba(0,0,0,0.04)',
+                            ? 'rgba(255,255,255,0.07)' 
+                            : 'rgba(0,0,0,0.03)',
+                          '& .MuiTableCell-root': {
+                            opacity: 1
+                          }
                         },
                         '&.Mui-selected': {
                           backgroundColor: theme.palette.mode === 'dark' 
-                            ? 'rgba(66, 165, 245, 0.1)' 
-                            : 'rgba(25, 118, 210, 0.08)',
+                            ? 'rgba(66, 165, 245, 0.15)' 
+                            : 'rgba(25, 118, 210, 0.12)',
+                          '&:hover': {
+                            backgroundColor: theme.palette.mode === 'dark' 
+                              ? 'rgba(66, 165, 245, 0.25)' 
+                              : 'rgba(25, 118, 210, 0.18)',
+                          }
                         },
                       }}
                     >
@@ -452,7 +647,17 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                           }}
                         >
                           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <Typography color="inherit">{item.productName}</Typography>
+                            <Typography 
+                              color="inherit" 
+                              sx={{
+                                '&:hover': {
+                                  textDecoration: 'underline',
+                                  transition: 'color 0.2s ease'
+                                }
+                              }}
+                            >
+                              {item.productName}
+                            </Typography>
                             {/* Display listings badge if item has listings */}
                             {item.status === 'listed' && getListingsBadge(item)}
                           </Box>
@@ -466,7 +671,12 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                             size="small"
                             sx={{ 
                               fontSize: '0.75rem',
-                              height: 24
+                              height: 24,
+                              transition: 'all 0.2s ease',
+                              '&:hover': {
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                                transform: 'translateY(-1px)'
+                              }
                             }}
                           />
                         </TableCell>
@@ -528,7 +738,16 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                               <IconButton
                                 size="small"
                                 onClick={() => handleStartEditing(item)}
-                                sx={{ ml: 1 }}
+                                sx={{ 
+                                  ml: 1,
+                                  opacity: 0.7,
+                                  transition: 'all 0.2s ease',
+                                  '&:hover': {
+                                    opacity: 1,
+                                    color: theme.palette.primary.main,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                                  }
+                                }}
                               >
                                 <EditIcon fontSize="small" />
                               </IconButton>
@@ -551,7 +770,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                             display: 'flex', 
                             alignItems: 'center', 
                             justifyContent: 'flex-end',
-                            cursor: 'pointer'
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            '&:hover': {
+                              transform: 'translateY(-1px)'
+                            }
                           }}>
                             {item.estimatedProfit >= 0 ? (
                               <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
@@ -566,6 +789,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                             <IconButton
                               size="small"
                               onClick={(e) => handleProfitInfoClick(e, item)}
+                              sx={{
+                                opacity: 0.7,
+                                '&:hover': {
+                                  opacity: 1,
+                                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                                }
+                              }}
                             >
                               <InfoIcon fontSize="small" />
                             </IconButton>
@@ -685,6 +915,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
             width: 280,
             p: 0.5,
             bgcolor: theme.palette.background.paper,
+            boxShadow: theme.shadows[4],
+            borderRadius: 2
           }}>
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>
@@ -776,6 +1008,12 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
           vertical: 'top',
           horizontal: 'center',
         }}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            boxShadow: theme.shadows[4]
+          }
+        }}
       >
         {selectedListingItem && selectedListingItem.listings && (
           <Card sx={{ 
@@ -837,11 +1075,16 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
                         component="a" 
                         href={listing.url} 
                         target="_blank"
+                        rel="noopener noreferrer"
                         sx={{ 
                           display: 'flex', 
                           alignItems: 'center', 
                           gap: 0.5,
-                          color: theme.palette.primary.main
+                          color: theme.palette.primary.main,
+                          textDecoration: 'none',
+                          '&:hover': {
+                            textDecoration: 'underline'
+                          }
                         }}
                       >
                         <LinkIcon fontSize="small" />

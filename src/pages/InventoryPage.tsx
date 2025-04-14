@@ -26,6 +26,7 @@ import {
   SelectChangeEvent,
   Collapse,
   Badge,
+  Fab,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -44,6 +45,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import InventoryIcon from '@mui/icons-material/Inventory';
+import AddIcon from '@mui/icons-material/Add';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -57,6 +59,8 @@ import StockInsights from '../components/Inventory/StockInsights';
 import TagManager from '../components/Inventory/TagManager';
 import ListItemModal from '../components/Inventory/ListItemModal';
 import BatchTagsModal from '../components/Inventory/BatchTagsModal';
+import AddItemModal from '../components/AddItemModal';
+import InventoryFilter, { ActiveFilter } from '../components/Inventory/InventoryFilter';
 
 import { api, Item } from '../services/api';
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
@@ -156,6 +160,12 @@ const InventoryPage: React.FC = () => {
   // Duplicate dialog state
   const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState<boolean>(false);
   const [itemToDuplicate, setItemToDuplicate] = useState<InventoryItem | undefined>(undefined);
+  
+  // Add Item modal state
+  const [isAddItemModalOpen, setIsAddItemModalOpen] = useState<boolean>(false);
+  
+  // Active filter state
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
 
   // Fetch items from API
   useEffect(() => {
@@ -655,6 +665,33 @@ const InventoryPage: React.FC = () => {
     setPage(0); // Reset to first page when filter changes
   };
 
+  // Handle filter changes
+  const handleFilterChange = (filters: ActiveFilter[]) => {
+    setActiveFilters(filters);
+    setPage(0); // Reset to first page when filters change
+  };
+
+  // Add Item Modal handlers
+  const handleOpenAddItemModal = () => {
+    setIsAddItemModalOpen(true);
+  };
+
+  const handleCloseAddItemModal = () => {
+    setIsAddItemModalOpen(false);
+    handleRefresh(); // Refresh to show the new item
+  };
+  
+  // Extract available brands for the brand filter
+  const availableBrands = useMemo(() => {
+    const brands = new Set<string>();
+    items.forEach(item => {
+      if (item.brand) {
+        brands.add(item.brand);
+      }
+    });
+    return Array.from(brands).sort();
+  }, [items]);
+
   // Export functionality
   const handleExportCSV = () => {
     exportToCSV(filteredItems, 'inventory');
@@ -683,7 +720,7 @@ const InventoryPage: React.FC = () => {
     });
   };
 
-  // Filter items based on search query and selected tag
+  // Filter items based on search query, selected tag, and active filters
   const filteredItems = useMemo(() => {
     let filtered = items;
     
@@ -705,8 +742,27 @@ const InventoryPage: React.FC = () => {
       );
     }
     
+    // Apply active filters
+    if (activeFilters.length > 0) {
+      filtered = filtered.filter(item => {
+        // Item must match all active filters to be included
+        return activeFilters.every(filter => {
+          switch (filter.type) {
+            case 'category':
+              return item.category === filter.value;
+            case 'brand':
+              return item.brand === filter.value;
+            case 'status':
+              return item.status === filter.value;
+            default:
+              return true;
+          }
+        });
+      });
+    }
+    
     return filtered;
-  }, [items, searchQuery, selectedTag]);
+  }, [items, searchQuery, selectedTag, activeFilters]);
 
   // Calculate KPI metrics with 'unlisted' status
   const kpiMetrics = useMemo(() => {
@@ -770,7 +826,7 @@ const InventoryPage: React.FC = () => {
 
   return (
     <Box sx={{ py: 3, px: 2, backgroundColor: theme.palette.background.default }}>
-      {/* Header Section */}
+      {/* Header Section with Add Item Button */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           Inventory
@@ -784,6 +840,22 @@ const InventoryPage: React.FC = () => {
             disabled={refreshing}
           >
             {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+          
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={handleOpenAddItemModal}
+            sx={{
+              borderRadius: 2,
+              bgcolor: theme.palette.primary.main,
+              '&:hover': {
+                bgcolor: theme.palette.primary.dark,
+              }
+            }}
+          >
+            Add Item
           </Button>
         </Box>
       </Box>
@@ -819,7 +891,14 @@ const InventoryPage: React.FC = () => {
       >
         <Grid container spacing={2} alignItems="center">
           <Grid item xs={12} md={6}>
-            <SearchBar value={searchQuery} onChange={handleSearchChange} />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <SearchBar value={searchQuery} onChange={handleSearchChange} />
+              <InventoryFilter 
+                onFilterChange={handleFilterChange}
+                activeFilters={activeFilters}
+                availableBrands={availableBrands}
+              />
+            </Box>
           </Grid>
           
           <Grid item xs={12} md={6}>
@@ -1050,6 +1129,12 @@ const InventoryPage: React.FC = () => {
         onClose={handleColumnMenuClose}
         columns={visibleColumns}
         onToggleColumn={handleColumnToggle}
+      />
+      
+      {/* Add Item Modal */}
+      <AddItemModal 
+        open={isAddItemModalOpen}
+        onClose={handleCloseAddItemModal}
       />
       
       {/* Edit Item Modal */}
