@@ -133,20 +133,11 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
         setSortOrder('asc');
       }
     } else {
-      // If sorting by a new field, start with the appropriate initial sort order
+      // If sorting by a new field, set the field and start with appropriate initial direction
       setSortField(field);
       
-      // Set initial sort order based on field type
-      if (dateFields.includes(field)) {
-        // For dates and days in inventory, default to newest first
-        setSortOrder('desc');
-      } else if (numericFields.includes(field)) {
-        // For numeric values, default to highest first
-        setSortOrder('desc');
-      } else {
-        // For text fields, default to A-Z
-        setSortOrder('asc');
-      }
+      // For all fields, consistently start with ascending order first
+      setSortOrder('asc');
     }
   };
   
