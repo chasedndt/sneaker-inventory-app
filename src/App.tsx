@@ -1,12 +1,9 @@
 // src/App.tsx
 import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, CircularProgress, Box } from '@mui/material';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-
-// Layout Components
-import Sidebar from './components/Sidebar';
-import Navbar from './components/layout/Navbar';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 
 // Auth Components
 import Login from './components/Auth/Login';
@@ -21,6 +18,13 @@ import SalesPage from './pages/SalesPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
 import CoplistsPage from './pages/CoplistsPage';
+
+// Layout Components
+import Layout from './components/Layout';
+
+// Contexts
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 
 // Protected Route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -41,189 +45,122 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
-// Create theme
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#8884d8', // Your primary color from the inventory app
-    },
-    secondary: {
-      main: '#82ca9d', // Your secondary color
-    },
-    background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 8,
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-        },
-      },
-    },
-  },
-});
-
-// Main App Layout with Sidebar and Content Area
-const AppLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page);
-  };
-  
-  return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
-      {/* Sidebar */}
-      <Box sx={{ width: 240, flexShrink: 0 }}>
-        <Sidebar onNavigate={handleNavigate} />
-      </Box>
-      
-      {/* Main Content */}
-      <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-        {children}
-      </Box>
-    </Box>
-  );
-};
-
-// Public Layout without Sidebar for auth pages
-const PublicLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  return (
-    <Box sx={{ flexGrow: 1 }}>
-      {children}
-    </Box>
-  );
-};
-
-// AppContent component with routes
+// AppContent component that combines the router with settings
 const AppContent: React.FC = () => {
-  const { currentUser, loading } = useAuth();
-  
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-  
-  return (
-    <>
-      <Navbar />
-      <Routes>
-        {/* Public routes with PublicLayout */}
-        <Route path="/login" element={
-          <PublicLayout>
-            <Login />
-          </PublicLayout>
-        } />
-        <Route path="/signup" element={
-          <PublicLayout>
-            <Signup />
-          </PublicLayout>
-        } />
-        <Route path="/forgot-password" element={
-          <PublicLayout>
-            <ForgotPassword />
-          </PublicLayout>
-        } />
-        
-        {/* Protected routes with AppLayout */}
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Dashboard />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/inventory" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <InventoryPage />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/sales" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <SalesPage />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/expenses" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <ExpensesPage />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/coplists" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <CoplistsPage />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/settings" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <SettingsPage />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <AppLayout>
-              <Profile />
-            </AppLayout>
-          </ProtectedRoute>
-        } />
-        
-        {/* Redirect root to dashboard if logged in, otherwise to login page */}
-        <Route path="/" element={
-          currentUser ? 
-            <Navigate to="/dashboard" replace /> : 
-            <Navigate to="/login" replace />
-        } />
-        
-        {/* Catch all route for 404 */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </>
-  );
-};
+  const { darkMode } = useSettings();
+  const [currentPage, setCurrentPage] = useState<string>('dashboard');
 
-// Main App component with providers
-function App() {
+  // Create theme based on current darkMode setting
+  const theme = React.useMemo(() => createTheme({
+    palette: {
+      mode: darkMode ? 'dark' : 'light',
+      primary: {
+        main: '#8884d8',
+      },
+      secondary: {
+        main: '#82ca9d',
+      },
+      background: {
+        default: darkMode ? '#121212' : '#f5f5f5',
+        paper: darkMode ? '#1e1e2d' : '#ffffff',
+      },
+    },
+    typography: {
+      fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    },
+    components: {
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            textTransform: 'none',
+            borderRadius: 8,
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            borderRadius: 12,
+          },
+        },
+      },
+      MuiListItemButton: {
+        styleOverrides: {
+          root: {
+            '&:hover': {
+              overflow: 'hidden',
+            },
+          },
+        },
+      },
+    },
+  }), [darkMode]);
+
+  // Layout-wrapped routes to maintain consistent UI
+  const LayoutWrapper = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    
+    // Extract the current page from the path
+    React.useEffect(() => {
+      const path = location.pathname.slice(1) || 'dashboard';
+      setCurrentPage(path);
+    }, [location]);
+    
+    // Navigation handler for sidebar
+    const handleNavigate = (page: string) => {
+      navigate(`/${page}`);
+      setCurrentPage(page);
+    };
+
+    return (
+      <Layout onNavigate={handleNavigate} currentPage={currentPage}>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/inventory" element={<InventoryPage />} />
+          <Route path="/sales" element={<SalesPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/coplists" element={<CoplistsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Layout>
+    );
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <AuthProvider>
-          <AppContent />
-        </AuthProvider>
-      </Router>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <Router>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            
+            {/* Protected routes */}
+            <Route path="/*" element={
+              <ProtectedRoute>
+                <LayoutWrapper />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Router>
+      </LocalizationProvider>
     </ThemeProvider>
+  );
+};
+
+// Main App component with all providers
+function App() {
+  return (
+    <AuthProvider>
+      <SettingsProvider>
+        <AppContent />
+      </SettingsProvider>
+    </AuthProvider>
   );
 }
 

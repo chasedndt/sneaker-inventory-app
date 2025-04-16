@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// src/components/Sidebar.tsx
+import React from 'react';
 import {
   Box,
   List,
@@ -17,9 +18,11 @@ import SellIcon from '@mui/icons-material/Sell';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import SettingsIcon from '@mui/icons-material/Settings';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SidebarProps {
   onNavigate: (page: string) => void;
+  currentPage: string;
 }
 
 type MenuItemType = {
@@ -29,11 +32,11 @@ type MenuItemType = {
   dividerAfter?: boolean;
 };
 
-const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
   const theme = useTheme();
-  const [activePage, setActivePage] = useState('dashboard');
+  const { currentUser } = useAuth();
 
-  // Define menu items - removed Activity and Releases
+  // Define menu items
   const menuItems: MenuItemType[] = [
     { label: 'Dashboard', icon: <DashboardIcon />, value: 'dashboard' },
     { label: 'Inventory', icon: <InventoryIcon />, value: 'inventory' },
@@ -44,9 +47,13 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
   ];
 
   const handleNavigate = (page: string) => {
-    setActivePage(page);
     onNavigate(page);
   };
+
+  // Return early if not authenticated
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <Box sx={{ 
@@ -95,7 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
           <React.Fragment key={item.value}>
             <ListItem disablePadding>
               <ListItemButton
-                selected={activePage === item.value}
+                selected={currentPage === item.value}
                 onClick={() => handleNavigate(item.value)}
                 sx={{
                   py: 1.5,
@@ -121,7 +128,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
               >
                 <ListItemIcon 
                   sx={{
-                    color: activePage === item.value 
+                    color: currentPage === item.value 
                       ? theme.palette.primary.main 
                       : theme.palette.text.secondary,
                     minWidth: 36,
@@ -133,8 +140,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate }) => {
                   primary={item.label} 
                   primaryTypographyProps={{
                     fontSize: '0.9rem',
-                    fontWeight: activePage === item.value ? 'medium' : 'regular',
-                    color: activePage === item.value 
+                    fontWeight: currentPage === item.value ? 'medium' : 'regular',
+                    color: currentPage === item.value 
                       ? theme.palette.primary.main 
                       : theme.palette.text.primary,
                   }}

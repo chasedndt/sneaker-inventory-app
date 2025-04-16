@@ -1,4 +1,4 @@
-// src/context/SettingsContext.tsx
+// src/contexts/SettingsContext.tsx
 import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
 import { 
   currencyConverter, 
@@ -8,6 +8,7 @@ import {
   formatCurrencyWithSymbol
 } from '../utils/currencyUtils';
 import { formatDate as formatDateUtil } from '../utils/dateUtils';
+import { useAuth } from './AuthContext';
 
 // Define the settings structure
 interface Settings {
@@ -31,6 +32,7 @@ interface SettingsContextType {
   setDateFormat: (format: string) => void;
   formatDate: (date: Date | string) => string;
   formatCurrency: (amount: number) => string;
+  getCurrentCurrency: () => string;
   convertCurrency: (amount: number, fromCurrency: string) => number;
   saveSettings: (settings: Settings) => void;
   refreshExchangeRates: () => Promise<boolean>;
@@ -38,42 +40,38 @@ interface SettingsContextType {
   lastRatesUpdate: Date | null;
 }
 
-// Create the context with default values
-const SettingsContext = createContext<SettingsContextType>({
-  darkMode: true,
-  toggleDarkMode: () => {},
-  currency: 'USD',
-  setCurrency: () => {},
-  dateFormat: 'MM/DD/YYYY',
-  setDateFormat: () => {},
-  formatDate: () => '',
-  formatCurrency: () => '',
-  convertCurrency: () => 0,
-  saveSettings: () => {},
-  refreshExchangeRates: async () => false,
-  exchangeRates: null,
-  lastRatesUpdate: null,
-});
+// Create the context with default undefined value
+const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
-// Settings storage key
-const SETTINGS_STORAGE_KEY = 'hypelist_settings';
-
-// Default settings
-const defaultSettings: Settings = {
-  darkMode: true,
-  currency: 'USD',
-  dateFormat: 'MM/DD/YYYY',
+// Custom hook to use the settings context
+export const useSettings = () => {
+  const context = useContext(SettingsContext);
+  if (context === undefined) {
+    throw new Error('useSettings must be used within a SettingsProvider');
+  }
+  return context;
 };
 
 interface SettingsProviderProps {
   children: ReactNode;
 }
 
+// Default settings
+const defaultSettings: Settings = {
+  darkMode: false,
+  currency: 'USD',
+  dateFormat: 'MM/DD/YYYY',
+};
+
+// Settings Provider component
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
+  const { currentUser } = useAuth();
+  const userSettingsKey = currentUser ? `hypelist_settings_${currentUser.uid}` : 'hypelist_settings';
+  
   // Initialize settings state from localStorage or defaults
   const [settings, setSettings] = useState<Settings>(() => {
     try {
-      const storedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      const storedSettings = localStorage.getItem(userSettingsKey);
       return storedSettings ? JSON.parse(storedSettings) : defaultSettings;
     } catch (error) {
       console.error('Error loading settings from localStorage:', error);
@@ -115,15 +113,17 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     initExchangeRates();
   }, []);
 
-  // Save settings whenever they change
+  // Save settings whenever they change or when user changes
   useEffect(() => {
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-      console.log('Settings saved to localStorage:', settings);
-    } catch (error) {
-      console.error('Error saving settings to localStorage:', error);
+    if (userSettingsKey) {
+      try {
+        localStorage.setItem(userSettingsKey, JSON.stringify(settings));
+        console.log('Settings saved to localStorage:', settings);
+      } catch (error) {
+        console.error('Error saving settings to localStorage:', error);
+      }
     }
-  }, [settings]);
+  }, [settings, userSettingsKey]);
 
   // Toggle dark mode
   const toggleDarkMode = () => {
@@ -172,6 +172,22 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     return formatDateUtil(date, dateFormat);
   };
 
+  // Get the current currency symbol
+  const getCurrentCurrency = (): string => {
+    switch (currency) {
+      case 'USD':
+        return '$';
+      case 'EUR':
+        return '€';
+      case 'GBP':
+        return '£';
+      case 'JPY':
+        return '¥';
+      default:
+        return '$';
+    }
+  };
+
   // Convert currency using the latest exchange rates
   const convertCurrency = (amount: number, fromCurrency: string = 'USD'): number => {
     // If amount is 0 or not a number, return 0
@@ -213,30 +229,29 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     setSettings(newSettings);
   };
 
+  // Create value object for the context
+  const value: SettingsContextType = {
+    darkMode,
+    toggleDarkMode,
+    currency,
+    setCurrency,
+    dateFormat,
+    setDateFormat,
+    formatDate,
+    formatCurrency,
+    getCurrentCurrency,
+    convertCurrency,
+    saveSettings,
+    refreshExchangeRates,
+    exchangeRates,
+    lastRatesUpdate,
+  };
+
   return (
-    <SettingsContext.Provider
-      value={{
-        darkMode,
-        toggleDarkMode,
-        currency,
-        setCurrency,
-        dateFormat,
-        setDateFormat,
-        formatDate,
-        formatCurrency,
-        convertCurrency,
-        saveSettings,
-        refreshExchangeRates,
-        exchangeRates,
-        lastRatesUpdate,
-      }}
-    >
+    <SettingsContext.Provider value={value}>
       {children}
     </SettingsContext.Provider>
   );
 };
-
-// Custom hook for using settings
-export const useSettings = () => useContext(SettingsContext);
 
 export default SettingsContext;

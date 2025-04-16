@@ -1,6 +1,7 @@
 // src/services/api.ts (Improved Error Handling for Tags and Listings)
 import { CategoryType } from '../components/AddItem/SizesQuantityForm';
 import { getImageUrl, safeImageUrl } from '../utils/imageUtils';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface ImageFile extends File {
   preview?: string;
@@ -674,6 +675,17 @@ export const api = {
       throw error;
     }
   }
+};
+
+// Create an API utility hook for components that need auth context
+export const useApi = () => {
+  const { currentUser } = useAuth();
+
+  // Return the same API object, but potentially with auth context in the future
+  return {
+    ...api,
+    isAuthenticated: !!currentUser
+  };
 };
 
 export type {

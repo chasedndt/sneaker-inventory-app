@@ -2,51 +2,44 @@
 import React from 'react';
 import { Box, useTheme } from '@mui/material';
 import Sidebar from './Sidebar';
+import Navbar from './layout/Navbar';
+import { useAuth } from '../contexts/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
   onNavigate: (page: string) => void;
+  currentPage: string;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, onNavigate }) => {
+const Layout: React.FC<LayoutProps> = ({ children, onNavigate, currentPage }) => {
   const theme = useTheme();
-  
-  return (
-    <Box sx={{
-      display: 'flex',
-      minHeight: '100vh',
-      width: '100%',
-      margin: 0,
-      padding: 0,
-      overflow: 'hidden',
-      bgcolor: theme.palette.background.default
-    }}>
-      {/* Sidebar Container */}
-      <Box sx={{
-        width: '240px',
-        height: '100vh',
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        zIndex: 1200,
-        // Remove the box-shadow to prevent visual overflow
-        // since we've fixed the hover effect in Sidebar component
-      }}>
-        <Sidebar onNavigate={onNavigate} />
-      </Box>
+  const { currentUser } = useAuth();
 
-      {/* Main content */}
-      <Box sx={{
+  if (!currentUser) {
+    // If not authenticated, just show the children without layout
+    // This should never happen since we use ProtectedRoute, but adding as a safeguard
+    return <>{children}</>;
+  }
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+      {/* Sidebar */}
+      <Box sx={{ width: 240, flexShrink: 0 }}>
+        <Sidebar onNavigate={onNavigate} currentPage={currentPage} />
+      </Box>
+      
+      {/* Main Content */}
+      <Box sx={{ 
         flexGrow: 1,
-        marginLeft: '240px',
-        minHeight: '100vh',
-        overflow: 'auto',
-        padding: '24px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
       }}>
-        <Box sx={{
-          maxWidth: '1600px',
-          margin: '0 auto',
-          width: '100%'
+        <Navbar currentUser={currentUser} />
+        <Box sx={{ 
+          flexGrow: 1,
+          overflow: 'auto',
+          backgroundColor: theme.palette.background.default 
         }}>
           {children}
         </Box>

@@ -18,6 +18,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import { api } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
 
+
 interface ImageViewerProps {
   open: boolean;
   onClose: () => void;
