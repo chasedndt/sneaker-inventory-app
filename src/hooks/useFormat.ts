@@ -1,6 +1,6 @@
 // src/hooks/useFormat.ts
 import { useCallback } from 'react';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings } from '../contexts/SettingsContext';
 
 /**
  * Custom hook for formatting values according to user settings

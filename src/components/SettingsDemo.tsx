@@ -10,7 +10,7 @@ import {
   Divider,
   useTheme 
 } from '@mui/material';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings } from '../contexts/SettingsContext';
 import useFormat from '../hooks/useFormat';
 
 /**

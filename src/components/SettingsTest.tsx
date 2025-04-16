@@ -1,7 +1,7 @@
 // src/components/SettingsTest.tsx
 import React, { useState, useEffect } from 'react';
 import { Box, Paper, Typography, Button, CircularProgress, useTheme } from '@mui/material';
-import { useSettings } from '../context/SettingsContext';
+import { useSettings } from '../contexts/SettingsContext';
 import useFormat from '../hooks/useFormat';
 
 /**

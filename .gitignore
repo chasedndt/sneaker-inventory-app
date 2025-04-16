@@ -23,9 +23,10 @@ backend/uploads/*
 /node_modules
 /build
 
-# Env Files
-*.env
-*.env.local
-*.env.development.local
-*.env.test.local
-*.env.production.local
+# Environment Variables
+.env
+.env.backend
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
