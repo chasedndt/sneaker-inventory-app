@@ -10,14 +10,16 @@ import {
   useTheme,
   Paper,
   CircularProgress,
-  DialogActions
+  DialogActions,
+  Alert
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIosIcon from '@mui/icons-material/ArrowBackIos';
 import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
+import LoginIcon from '@mui/icons-material/Login';
 import { api } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
-
+import { useAuth } from '../../contexts/AuthContext';
 
 interface ImageViewerProps {
   open: boolean;
@@ -33,20 +35,31 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   initialImageIndex = 0
 }) => {
   const theme = useTheme();
+  const { currentUser } = useAuth();
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(initialImageIndex);
+  const [authError, setAuthError] = useState<boolean>(false);
 
   // Fetch images when the dialog opens
   useEffect(() => {
     if (open && itemId !== null) {
+      // Check if user is authenticated
+      if (!currentUser) {
+        setAuthError(true);
+        setLoading(false);
+        setError('Authentication required. Please log in to view images.');
+        return;
+      }
+
       const fetchImages = async () => {
         try {
           setLoading(true);
           setError(null);
+          setAuthError(false);
           
-          // Fetch all images for the item
+          // Fetch all images for the item with authenticated request
           const imageFilenames = await api.getItemImages(itemId);
           
           if (imageFilenames.length === 0) {
@@ -59,7 +72,19 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
           }
         } catch (err: any) {
           console.error('Error fetching images:', err);
-          setError(`Failed to load images: ${err.message}`);
+          
+          // Check if this is an authentication error
+          if (err.message && (
+              err.message.includes('Authentication required') ||
+              err.message.includes('Authentication expired') ||
+              err.message.includes('permission')
+          )) {
+            setAuthError(true);
+            setError('Authentication error: ' + err.message);
+          } else {
+            setError(`Failed to load images: ${err.message}`);
+          }
+          
           setImages([]);
         } finally {
           setLoading(false);
@@ -68,7 +93,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       
       fetchImages();
     }
-  }, [open, itemId, initialImageIndex]);
+  }, [open, itemId, initialImageIndex, currentUser]);
 
   // Handle navigation
   const handlePrevious = () => {
@@ -141,8 +166,23 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
             <CircularProgress />
           </Box>
+        ) : authError ? (
+          <Box sx={{ textAlign: 'center', p: 4 }}>
+            <Alert 
+              severity="error" 
+              icon={<LoginIcon />}
+              sx={{ mb: 2 }}
+            >
+              Authentication Error
+            </Alert>
+            <Typography color="error">{error}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Please log in again to view these images.
+            </Typography>
+          </Box>
         ) : error ? (
           <Box sx={{ textAlign: 'center', p: 4 }}>
+            <Alert severity="error" sx={{ mb: 2 }}>Error Loading Images</Alert>
             <Typography color="error">{error}</Typography>
           </Box>
         ) : images.length > 0 ? (
@@ -167,6 +207,12 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                   objectFit: 'contain',
                   display: 'block',
                   margin: '0 auto'
+                }}
+                onError={(e) => {
+                  // If image fails to load, show error
+                  console.error('Failed to load image:', currentImageUrl);
+                  // Set a placeholder or broken image indicator
+                  (e.target as HTMLImageElement).src = '/placeholder-image-svg.svg';
                 }}
               />
             </Box>
@@ -253,6 +299,10 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                     width: '100%',
                     height: '100%',
                     objectFit: 'cover',
+                  }}
+                  onError={(e) => {
+                    // If thumbnail fails to load, show placeholder
+                    (e.target as HTMLImageElement).src = '/placeholder-image-svg.svg';
                   }}
                 />
               </Paper>

@@ -10,6 +10,9 @@ class Item(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Add user_id field to associate with Firebase UID
+    user_id = db.Column(db.String(100), nullable=False, index=True)
+    
     # Product Details
     category = db.Column(db.String(50), nullable=False)
     product_name = db.Column(db.String(100), nullable=False)
@@ -79,6 +82,7 @@ class Item(db.Model):
             
             return {
                 'id': self.id,
+                'user_id': self.user_id,  # Include user_id in API response
                 'category': self.category,
                 'productName': self.product_name,
                 'reference': self.reference,
@@ -106,6 +110,7 @@ class Item(db.Model):
             # Return a minimal dict with error info
             return {
                 'id': self.id if hasattr(self, 'id') else None,
+                'user_id': self.user_id if hasattr(self, 'user_id') else None,
                 'productName': self.product_name if hasattr(self, 'product_name') else 'Unknown Item',
                 'error': f"Failed to serialize item: {str(e)}"
             }
@@ -116,6 +121,7 @@ class Size(db.Model):
     system = db.Column(db.String(20))
     size = db.Column(db.String(20), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
+    # No direct user_id since it's associated to Item
 
 class Image(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -123,6 +129,7 @@ class Image(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     path = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # No direct user_id since it's associated to Item
 
     def to_dict(self):
         try:
@@ -142,8 +149,12 @@ class Image(db.Model):
 
 class Tag(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(50), nullable=False)
     color = db.Column(db.String(20), nullable=False, default='#8884d8')  # Default color
+    user_id = db.Column(db.String(100), nullable=False, index=True)  # Tags are user-specific
+    
+    # Add unique constraint for name+user_id instead of just name
+    __table_args__ = (db.UniqueConstraint('name', 'user_id', name='unique_tag_per_user'),)
     
     def to_dict(self):
         """
@@ -153,7 +164,8 @@ class Tag(db.Model):
             return {
                 'id': str(self.id),  # Convert to string for consistency with frontend
                 'name': self.name,
-                'color': self.color
+                'color': self.color,
+                'user_id': self.user_id
             }
         except Exception as e:
             print(f"🏷️ Error in Tag.to_dict(): {str(e)}")
@@ -166,6 +178,9 @@ class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Add user_id field to associate with Firebase UID
+    user_id = db.Column(db.String(100), nullable=False, index=True)
     
     # Foreign key to item
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
@@ -187,6 +202,7 @@ class Sale(db.Model):
         try:
             return {
                 'id': self.id,
+                'user_id': self.user_id,
                 'itemId': self.item_id,
                 'platform': self.platform,
                 'saleDate': self.sale_date.isoformat() if self.sale_date else None,
@@ -212,6 +228,9 @@ class Expense(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # Add user_id field to associate with Firebase UID
+    user_id = db.Column(db.String(100), nullable=False, index=True)
+    
     # Expense details
     expense_type = db.Column(db.String(50), nullable=False)  # 'shipping', 'supplies', 'fees', 'storage', 'other'
     amount = db.Column(db.Float, nullable=False)
@@ -230,6 +249,7 @@ class Expense(db.Model):
         try:
             return {
                 'id': self.id,
+                'user_id': self.user_id,
                 'expenseType': self.expense_type,
                 'amount': self.amount,
                 'currency': self.currency,
@@ -249,8 +269,85 @@ class Expense(db.Model):
                 'error': f"Failed to serialize expense: {str(e)}"
             }
 
+# Add a Coplist model for saving item collections
+class Coplist(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # User ID field
+    user_id = db.Column(db.String(100), nullable=False, index=True)
+    
+    # Coplist details
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    is_private = db.Column(db.Boolean, default=True)
+    
+    # Relationship with items via join table
+    items = db.relationship('Item', 
+                           secondary='coplist_items',
+                           backref=db.backref('coplists', lazy='dynamic'))
+    
+    def to_dict(self):
+        """
+        Create a dictionary representation of the coplist for API responses.
+        """
+        try:
+            return {
+                'id': self.id,
+                'user_id': self.user_id,
+                'name': self.name,
+                'description': self.description,
+                'is_private': self.is_private,
+                'item_count': len(self.items),
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+        except Exception as e:
+            print(f"📋 Error in Coplist.to_dict(): {str(e)}")
+            return {
+                'id': self.id if hasattr(self, 'id') else None,
+                'error': f"Failed to serialize coplist: {str(e)}"
+            }
+
+# User Settings model to store user preferences
+class UserSettings(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(100), nullable=False, unique=True, index=True)
+    dark_mode = db.Column(db.Boolean, default=False)
+    currency = db.Column(db.String(10), default='USD')
+    date_format = db.Column(db.String(20), default='MM/DD/YYYY')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        """
+        Create a dictionary representation of user settings for API responses.
+        """
+        try:
+            return {
+                'user_id': self.user_id,
+                'dark_mode': self.dark_mode,
+                'currency': self.currency,
+                'date_format': self.date_format,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            }
+        except Exception as e:
+            print(f"⚙️ Error in UserSettings.to_dict(): {str(e)}")
+            return {
+                'user_id': self.user_id if hasattr(self, 'user_id') else None,
+                'error': f"Failed to serialize user settings: {str(e)}"
+            }
+
 # Association table for many-to-many relationship between items and tags
 item_tags = db.Table('item_tags',
     db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True),
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)
+)
+
+# Association table for Coplists and Items
+coplist_items = db.Table('coplist_items',
+    db.Column('coplist_id', db.Integer, db.ForeignKey('coplist.id'), primary_key=True),
+    db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True)
 )

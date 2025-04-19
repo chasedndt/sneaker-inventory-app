@@ -9,7 +9,7 @@ import traceback
 from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
-from models import db, Item, Size, Image, Tag, Sale, Expense
+from models import db, Item, Size, Image, Tag, Sale, Expense, Coplist, UserSettings
 from config import Config
 from datetime import datetime, timedelta
 from tag_routes import tag_routes
@@ -18,6 +18,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 import uuid
 import calendar
+from middleware.auth import require_auth, get_user_id_from_token, get_current_user_info
 
 def convert_to_snake_case(name):
     """Convert a string from camelCase to snake_case."""
@@ -32,7 +33,7 @@ def create_app():
         r"/api/*": {
             "origins": ["http://localhost:3000"],
             "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-            "allow_headers": ["Content-Type"],
+            "allow_headers": ["Content-Type", "Authorization"],  # Added Authorization header
             "max_age": 3600,
             "supports_credentials": True
         }
@@ -71,15 +72,87 @@ def create_app():
         logger.info("Test endpoint hit")
         return jsonify({'status': 'connected'}), 200
     
-    # NEW ENDPOINT: Get all items
-    @app.route('/api/items', methods=['GET'])
-    def get_items():
+    # Get user info endpoint
+    @app.route('/api/user', methods=['GET'])
+    @require_auth
+    def get_user(user_id):
         """
-        Get all items with their images.
+        Get current user information.
         """
         try:
-            logger.info("📊 Fetching all items")
-            items = Item.query.all()
+            logger.info(f"🔍 Fetching user info for user_id: {user_id}")
+            
+            # Get user settings
+            settings = UserSettings.query.filter_by(user_id=user_id).first()
+            
+            # If settings don't exist, create default settings
+            if not settings:
+                settings = UserSettings(user_id=user_id)
+                db.session.add(settings)
+                db.session.commit()
+                logger.info(f"✅ Created default settings for user_id: {user_id}")
+            
+            # Get user details from Firebase (optional)
+            user_info = get_current_user_info() or {'uid': user_id}
+            
+            # Combine settings with user info
+            response = {
+                **user_info,
+                'settings': settings.to_dict()
+            }
+            
+            return jsonify(response), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching user info: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Update user settings endpoint
+    @app.route('/api/settings', methods=['PUT'])
+    @require_auth
+    def update_settings(user_id):
+        """
+        Update user settings.
+        """
+        try:
+            logger.info(f"🔄 Updating settings for user_id: {user_id}")
+            data = request.json
+            
+            if not data:
+                return jsonify({'error': 'No data provided'}), 400
+            
+            # Get existing settings or create new
+            settings = UserSettings.query.filter_by(user_id=user_id).first()
+            if not settings:
+                settings = UserSettings(user_id=user_id)
+                db.session.add(settings)
+            
+            # Update settings
+            if 'dark_mode' in data:
+                settings.dark_mode = data['dark_mode']
+            if 'currency' in data:
+                settings.currency = data['currency']
+            if 'date_format' in data:
+                settings.date_format = data['date_format']
+            
+            db.session.commit()
+            
+            logger.info(f"✅ Settings updated for user_id: {user_id}")
+            return jsonify(settings.to_dict()), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating settings: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Modified to include user_id from authentication
+    @app.route('/api/items', methods=['GET'])
+    @require_auth
+    def get_items(user_id):
+        """
+        Get all items with their images for current user.
+        """
+        try:
+            logger.info(f"📊 Fetching items for user_id: {user_id}")
+            items = Item.query.filter_by(user_id=user_id).all()
             
             # Convert items to dictionary format with image URLs
             items_data = []
@@ -87,15 +160,16 @@ def create_app():
                 item_dict = item.to_dict()
                 items_data.append(item_dict)
             
-            logger.info(f"✅ Retrieved {len(items_data)} items")
+            logger.info(f"✅ Retrieved {len(items_data)} items for user_id: {user_id}")
             return jsonify(items_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # Get a single item by ID
+    # Get a single item by ID - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['GET'])
-    def get_item(item_id):
+    @require_auth
+    def get_item(user_id, item_id):
         """
         Get a single item by ID with its images.
         """
@@ -105,7 +179,12 @@ def create_app():
                 logger.warning(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': 'Item not found'}), 404
             
-            logger.info(f"✅ Retrieved item {item_id} from database")
+            # Check if item belongs to the requesting user
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to access item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            logger.info(f"✅ Retrieved item {item_id} from database for user_id: {user_id}")
             
             # Get the item's images
             images = Image.query.filter_by(item_id=item.id).all()
@@ -122,11 +201,12 @@ def create_app():
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # Add a new item
+    # Add a new item with current user_id
     @app.route('/api/items', methods=['POST'])
-    def add_item():
+    @require_auth
+    def add_item(user_id):
         try:
-            logger.info("Receiving item creation request")
+            logger.info(f"Receiving item creation request for user_id: {user_id}")
             
             # Check if the post request has the file part
             if 'images' not in request.files and 'data' not in request.form:
@@ -141,8 +221,9 @@ def create_app():
             sizes_quantity = form_data.get('sizesQuantity', {})
             purchase_details = form_data.get('purchaseDetails', {})
             
-            # Create a new item
+            # Create a new item with user_id
             new_item = Item(
+                user_id=user_id,  # Set the user_id from auth
                 category=product_details.get('category', ''),
                 product_name=product_details.get('productName', ''),
                 reference=product_details.get('reference', ''),
@@ -181,10 +262,10 @@ def create_app():
             # Add tags if provided
             if purchase_details.get('tags'):
                 for tag_name in purchase_details.get('tags', []):
-                    # Check if tag already exists
-                    tag = Tag.query.filter_by(name=tag_name).first()
+                    # Check if tag already exists for this user
+                    tag = Tag.query.filter_by(name=tag_name, user_id=user_id).first()
                     if not tag:
-                        tag = Tag(name=tag_name)
+                        tag = Tag(name=tag_name, user_id=user_id)
                         db.session.add(tag)
                         db.session.flush()
                     
@@ -200,10 +281,15 @@ def create_app():
                     # Generate a secure filename with timestamp to avoid duplicates
                     filename = secure_filename(file.filename)
                     filename_parts = filename.rsplit('.', 1)
-                    timestamped_filename = f"{filename_parts[0]}_{int(time.time())}.{filename_parts[1]}"
+                    timestamped_filename = f"{filename_parts[0]}_{int(time.time())}_{user_id}.{filename_parts[1]}"
+                    
+                    # Create user-specific subfolder
+                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+                    if not os.path.exists(user_upload_folder):
+                        os.makedirs(user_upload_folder)
                     
                     # Save the file
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    file_path = os.path.join(user_upload_folder, timestamped_filename)
                     file.save(file_path)
                     
                     # Create image record in database
@@ -218,7 +304,7 @@ def create_app():
             # Commit changes to database
             db.session.commit()
             
-            logger.info(f"✅ Item created with ID: {new_item.id}")
+            logger.info(f"✅ Item created with ID: {new_item.id} for user_id: {user_id}")
             
             # Return the created item with its images
             return jsonify({
@@ -234,23 +320,29 @@ def create_app():
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error creating item: {str(e)}")
+            logger.error(f"💥 Error creating item for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # Update an existing item
+    # Update an existing item - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['PUT'])
-    def update_item(item_id):
+    @require_auth
+    def update_item(user_id, item_id):
         """
-        Update an existing item.
+        Update an existing item, ensuring it belongs to the current user.
         """
         try:
-            logger.info(f"🔄 Updating item {item_id}")
+            logger.info(f"🔄 Updating item {item_id} for user {user_id}")
             
-            # Check if item exists
+            # Check if item exists and belongs to user
             item = Item.query.get(item_id)
             if not item:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Verify ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Check if the request has data
             if 'data' not in request.form:
@@ -324,10 +416,15 @@ def create_app():
                         # Generate a secure filename with timestamp to avoid duplicates
                         filename = secure_filename(file.filename)
                         filename_parts = filename.rsplit('.', 1)
-                        timestamped_filename = f"{filename_parts[0]}_{int(time.time())}.{filename_parts[1]}"
+                        timestamped_filename = f"{filename_parts[0]}_{int(time.time())}_{user_id}.{filename_parts[1]}"
+                        
+                        # Create user-specific subfolder
+                        user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+                        if not os.path.exists(user_upload_folder):
+                            os.makedirs(user_upload_folder)
                         
                         # Save the file
-                        file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                        file_path = os.path.join(user_upload_folder, timestamped_filename)
                         file.save(file_path)
                         
                         # Create image record in database
@@ -345,7 +442,7 @@ def create_app():
             # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Item {item_id} updated successfully")
+            logger.info(f"✅ Item {item_id} updated successfully for user {user_id}")
             
             # Return the updated item
             return jsonify({
@@ -354,17 +451,29 @@ def create_app():
             }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error updating item {item_id}: {str(e)}")
+            logger.error(f"💥 Error updating item {item_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # Update an item field
+    # Update a specific field of an item
     @app.route('/api/items/<int:item_id>/field', methods=['PATCH'])
-    def update_item_field(item_id):
+    @require_auth
+    def update_item_field(user_id, item_id):
         """
-        Update a specific field of an item.
+        Update a specific field of an item, verifying user ownership.
         """
         try:
-            logger.info(f"🔄 Updating field for item {item_id}")
+            logger.info(f"🔄 Updating field for item {item_id}, user {user_id}")
+            
+            # Check if item exists and belongs to user
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # Verify ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Log request data for debugging
             logger.info(f"Request data: {request.data}")
@@ -389,12 +498,6 @@ def create_app():
             
             logger.info(f"Field: {field}, Value: {value}")
             
-            # Check if item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
-            
             # Special handling for tags field
             if field == 'tags':
                 try:
@@ -417,11 +520,12 @@ def create_app():
                         # Try to find the tag
                         tag = Tag.query.get(tag_id_to_use)
                         
-                        if tag:
+                        # Verify the tag belongs to the user
+                        if tag and tag.user_id == user_id:
                             item.tags.append(tag)
                             logger.info(f"Added tag {tag.id} to item {item_id}")
                         else:
-                            logger.warning(f"Tag with ID {tag_id} not found")
+                            logger.warning(f"Tag with ID {tag_id} not found or doesn't belong to user {user_id}")
                     
                     # Log the updated tags
                     logger.info(f"Updated tags for item {item_id}: {[t.id for t in item.tags]}")
@@ -510,14 +614,15 @@ def create_app():
             logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
-    # Delete an item
+    # Delete an item - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['DELETE'])
-    def delete_item(item_id):
+    @require_auth
+    def delete_item(user_id, item_id):
         """
-        Delete an item and its associated data.
+        Delete an item and its associated data, verifying user ownership.
         """
         try:
-            logger.info(f"🗑️ Deleting item {item_id}")
+            logger.info(f"🗑️ Deleting item {item_id} for user {user_id}")
             
             # Check if item exists
             item = Item.query.get(item_id)
@@ -525,8 +630,13 @@ def create_app():
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
+            # Verify ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to delete item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
             # Delete associated sales records
-            sales = Sale.query.filter_by(item_id=item_id).all()
+            sales = Sale.query.filter_by(item_id=item_id, user_id=user_id).all()
             for sale in sales:
                 db.session.delete(sale)
                 logger.info(f"🗑️ Deleted associated sale {sale.id} for item {item_id}")
@@ -535,7 +645,8 @@ def create_app():
             images = Image.query.filter_by(item_id=item_id).all()
             for image in images:
                 try:
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], image.filename)
+                    # Construct path based on user_id subfolder
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], user_id, image.filename)
                     if os.path.exists(file_path):
                         os.remove(file_path)
                         logger.info(f"✅ Deleted image file: {file_path}")
@@ -551,88 +662,26 @@ def create_app():
             db.session.delete(item)
             db.session.commit()
             
-            logger.info(f"✅ Item {item_id} deleted successfully")
+            logger.info(f"✅ Item {item_id} deleted successfully for user {user_id}")
             
             return jsonify({
                 'message': f'Item {item_id} deleted successfully'
             }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error deleting item {item_id}: {str(e)}")
+            logger.error(f"💥 Error deleting item {item_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/check-image/<filename>')
-    def check_image(filename):
-        """
-        Check if an image exists in the uploads directory and return metadata
-        """
-        try:
-            image_logger.info(f"Image check request for: {filename}")
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            exists = os.path.exists(filepath)
-            
-            if exists:
-                stats = os.stat(filepath)
-                image_logger.info(f"✅ Image check: {filename} exists, size: {stats.st_size} bytes")
-                return jsonify({
-                    'exists': True,
-                    'filename': filename,
-                    'filepath': filepath,
-                    'size': stats.st_size,
-                    'created': stats.st_ctime,
-                    'permissions': oct(stats.st_mode)[-3:]
-                }), 200
-            else:
-                # Log the complete uploads directory to help troubleshoot
-                try:
-                    files_in_directory = os.listdir(app.config['UPLOAD_FOLDER'])
-                    image_logger.warning(f"❌ File not found: {filename}, available files: {files_in_directory}")
-                except Exception as dir_err:
-                    image_logger.error(f"🚫 Error listing directory: {str(dir_err)}")
-                    files_in_directory = []
-                
-                return jsonify({
-                    'exists': False,
-                    'filename': filename,
-                    'attempted_path': filepath,
-                    'directory': app.config['UPLOAD_FOLDER'],
-                    'files_in_directory': files_in_directory[:10]  # Limit to first 10 files
-                }), 404
-        except Exception as e:
-            image_logger.error(f"💥 Error checking image {filename}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/uploads/<filename>')
-    def serve_image(filename):
-        """
-        Serve uploaded images with detailed logging
-        """
-        try:
-            image_logger.info(f"📷 Image request for: {filename}")
-            # Check if file exists before serving
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if not os.path.exists(filepath):
-                image_logger.warning(f"🔍 Requested image not found: {filename}")
-                return jsonify({'error': 'Image not found'}), 404
-                
-            # Log successful request
-            image_logger.info(f"✅ Serving image: {filename}")
-            return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-        except Exception as e:
-            image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-        
-    
-
-    # SALES API ENDPOINTS
+    # Sales Endpoints - all with user_id verification
     @app.route('/api/sales', methods=['GET'])
-    def get_sales():
+    @require_auth
+    def get_sales(user_id):
         """
-        Get all sales with associated item details.
+        Get all sales for the current user.
         """
         try:
-            logger.info("📊 Fetching all sales")
-            sales = Sale.query.all()
+            logger.info(f"📊 Fetching sales for user_id: {user_id}")
+            sales = Sale.query.filter_by(user_id=user_id).all()
             
             # Convert sales to dictionary format with item details
             sales_data = []
@@ -641,8 +690,8 @@ def create_app():
                 
                 # Get associated item for additional info
                 item = Item.query.get(sale.item_id)
-                if item:
-                    # Add item details that would be useful for the sales display
+                if item and item.user_id == user_id:  # Additional ownership check
+                    # Add item details to sale data
                     images = Image.query.filter_by(item_id=item.id).all()
                     image_filenames = [img.filename for img in images]
                     
@@ -651,7 +700,7 @@ def create_app():
                     size = size_info.size if size_info else None
                     size_system = size_info.system if size_info else None
                     
-                    # Add item details to sale data
+                    # Add item details to sale dict
                     sale_dict.update({
                         'itemName': item.product_name,
                         'brand': item.brand,
@@ -662,34 +711,125 @@ def create_app():
                         'size': size,
                         'sizeSystem': size_system
                     })
+                else:
+                    # Item not found or not owned by user - add minimal info
+                    sale_dict.update({
+                        'itemName': 'Unknown Item',
+                        'brand': 'Unknown',
+                        'category': 'Unknown',
+                        'purchasePrice': 0,
+                        'images': []
+                    })
                 
                 sales_data.append(sale_dict)
             
-            logger.info(f"✅ Retrieved {len(sales_data)} sales")
+            logger.info(f"✅ Retrieved {len(sales_data)} sales for user_id: {user_id}")
             return jsonify(sales_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching sales: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/sales/<int:sale_id>', methods=['GET'])
-    def get_sale(sale_id):
+    # Create a new sale record
+    @app.route('/api/sales', methods=['POST'])
+    @require_auth
+    def create_sale(user_id):
         """
-        Get a single sale by ID with associated item details.
+        Create a new sale record and update item status to 'sold'.
         """
         try:
-            logger.info(f"🔍 Fetching sale {sale_id}")
-            sale = Sale.query.get(sale_id)
+            logger.info(f"📝 Creating new sale record for user_id: {user_id}")
+            data = request.json
             
+            # Validate required fields
+            required_fields = ['itemId', 'platform', 'saleDate', 'salePrice', 'status']
+            for field in required_fields:
+                if field not in data:
+                    logger.error(f"❌ Missing required field: {field}")
+                    return jsonify({'error': f'Missing required field: {field}'}), 400
+            
+            # Check if item exists and belongs to user
+            item = Item.query.get(data['itemId'])
+            if not item:
+                logger.error(f"❌ Item with ID {data['itemId']} not found")
+                return jsonify({'error': f'Item with ID {data["itemId"]} not found'}), 404
+            
+            # Verify ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to create sale for item {item.id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Parse the date string
+            try:
+                sale_date = datetime.fromisoformat(data['saleDate'].replace('Z', '+00:00'))
+            except (ValueError, TypeError) as e:
+                logger.error(f"❌ Invalid date format: {data['saleDate']}")
+                return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
+            
+            # Create new sale record with user_id
+            new_sale = Sale(
+                user_id=user_id,
+                item_id=data['itemId'],
+                platform=data['platform'],
+                sale_date=sale_date,
+                sale_price=float(data['salePrice']),
+                currency=data.get('currency', '$'),
+                sales_tax=float(data.get('salesTax', 0) or 0),
+                platform_fees=float(data.get('platformFees', 0) or 0),
+                status=data['status'],
+                sale_id=data.get('saleId', '')
+            )
+            
+            db.session.add(new_sale)
+            
+            # Update item status to 'sold'
+            item.status = 'sold'
+            
+            # Commit changes
+            db.session.commit()
+            
+            logger.info(f"✅ Created new sale record with ID {new_sale.id} for user {user_id}")
+            
+            # Return the created sale with item details
+            sale_dict = new_sale.to_dict()
+            sale_dict.update({
+                'itemName': item.product_name,
+                'brand': item.brand,
+                'category': item.category,
+                'purchasePrice': item.purchase_price
+            })
+            
+            return jsonify(sale_dict), 201
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error creating sale for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Get single sale with ownership verification
+    @app.route('/api/sales/<int:sale_id>', methods=['GET'])
+    @require_auth
+    def get_sale(user_id, sale_id):
+        """
+        Get a single sale by ID with ownership verification.
+        """
+        try:
+            logger.info(f"🔍 Fetching sale {sale_id} for user {user_id}")
+            
+            sale = Sale.query.get(sale_id)
             if not sale:
                 logger.warning(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': 'Sale not found'}), 404
+            
+            # Verify ownership
+            if sale.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to access sale {sale_id} belonging to user {sale.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Convert sale to dictionary
             sale_dict = sale.to_dict()
             
             # Get associated item for additional info
             item = Item.query.get(sale.item_id)
-            if item:
+            if item and item.user_id == user_id:  # Additional ownership check
                 # Add item details
                 images = Image.query.filter_by(item_id=item.id).all()
                 image_filenames = [img.filename for img in images]
@@ -711,86 +851,21 @@ def create_app():
                     'sizeSystem': size_system
                 })
             
-            logger.info(f"✅ Retrieved sale {sale_id}")
+            logger.info(f"✅ Retrieved sale {sale_id} for user {user_id}")
             return jsonify(sale_dict), 200
         except Exception as e:
             logger.error(f"💥 Error fetching sale {sale_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/sales', methods=['POST'])
-    def create_sale():
-        """
-        Create a new sale record and update item status to 'sold'.
-        """
-        try:
-            logger.info("📝 Creating new sale record")
-            data = request.json
-            
-            # Validate required fields
-            required_fields = ['itemId', 'platform', 'saleDate', 'salePrice', 'status']
-            for field in required_fields:
-                if field not in data:
-                    logger.error(f"❌ Missing required field: {field}")
-                    return jsonify({'error': f'Missing required field: {field}'}), 400
-            
-            # Check if item exists
-            item = Item.query.get(data['itemId'])
-            if not item:
-                logger.error(f"❌ Item with ID {data['itemId']} not found")
-                return jsonify({'error': f'Item with ID {data["itemId"]} not found'}), 404
-            
-            # Parse the date string
-            try:
-                sale_date = datetime.fromisoformat(data['saleDate'].replace('Z', '+00:00'))
-            except (ValueError, TypeError) as e:
-                logger.error(f"❌ Invalid date format: {data['saleDate']}")
-                return jsonify({'error': 'Invalid date format. Use ISO format (YYYY-MM-DDTHH:MM:SS.sssZ)'}), 400
-            
-            # Create new sale record
-            new_sale = Sale(
-                item_id=data['itemId'],
-                platform=data['platform'],
-                sale_date=sale_date,
-                sale_price=float(data['salePrice']),
-                currency=data.get('currency', '$'),
-                sales_tax=float(data.get('salesTax', 0) or 0),
-                platform_fees=float(data.get('platformFees', 0) or 0),
-                status=data['status'],
-                sale_id=data.get('saleId', '')
-            )
-            
-            db.session.add(new_sale)
-            
-            # Update item status to 'sold'
-            item.status = 'sold'
-            
-            # Commit changes
-            db.session.commit()
-            
-            logger.info(f"✅ Created new sale record with ID {new_sale.id}")
-            
-            # Return the created sale with item details
-            sale_dict = new_sale.to_dict()
-            sale_dict.update({
-                'itemName': item.product_name,
-                'brand': item.brand,
-                'category': item.category,
-                'purchasePrice': item.purchase_price
-            })
-            
-            return jsonify(sale_dict), 201
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error creating sale: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
+    # Update a sale with ownership verification (continued)
     @app.route('/api/sales/<int:sale_id>', methods=['PUT'])
-    def update_sale(sale_id):
+    @require_auth
+    def update_sale(user_id, sale_id):
         """
-        Update an existing sale record.
+        Update an existing sale record with ownership verification.
         """
         try:
-            logger.info(f"📝 Updating sale {sale_id}")
+            logger.info(f"📝 Updating sale {sale_id} for user {user_id}")
             data = request.json
             
             # Check if sale exists
@@ -798,6 +873,11 @@ def create_app():
             if not sale:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # Verify ownership
+            if sale.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update sale {sale_id} belonging to user {sale.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Update sale fields if provided
             if 'platform' in data:
@@ -832,22 +912,24 @@ def create_app():
             # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Updated sale {sale_id}")
+            logger.info(f"✅ Updated sale {sale_id} for user {user_id}")
             
             # Return the updated sale
             return jsonify(sale.to_dict()), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error updating sale {sale_id}: {str(e)}")
+            logger.error(f"💥 Error updating sale {sale_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # Update a specific field of a sale
     @app.route('/api/sales/<int:sale_id>/field', methods=['PATCH'])
-    def update_sale_field(sale_id):
+    @require_auth
+    def update_sale_field(user_id, sale_id):
         """
-        Update a specific field of a sale.
+        Update a specific field of a sale, verifying user ownership.
         """
         try:
-            logger.info(f"🔄 Updating field for sale {sale_id}")
+            logger.info(f"🔄 Updating field for sale {sale_id}, user {user_id}")
             data = request.json
             
             # Validate request
@@ -863,6 +945,11 @@ def create_app():
             if not sale:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # Verify ownership
+            if sale.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update sale {sale_id} belonging to user {sale.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Update the specific field
             if field == 'status':
@@ -906,7 +993,7 @@ def create_app():
             # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Updated {field} for sale {sale_id}")
+            logger.info(f"✅ Updated {field} for sale {sale_id} for user {user_id}")
             
             # Return success message
             return jsonify({
@@ -917,22 +1004,29 @@ def create_app():
             }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error updating field for sale {sale_id}: {str(e)}")
+            logger.error(f"💥 Error updating field for sale {sale_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # Delete a sale with ownership verification
     @app.route('/api/sales/<int:sale_id>', methods=['DELETE'])
-    def delete_sale(sale_id):
+    @require_auth
+    def delete_sale(user_id, sale_id):
         """
-        Delete a sale record.
+        Delete a sale record with ownership verification.
         """
         try:
-            logger.info(f"🗑️ Deleting sale {sale_id}")
+            logger.info(f"🗑️ Deleting sale {sale_id} for user {user_id}")
             
             # Check if sale exists
             sale = Sale.query.get(sale_id)
             if not sale:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # Verify ownership
+            if sale.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to delete sale {sale_id} belonging to user {sale.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Get the item ID for potential status update
             item_id = sale.item_id
@@ -941,18 +1035,18 @@ def create_app():
             db.session.delete(sale)
             
             # Check if this was the only sale for the item
-            remaining_sales = Sale.query.filter_by(item_id=item_id).count()
+            remaining_sales = Sale.query.filter_by(item_id=item_id, user_id=user_id).count()
             
             # If no other sales for this item, update item status back to 'unlisted'
             if remaining_sales == 0:
                 item = Item.query.get(item_id)
-                if item and item.status == 'sold':
+                if item and item.user_id == user_id and item.status == 'sold':
                     item.status = 'unlisted'
             
             # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Deleted sale {sale_id}")
+            logger.info(f"✅ Deleted sale {sale_id} for user {user_id}")
             
             return jsonify({
                 'message': f'Sale {sale_id} deleted successfully',
@@ -960,17 +1054,18 @@ def create_app():
             }), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error deleting sale {sale_id}: {str(e)}")
+            logger.error(f"💥 Error deleting sale {sale_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
-    
-    # Endpoint to get sales by item
+
+    # Get sales by item ID with user ownership verification
     @app.route('/api/items/<int:item_id>/sales', methods=['GET'])
-    def get_sales_by_item(item_id):
+    @require_auth
+    def get_sales_by_item(user_id, item_id):
         """
-        Get all sales for a specific item.
+        Get all sales for a specific item with ownership verification.
         """
         try:
-            logger.info(f"📊 Fetching sales for item {item_id}")
+            logger.info(f"📊 Fetching sales for item {item_id}, user {user_id}")
             
             # Check if the item exists
             item = Item.query.get(item_id)
@@ -978,108 +1073,46 @@ def create_app():
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
+            # Verify ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to access sales for item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
             # Get all sales for this item
-            sales = Sale.query.filter_by(item_id=item_id).all()
+            sales = Sale.query.filter_by(item_id=item_id, user_id=user_id).all()
             
             # Convert to dictionary format
             sales_data = [sale.to_dict() for sale in sales]
             
-            logger.info(f"✅ Retrieved {len(sales_data)} sales for item {item_id}")
+            logger.info(f"✅ Retrieved {len(sales_data)} sales for item {item_id}, user {user_id}")
             return jsonify(sales_data), 200
         except Exception as e:
-            logger.error(f"💥 Error fetching sales for item {item_id}: {str(e)}")
+            logger.error(f"💥 Error fetching sales for item {item_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # Save custom platforms to database
-    @app.route('/api/platforms', methods=['GET'])
-    def get_platforms():
-        """
-        Get all custom platforms from the database.
-        """
-        try:
-            # In a real app, you would have a Platform model
-            # For now, we'll use a simple file-based approach
-            platforms_file = os.path.join(app.config['BASEDIR'], 'platforms.json')
-            
-            if os.path.exists(platforms_file):
-                with open(platforms_file, 'r') as f:
-                    try:
-                        platforms = json.load(f)
-                    except json.JSONDecodeError:
-                        platforms = {"platforms": []}
-            else:
-                platforms = {"platforms": []}
-            
-            return jsonify(platforms), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching platforms: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/platforms', methods=['POST'])
-    def add_platform():
-        """
-        Add a new custom platform.
-        """
-        try:
-            data = request.json
-            
-            if 'name' not in data:
-                return jsonify({'error': 'Platform name is required'}), 400
-            
-            platform_name = data['name']
-            
-            # In a real app, you would save this to a Platform model
-            # For now, we'll use a simple file-based approach
-            platforms_file = os.path.join(app.config['BASEDIR'], 'platforms.json')
-            
-            if os.path.exists(platforms_file):
-                with open(platforms_file, 'r') as f:
-                    try:
-                        platforms = json.load(f)
-                    except json.JSONDecodeError:
-                        platforms = {"platforms": []}
-            else:
-                platforms = {"platforms": []}
-            
-            # Add the new platform if it doesn't already exist
-            if platform_name not in platforms["platforms"]:
-                platforms["platforms"].append(platform_name)
-                
-                # Save the updated platforms
-                with open(platforms_file, 'w') as f:
-                    json.dump(platforms, f)
-                
-                logger.info(f"✅ Added new platform: {platform_name}")
-                return jsonify({'message': 'Platform added successfully'}), 201
-            else:
-                return jsonify({'message': 'Platform already exists'}), 200
-            
-        except Exception as e:
-            logger.error(f"💥 Error adding platform: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-        
-
-# EXPENSES API ENDPOINTS
+    # EXPENSES API ENDPOINTS
     @app.route('/api/expenses', methods=['GET'])
-    def get_expenses():
+    @require_auth
+    def get_expenses(user_id):
         """
-        Get all expenses.
+        Get all expenses for the current user.
         """
         try:
-            logger.info("📋 Fetching all expenses")
-            expenses = Expense.query.order_by(Expense.expense_date.desc()).all()
+            logger.info(f"📋 Fetching expenses for user {user_id}")
+            expenses = Expense.query.filter_by(user_id=user_id).order_by(Expense.expense_date.desc()).all()
             return jsonify([expense.to_dict() for expense in expenses])
         except Exception as e:
-            logger.error(f"💥 Error fetching expenses: {str(e)}")
+            logger.error(f"💥 Error fetching expenses for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses', methods=['POST'])
-    def create_expense():
+    @require_auth
+    def create_expense(user_id):
         """
-        Create a new expense record with proper handling of recurring expenses.
+        Create a new expense record for the current user.
         """
         try:
-            logger.info("📝 Creating new expense record")
+            logger.info(f"📝 Creating new expense record for user {user_id}")
             
             # Check if we have file data and form data
             has_receipt = 'receipt' in request.files
@@ -1111,19 +1144,25 @@ def create_app():
             if has_receipt:
                 receipt_file = request.files['receipt']
                 if receipt_file and allowed_file(receipt_file.filename):
-                    # Generate a secure filename with timestamp
+                    # Generate a secure filename with timestamp and user_id
                     filename = secure_filename(receipt_file.filename)
                     filename_parts = filename.rsplit('.', 1)
-                    timestamped_filename = f"receipt_{int(time.time())}_{filename_parts[0]}.{filename_parts[1]}"
+                    timestamped_filename = f"receipt_{int(time.time())}_{user_id}_{filename_parts[0]}.{filename_parts[1]}"
+                    
+                    # Create user-specific directory
+                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+                    if not os.path.exists(user_upload_folder):
+                        os.makedirs(user_upload_folder)
                     
                     # Save the file
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    file_path = os.path.join(user_upload_folder, timestamped_filename)
                     receipt_file.save(file_path)
                     receipt_filename = timestamped_filename
-                    logger.info(f"📄 Saved receipt: {timestamped_filename}")
+                    logger.info(f"📄 Saved receipt: {timestamped_filename} for user {user_id}")
             
-            # Create the base expense record
+            # Create the expense record with user_id
             new_expense = Expense(
+                user_id=user_id,
                 expense_type=expense_data['expenseType'],
                 amount=float(expense_data['amount']),
                 currency=expense_data.get('currency', '$'),
@@ -1138,172 +1177,61 @@ def create_app():
             db.session.add(new_expense)
             db.session.flush()  # Get the ID without committing
             
-            # Create any additional recurring expense entries if needed
-            # The frontend will handle this to avoid blocking this request
-            
             # Commit the transaction
             db.session.commit()
             
-            logger.info(f"✅ Created expense with ID {new_expense.id}")
+            logger.info(f"✅ Created expense with ID {new_expense.id} for user {user_id}")
             return jsonify(new_expense.to_dict()), 201
             
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error creating expense: {str(e)}")
+            logger.error(f"💥 Error creating expense for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
-        
-    @app.route('/api/expenses/generate-recurring', methods=['POST'])
-    def generate_missing_recurring_expenses():
-        """
-        Generate missing recurring expense entries up to the current date.
-        """
-        try:
-            logger.info("🔄 Generating missing recurring expense entries")
-            
-            # Get all recurring expenses
-            recurring_expenses = Expense.query.filter_by(is_recurring=True).all()
-            logger.info(f"Found {len(recurring_expenses)} recurring expenses")
-            
-            generated_entries = []
-            
-            # For each recurring expense, generate missing entries
-            for base_expense in recurring_expenses:
-                # Skip if no recurrence period
-                if not base_expense.recurrence_period:
-                    continue
-                    
-                # Define the current date and time
-                current_date = datetime.utcnow()
-                
-                # Calculate the next recurrence date from the expense date
-                next_date = get_next_recurrence_date(
-                    base_expense.expense_date, 
-                    base_expense.recurrence_period
-                )
-                
-                # Keep generating entries until we reach the current date
-                while next_date <= current_date:
-                    # Check if an entry already exists for this date
-                    existing_entry = Expense.query.filter(
-                        Expense.expense_type == base_expense.expense_type,
-                        Expense.amount == base_expense.amount,
-                        Expense.vendor == base_expense.vendor,
-                        func.date(Expense.expense_date) == func.date(next_date)
-                    ).first()
-                    
-                    # Skip if an entry already exists
-                    if existing_entry:
-                        # Move to the next date
-                        next_date = get_next_recurrence_date(
-                            next_date, 
-                            base_expense.recurrence_period
-                        )
-                        continue
-                    
-                    # Create a new entry based on the base expense
-                    new_entry = Expense(
-                        expense_type=base_expense.expense_type,
-                        amount=base_expense.amount,
-                        currency=base_expense.currency,
-                        expense_date=next_date,
-                        vendor=base_expense.vendor,
-                        notes=f"{base_expense.notes} (Auto-generated from recurring expense {base_expense.id})" if base_expense.notes else f"Auto-generated from recurring expense {base_expense.id}",
-                        is_recurring=False,  # Mark as not recurring to avoid infinite recursion
-                        receipt_filename=None  # Don't copy receipt
-                    )
-                    
-                    db.session.add(new_entry)
-                    db.session.flush()
-                    
-                    generated_entries.append(new_entry.to_dict())
-                    
-                    # Calculate the next date
-                    next_date = get_next_recurrence_date(
-                        next_date, 
-                        base_expense.recurrence_period
-                    )
-                
-            # Commit all changes
-            db.session.commit()
-            
-            logger.info(f"✅ Generated {len(generated_entries)} recurring expense entries")
-            
-            return jsonify({
-                'message': f'Generated {len(generated_entries)} recurring expense entries',
-                'entries': generated_entries
-            }), 201
-            
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error generating recurring expenses: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-
-    def get_next_recurrence_date(current_date, recurrence_period):
-        """
-        Calculate the next date based on a recurrence period.
-        """
-        if recurrence_period == 'weekly':
-            return current_date + timedelta(days=7)
-        elif recurrence_period == 'monthly':
-            # Handle month boundary cases properly
-            year = current_date.year + ((current_date.month + 1) // 12)
-            month = ((current_date.month + 1) % 12) or 12
-            day = min(current_date.day, calendar.monthrange(year, month)[1])
-            return datetime(year, month, day, 
-                        current_date.hour, current_date.minute, current_date.second)
-        elif recurrence_period == 'quarterly':
-            # Add 3 months
-            year = current_date.year + ((current_date.month + 3) // 12) 
-            month = ((current_date.month + 3) % 12) or 12
-            day = min(current_date.day, calendar.monthrange(year, month)[1])
-            return datetime(year, month, day,
-                        current_date.hour, current_date.minute, current_date.second)
-        elif recurrence_period == 'annually':
-            # Add 1 year
-            year = current_date.year + 1
-            # Check for leap year (February 29th)
-            if current_date.month == 2 and current_date.day == 29 and not calendar.isleap(year):
-                day = 28
-            else:
-                day = current_date.day
-            return datetime(year, current_date.month, day,
-                       current_date.hour, current_date.minute, current_date.second)
-        else:
-            raise ValueError(f"Unknown recurrence period: {recurrence_period}") 
 
     @app.route('/api/expenses/<int:expense_id>', methods=['GET'])
-    def get_expense(expense_id):
+    @require_auth
+    def get_expense(user_id, expense_id):
         """
-        Get a single expense by ID.
+        Get a single expense by ID with ownership verification.
         """
         try:
-            logger.info(f"🔍 Fetching expense {expense_id}")
+            logger.info(f"🔍 Fetching expense {expense_id} for user {user_id}")
             
             expense = Expense.query.get(expense_id)
             if not expense:
                 logger.warning(f"❌ Expense with ID {expense_id} not found")
                 return jsonify({'error': 'Expense not found'}), 404
             
-            logger.info(f"✅ Retrieved expense {expense_id}")
+            # Verify ownership
+            if expense.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to access expense {expense_id} belonging to user {expense.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            logger.info(f"✅ Retrieved expense {expense_id} for user {user_id}")
             return jsonify(expense.to_dict()), 200
         except Exception as e:
-            logger.error(f"💥 Error fetching expense {expense_id}: {str(e)}")
+            logger.error(f"💥 Error fetching expense {expense_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses/<int:expense_id>', methods=['PUT'])
-    def update_expense(expense_id):
+    @require_auth
+    def update_expense(user_id, expense_id):
         """
-        Update an existing expense.
+        Update an existing expense with ownership verification.
         """
         try:
-            logger.info(f"🔄 Updating expense {expense_id}")
+            logger.info(f"🔄 Updating expense {expense_id} for user {user_id}")
             
             # Check if expense exists
             expense = Expense.query.get(expense_id)
             if not expense:
                 logger.error(f"❌ Expense with ID {expense_id} not found")
                 return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # Verify ownership
+            if expense.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update expense {expense_id} belonging to user {expense.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
             
             # Check if we have file data and form data
             has_receipt = 'receipt' in request.files
@@ -1352,41 +1280,47 @@ def create_app():
                 if receipt_file and allowed_file(receipt_file.filename):
                     # Delete old receipt if it exists
                     if expense.receipt_filename:
-                        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], expense.receipt_filename)
+                        old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], user_id, expense.receipt_filename)
                         if os.path.exists(old_file_path):
                             os.remove(old_file_path)
-                            logger.info(f"🗑️ Deleted old receipt: {expense.receipt_filename}")
+                            logger.info(f"🗑️ Deleted old receipt: {expense.receipt_filename} for user {user_id}")
                     
-                    # Generate a secure filename with timestamp
+                    # Generate a secure filename with timestamp and user_id
                     filename = secure_filename(receipt_file.filename)
                     filename_parts = filename.rsplit('.', 1)
-                    timestamped_filename = f"receipt_{int(time.time())}_{filename_parts[0]}.{filename_parts[1]}"
+                    timestamped_filename = f"receipt_{int(time.time())}_{user_id}_{filename_parts[0]}.{filename_parts[1]}"
+                    
+                    # Create user-specific directory
+                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+                    if not os.path.exists(user_upload_folder):
+                        os.makedirs(user_upload_folder)
                     
                     # Save the file
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], timestamped_filename)
+                    file_path = os.path.join(user_upload_folder, timestamped_filename)
                     receipt_file.save(file_path)
                     expense.receipt_filename = timestamped_filename
-                    logger.info(f"📄 Updated receipt: {timestamped_filename}")
+                    logger.info(f"📄 Updated receipt: {timestamped_filename} for user {user_id}")
             
             # Update timestamp
             expense.updated_at = datetime.utcnow()
             
             db.session.commit()
             
-            logger.info(f"✅ Updated expense {expense_id}")
+            logger.info(f"✅ Updated expense {expense_id} for user {user_id}")
             return jsonify(expense.to_dict()), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error updating expense {expense_id}: {str(e)}")
+            logger.error(f"💥 Error updating expense {expense_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses/<int:expense_id>', methods=['DELETE'])
-    def delete_expense(expense_id):
+    @require_auth
+    def delete_expense(user_id, expense_id):
         """
-        Delete an expense record.
+        Delete an expense record with ownership verification.
         """
         try:
-            logger.info(f"🗑️ Deleting expense {expense_id}")
+            logger.info(f"🗑️ Deleting expense {expense_id} for user {user_id}")
             
             # Check if expense exists
             expense = Expense.query.get(expense_id)
@@ -1394,38 +1328,44 @@ def create_app():
                 logger.error(f"❌ Expense with ID {expense_id} not found")
                 return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
             
+            # Verify ownership
+            if expense.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to delete expense {expense_id} belonging to user {expense.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
             # Delete receipt file if it exists
             if expense.receipt_filename:
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], expense.receipt_filename)
+                file_path = os.path.join(app.config['UPLOAD_FOLDER'], user_id, expense.receipt_filename)
                 if os.path.exists(file_path):
                     os.remove(file_path)
-                    logger.info(f"🗑️ Deleted receipt file: {expense.receipt_filename}")
+                    logger.info(f"🗑️ Deleted receipt file: {expense.receipt_filename} for user {user_id}")
             
             # Delete the expense record
             db.session.delete(expense)
             db.session.commit()
             
-            logger.info(f"✅ Deleted expense {expense_id}")
+            logger.info(f"✅ Deleted expense {expense_id} for user {user_id}")
             return jsonify({'message': f'Expense {expense_id} deleted successfully'}), 200
         except Exception as e:
             db.session.rollback()
-            logger.error(f"💥 Error deleting expense {expense_id}: {str(e)}")
+            logger.error(f"💥 Error deleting expense {expense_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
     @app.route('/api/expenses/summary', methods=['GET'])
-    def get_expense_summary():
+    @require_auth
+    def get_expense_summary(user_id):
         """
-        Get expense summary statistics.
+        Get expense summary statistics for the current user.
         """
         try:
-            logger.info("📊 Generating expense summary")
+            logger.info(f"📊 Generating expense summary for user {user_id}")
             
             # Get query parameters for date filtering
             start_date_str = request.args.get('start_date')
             end_date_str = request.args.get('end_date')
             
-            # Base query
-            query = Expense.query
+            # Base query for user's expenses
+            query = Expense.query.filter_by(user_id=user_id)
             
             # Apply date filters if provided
             if start_date_str:
@@ -1466,20 +1406,22 @@ def create_app():
                     end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
                     start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                     
-                    # Calculate current month expenses
+                    # Calculate current period expenses
                     current_month_expenses = Expense.query.filter(
+                        Expense.user_id == user_id,
                         Expense.expense_date >= start_date,
                         Expense.expense_date <= end_date
                     ).all()
                     current_month_total = sum(expense.amount for expense in current_month_expenses)
                     
-                    # Calculate previous month range
+                    # Calculate previous period range
                     month_diff = (end_date - start_date).days
                     prev_end_date = start_date
                     prev_start_date = prev_end_date - timedelta(days=month_diff)
                     
-                    # Calculate previous month expenses
+                    # Calculate previous period expenses
                     previous_month_expenses = Expense.query.filter(
+                        Expense.user_id == user_id,
                         Expense.expense_date >= prev_start_date,
                         Expense.expense_date < prev_end_date
                     ).all()
@@ -1500,315 +1442,442 @@ def create_app():
                 'monthOverMonthChange': mom_change
             }
             
-            logger.info(f"✅ Generated expense summary with {expense_count} expenses")
+            logger.info(f"✅ Generated expense summary with {expense_count} expenses for user {user_id}")
             return jsonify(summary), 200
         except Exception as e:
-            logger.error(f"💥 Error generating expense summary: {str(e)}")
+            logger.error(f"💥 Error generating expense summary for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/expenses/types', methods=['GET'])
-    def get_expense_types():
+    # COPLISTS API ENDPOINTS
+    @app.route('/api/coplists', methods=['GET'])
+    @require_auth
+    def get_coplists(user_id):
         """
-        Get list of valid expense types.
-        """
-        try:
-            logger.info("📋 Fetching expense types")
-            
-            # Define standard expense types
-            expense_types = [
-                'Shipping',
-                'Packaging',
-                'Platform Fees',
-                'Storage',
-                'Supplies',
-                'Software',
-                'Marketing',
-                'Travel',
-                'Utilities',
-                'Rent',
-                'Insurance',
-                'Taxes',
-                'Other'
-            ]
-            
-            # Get custom expense types from the database
-            custom_types = db.session.query(Expense.expense_type).distinct().all()
-            for custom_type in custom_types:
-                if custom_type[0] not in expense_types:
-                    expense_types.append(custom_type[0])
-            
-            logger.info(f"✅ Retrieved {len(expense_types)} expense types")
-            return jsonify(expense_types), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching expense types: {str(e)}")
-            return jsonify({'error': str(e)}), 500    
-    
-    # net Profit from sold items Dashboard KPI Metric 
-
-    @app.route('/api/sales/net-profit', methods=['GET'])
-    def get_sales_net_profit():
-        """
-        Calculate the total net profit from all completed sales,
-        properly accounting for all expenses.
+        Get all coplists for the current user.
         """
         try:
-            logger.info("📊 Calculating net profit from sold items with expenses")
-            
-            # Get query parameters for date filtering
-            start_date_str = request.args.get('start_date')
-            end_date_str = request.args.get('end_date')
-            
-            # Initialize date objects to None
-            start_date = None
-            end_date = None
-            
-            # Parse start date if provided
-            if start_date_str:
-                try:
-                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    logger.info(f"🗓️ Filtering sales and expenses after {start_date}")
-                except ValueError:
-                    logger.warning(f"⚠️ Invalid start date format: {start_date_str}")
-            
-            # Parse end date if provided
-            if end_date_str:
-                try:
-                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    logger.info(f"🗓️ Filtering sales and expenses before {end_date}")
-                except ValueError:
-                    logger.warning(f"⚠️ Invalid end date format: {end_date_str}")
-            
-            # -- Sales calculations --
-            # Base query for completed sales
-            sales_query = Sale.query.filter(Sale.status == 'completed')
-            
-            # Apply date filters to sales if provided
-            if start_date:
-                sales_query = sales_query.filter(Sale.sale_date >= start_date)
-            if end_date:
-                sales_query = sales_query.filter(Sale.sale_date <= end_date)
-            
-            # Get all sales matching the query
-            sales = sales_query.all()
-            
-            # Calculate gross profit from completed sales
-            gross_profit = 0
-            total_sales_revenue = 0
-            total_costs_of_goods = 0
-            
-            for sale in sales:
-                # Get the item details
-                item = Item.query.get(sale.item_id)
-                if item:
-                    # Calculate revenue and costs
-                    sale_price = sale.sale_price
-                    purchase_price = item.purchase_price
-                    sales_tax = sale.sales_tax or 0
-                    platform_fees = sale.platform_fees or 0
-                    shipping_cost = item.shipping_price or 0
-                    
-                    # Add to totals
-                    total_sales_revenue += sale_price
-                    total_costs_of_goods += purchase_price
-                    
-                    # Calculate profit for this sale
-                    item_profit = sale_price - purchase_price - sales_tax - platform_fees - shipping_cost
-                    gross_profit += item_profit
-            
-            # -- Expense calculations --
-            # Base query for expenses
-            expense_query = Expense.query
-            
-            # Apply date filters to expenses if provided
-            if start_date:
-                expense_query = expense_query.filter(Expense.expense_date >= start_date)
-            if end_date:
-                expense_query = expense_query.filter(Expense.expense_date <= end_date)
-            
-            # Get all expenses matching the query
-            expenses = expense_query.all()
-            
-            # Calculate total expenses
-            total_expenses = sum(expense.amount for expense in expenses)
-            
-            # Calculate net profit (gross profit minus expenses)
-            net_profit = gross_profit - total_expenses
-            
-            # Calculate average profit per sale
-            avg_profit_per_sale = net_profit / len(sales) if len(sales) > 0 else 0
-            
-            # Calculate previous period metrics for comparison
-            previous_period_net_profit = 0
-            net_profit_change = 0
-            
-            if start_date and end_date:
-                # Calculate the duration of the current period
-                period_duration = (end_date - start_date).days
-                
-                # Define previous period date range
-                prev_end_date = start_date
-                prev_start_date = prev_end_date - timedelta(days=period_duration)
-                
-                logger.info(f"🗓️ Previous period: {prev_start_date} to {prev_end_date}")
-                
-                # Get previous period sales
-                prev_sales_query = Sale.query.filter(
-                    Sale.status == 'completed',
-                    Sale.sale_date >= prev_start_date,
-                    Sale.sale_date < prev_end_date
-                )
-                prev_sales = prev_sales_query.all()
-                
-                # Get previous period expenses
-                prev_expense_query = Expense.query.filter(
-                    Expense.expense_date >= prev_start_date,
-                    Expense.expense_date < prev_end_date
-                )
-                prev_expenses = prev_expense_query.all()
-                
-                # Calculate previous period profits
-                prev_gross_profit = 0
-                
-                for prev_sale in prev_sales:
-                    prev_item = Item.query.get(prev_sale.item_id)
-                    if prev_item:
-                        prev_item_profit = (
-                            prev_sale.sale_price 
-                            - prev_item.purchase_price 
-                            - (prev_sale.sales_tax or 0) 
-                            - (prev_sale.platform_fees or 0) 
-                            - (prev_item.shipping_price or 0)
-                        )
-                        prev_gross_profit += prev_item_profit
-                
-                # Calculate previous period total expenses
-                prev_total_expenses = sum(expense.amount for expense in prev_expenses)
-                
-                # Calculate previous period net profit
-                previous_period_net_profit = prev_gross_profit - prev_total_expenses
-                
-                # Calculate percentage change
-                if previous_period_net_profit != 0:
-                    net_profit_change = ((net_profit - previous_period_net_profit) / abs(previous_period_net_profit)) * 100
-                else:
-                    # If previous period profit was 0, use current profit to determine direction
-                    net_profit_change = 100 if net_profit > 0 else -100 if net_profit < 0 else 0
-            
-            # Prepare comprehensive response
-            response = {
-                'netProfitSold': net_profit,
-                'salesCount': len(sales),
-                'grossProfit': gross_profit,
-                'totalExpenses': total_expenses,
-                'totalSalesRevenue': total_sales_revenue,
-                'totalCostsOfGoods': total_costs_of_goods,
-                'avgProfitPerSale': avg_profit_per_sale,
-                'previousPeriodNetProfit': previous_period_net_profit,
-                'netProfitChange': net_profit_change
-            }
-            
-            logger.info(f"✅ Calculated net profit metrics from {len(sales)} sales and {len(expenses)} expenses")
-            logger.info(f"📊 Net profit: ${net_profit:.2f}, Change: {net_profit_change:.2f}%")
-            
-            return jsonify(response), 200
+            logger.info(f"📋 Fetching coplists for user {user_id}")
+            coplists = Coplist.query.filter_by(user_id=user_id).all()
+            return jsonify([coplist.to_dict() for coplist in coplists]), 200
         except Exception as e:
-            logger.error(f"💥 Error calculating net profit metrics: {str(e)}")
+            logger.error(f"💥 Error fetching coplists for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
-        
-   # Expense Data Dashboard KPI Metric
-    @app.route('/api/expenses/total', methods=['GET'])
-    def get_total_expenses():
+
+    @app.route('/api/coplists', methods=['POST'])
+    @require_auth
+    def create_coplist(user_id):
         """
-        Calculate the total amount of all expenses with optional date filtering.
+        Create a new coplist for the current user.
         """
         try:
-            logger.info("Calculating total expenses")
+            logger.info(f"📝 Creating new coplist for user {user_id}")
+            data = request.json
             
-            # Get query parameters for date filtering
-            start_date_str = request.args.get('start_date')
-            end_date_str = request.args.get('end_date')
+            # Validate required fields
+            if not data or 'name' not in data:
+                logger.error("❌ Missing required field: name")
+                return jsonify({'error': 'Missing required field: name'}), 400
             
-            # Base query
-            query = Expense.query
+            # Create new coplist
+            new_coplist = Coplist(
+                user_id=user_id,
+                name=data['name'],
+                description=data.get('description', ''),
+                is_private=data.get('is_private', True)
+            )
             
-            # Apply date filters if provided
-            if start_date_str:
-                try:
-                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date >= start_date)
-                    logger.info(f"Filtering expenses after {start_date}")
-                except ValueError:
-                    logger.warning(f"Invalid start date format: {start_date_str}")
+            db.session.add(new_coplist)
+            db.session.commit()
             
-            if end_date_str:
-                try:
-                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date <= end_date)
-                    logger.info(f"Filtering expenses before {end_date}")
-                except ValueError:
-                    logger.warning(f"Invalid end date format: {end_date_str}")
-            
-            # Get all expenses matching the query
-            expenses = query.all()
-            
-            # Calculate total expenses
-            total_amount = sum(expense.amount for expense in expenses)
-            
-            # Calculate previous period's total for percentage change
-            prev_period_total = 0
-            percentage_change = 0
-            
-            if start_date_str and end_date_str:
-                try:
-                    # Convert to datetime objects
-                    start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    
-                    # Calculate period length in days
-                    period_length = (end_date - start_date).days
-                    
-                    # Calculate previous period date range
-                    prev_period_end = start_date - timedelta(days=1)
-                    prev_period_start = prev_period_end - timedelta(days=period_length)
-                    
-                    # Query for previous period expenses
-                    prev_period_expenses = Expense.query.filter(
-                        Expense.expense_date >= prev_period_start,
-                        Expense.expense_date <= prev_period_end
-                    ).all()
-                    
-                    # Calculate previous period total
-                    prev_period_total = sum(expense.amount for expense in prev_period_expenses)
-                    
-                    # Calculate percentage change
-                    if prev_period_total > 0:
-                        percentage_change = ((total_amount - prev_period_total) / prev_period_total) * 100
-                except Exception as e:
-                    logger.error(f"Error calculating previous period data: {str(e)}")
-            
-            logger.info(f"Calculated total expenses: ${total_amount:.2f} with {percentage_change:.2f}% change from previous period")
-            
-            # Return the results
-            return jsonify({
-                'totalExpenses': total_amount,
-                'expenseCount': len(expenses),
-                'percentageChange': percentage_change,
-                'previousPeriodTotal': prev_period_total
-            }), 200
+            logger.info(f"✅ Created coplist with ID {new_coplist.id} for user {user_id}")
+            return jsonify(new_coplist.to_dict()), 201
         except Exception as e:
-            logger.error(f"Error calculating total expenses: {str(e)}")
-            return jsonify({'error': str(e)}), 500 
+            db.session.rollback()
+            logger.error(f"💥 Error creating coplist for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 
-        ## Comprehensive endpoint for all dashboard KPI metrics. Ensures consistent calculation methods across all metrics.         
-    
+    @app.route('/api/coplists/<int:coplist_id>', methods=['GET'])
+    @require_auth
+    def get_coplist(user_id, coplist_id):
+        """
+        Get a single coplist by ID with ownership verification.
+        """
+        try:
+            logger.info(f"🔍 Fetching coplist {coplist_id} for user {user_id}")
+            
+            coplist = Coplist.query.get(coplist_id)
+            if not coplist:
+                logger.warning(f"❌ Coplist with ID {coplist_id} not found")
+                return jsonify({'error': 'Coplist not found'}), 404
+            
+            # Verify ownership or public access
+            if coplist.user_id != user_id and coplist.is_private:
+                logger.warning(f"🚫 User {user_id} attempted to access private coplist {coplist_id} belonging to user {coplist.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Get detailed coplist with items
+            coplist_data = coplist.to_dict()
+            
+            # Add items details
+            items_data = []
+            for item in coplist.items:
+                # Only include basic item details
+                item_data = {
+                    'id': item.id,
+                    'productName': item.product_name,
+                    'brand': item.brand,
+                    'category': item.category,
+                    'status': item.status
+                }
+                
+                # Include image if available
+                images = Image.query.filter_by(item_id=item.id).all()
+                if images:
+                    item_data['imageUrl'] = images[0].filename
+                    
+                items_data.append(item_data)
+                
+            coplist_data['items'] = items_data
+            
+            logger.info(f"✅ Retrieved coplist {coplist_id} with {len(items_data)} items")
+            return jsonify(coplist_data), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching coplist {coplist_id} for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/coplists/<int:coplist_id>', methods=['PUT'])
+    @require_auth
+    def update_coplist(user_id, coplist_id):
+        """
+        Update an existing coplist with ownership verification.
+        """
+        try:
+            logger.info(f"🔄 Updating coplist {coplist_id} for user {user_id}")
+            data = request.json
+            
+            # Validate request
+            if not data:
+                logger.error("❌ No data provided")
+                return jsonify({'error': 'No data provided'}), 400
+            
+            # Check if coplist exists
+            coplist = Coplist.query.get(coplist_id)
+            if not coplist:
+                logger.error(f"❌ Coplist with ID {coplist_id} not found")
+                return jsonify({'error': 'Coplist not found'}), 404
+            
+            # Verify ownership
+            if coplist.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update coplist {coplist_id} belonging to user {coplist.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Update coplist fields
+            if 'name' in data:
+                coplist.name = data['name']
+            
+            if 'description' in data:
+                coplist.description = data['description']
+            
+            if 'is_private' in data:
+                coplist.is_private = data['is_private']
+            
+            # Update items if provided
+            if 'items' in data and isinstance(data['items'], list):
+                # Clear existing items
+                coplist.items = []
+                
+                # Add each item, verifying ownership
+                for item_id in data['items']:
+                    item = Item.query.get(item_id)
+                    if item and item.user_id == user_id:
+                        coplist.items.append(item)
+                    else:
+                        logger.warning(f"⚠️ Item {item_id} not found or not owned by user {user_id}, skipping")
+            
+            # Update timestamps
+            coplist.updated_at = datetime.utcnow()
+            
+            db.session.commit()
+            
+            logger.info(f"✅ Updated coplist {coplist_id} for user {user_id}")
+            return jsonify(coplist.to_dict()), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating coplist {coplist_id} for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/coplists/<int:coplist_id>/items/<int:item_id>', methods=['POST'])
+    @require_auth
+    def add_item_to_coplist(user_id, coplist_id, item_id):
+        """
+        Add an item to a coplist with ownership verification for both.
+        """
+        try:
+            logger.info(f"🔄 Adding item {item_id} to coplist {coplist_id} for user {user_id}")
+            
+            # Check if coplist exists
+            coplist = Coplist.query.get(coplist_id)
+            if not coplist:
+                logger.error(f"❌ Coplist with ID {coplist_id} not found")
+                return jsonify({'error': 'Coplist not found'}), 404
+            
+            # Verify coplist ownership
+            if coplist.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to modify coplist {coplist_id} belonging to user {coplist.user_id}")
+                return jsonify({'error': 'Unauthorized access to coplist'}), 403
+            
+            # Check if item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': 'Item not found'}), 404
+            
+            # Verify item ownership
+            if item.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to add item {item_id} belonging to user {item.user_id}")
+                return jsonify({'error': 'Unauthorized access to item'}), 403
+            
+            # Check if item is already in the coplist
+            if item in coplist.items:
+                logger.info(f"⚠️ Item {item_id} is already in coplist {coplist_id}")
+                return jsonify({'message': 'Item is already in the coplist'}), 200
+            
+            # Add item to coplist
+            coplist.items.append(item)
+            db.session.commit()
+            
+            logger.info(f"✅ Added item {item_id} to coplist {coplist_id}")
+            return jsonify({'message': f'Item {item_id} added to coplist {coplist_id}'}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error adding item to coplist: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/coplists/<int:coplist_id>/items/<int:item_id>', methods=['DELETE'])
+    @require_auth
+    def remove_item_from_coplist(user_id, coplist_id, item_id):
+        """
+        Remove an item from a coplist with ownership verification.
+        """
+        try:
+            logger.info(f"🔄 Removing item {item_id} from coplist {coplist_id} for user {user_id}")
+            
+            # Check if coplist exists
+            coplist = Coplist.query.get(coplist_id)
+            if not coplist:
+                logger.error(f"❌ Coplist with ID {coplist_id} not found")
+                return jsonify({'error': 'Coplist not found'}), 404
+            
+            # Verify coplist ownership
+            if coplist.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to modify coplist {coplist_id} belonging to user {coplist.user_id}")
+                return jsonify({'error': 'Unauthorized access to coplist'}), 403
+            
+            # Check if item exists
+            item = Item.query.get(item_id)
+            if not item:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': 'Item not found'}), 404
+            
+            # Check if item is in the coplist
+            if item not in coplist.items:
+                logger.info(f"⚠️ Item {item_id} is not in coplist {coplist_id}")
+                return jsonify({'message': 'Item is not in the coplist'}), 200
+            
+            # Remove item from coplist
+            coplist.items.remove(item)
+            db.session.commit()
+            
+            logger.info(f"✅ Removed item {item_id} from coplist {coplist_id}")
+            return jsonify({'message': f'Item {item_id} removed from coplist {coplist_id}'}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error removing item from coplist: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/coplists/<int:coplist_id>', methods=['DELETE'])
+    @require_auth
+    def delete_coplist(user_id, coplist_id):
+        """
+        Delete a coplist with ownership verification.
+        """
+        try:
+            logger.info(f"🗑️ Deleting coplist {coplist_id} for user {user_id}")
+            
+            # Check if coplist exists
+            coplist = Coplist.query.get(coplist_id)
+            if not coplist:
+                logger.error(f"❌ Coplist with ID {coplist_id} not found")
+                return jsonify({'error': 'Coplist not found'}), 404
+            
+            # Verify ownership
+            if coplist.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to delete coplist {coplist_id} belonging to user {coplist.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Delete the coplist (association table entries are deleted automatically)
+            db.session.delete(coplist)
+            db.session.commit()
+            
+            logger.info(f"✅ Deleted coplist {coplist_id}")
+            return jsonify({'message': f'Coplist {coplist_id} deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error deleting coplist {coplist_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # TAGS API WITH USER OWNERSHIP
+    @app.route('/api/user-tags', methods=['GET'])
+    @require_auth
+    def get_user_tags(user_id):
+        """
+        Get all tags for the current user.
+        """
+        try:
+            logger.info(f"📋 Fetching tags for user {user_id}")
+            tags = Tag.query.filter_by(user_id=user_id).all()
+            
+            logger.info(f"✅ Retrieved {len(tags)} tags for user {user_id}")
+            return jsonify([tag.to_dict() for tag in tags]), 200
+        except Exception as e:
+            logger.error(f"💥 Error fetching tags for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/user-tags', methods=['POST'])
+    @require_auth
+    def create_user_tag(user_id):
+        """
+        Create a new tag for the current user.
+        """
+        try:
+            logger.info(f"🏷️ Creating new tag for user {user_id}")
+            data = request.json
+            
+            # Validate request
+            if not data or 'name' not in data:
+                logger.error("❌ Missing required field: name")
+                return jsonify({'error': 'Missing required field: name'}), 400
+            
+            # Check for duplicate tag name for this user
+            existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
+            if existing_tag:
+                logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+            
+            # Create new tag with user_id
+            new_tag = Tag(
+                name=data['name'],
+                color=data.get('color', '#8884d8'),  # Default color if not provided
+                user_id=user_id
+            )
+            
+            db.session.add(new_tag)
+            db.session.commit()
+            
+            logger.info(f"✅ Created tag '{data['name']}' with ID {new_tag.id} for user {user_id}")
+            return jsonify(new_tag.to_dict()), 201
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error creating tag for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/user-tags/<int:tag_id>', methods=['PUT'])
+    @require_auth
+    def update_user_tag(user_id, tag_id):
+        """
+        Update an existing tag with ownership verification.
+        """
+        try:
+            logger.info(f"🔄 Updating tag {tag_id} for user {user_id}")
+            data = request.json
+            
+            # Validate request
+            if not data or ('name' not in data and 'color' not in data):
+                logger.error("❌ Missing required fields: name or color")
+                return jsonify({'error': 'Missing required fields: name or color'}), 400
+            
+            # Check if tag exists
+            tag = Tag.query.get(tag_id)
+            if not tag:
+                logger.error(f"❌ Tag with ID {tag_id} not found")
+                return jsonify({'error': 'Tag not found'}), 404
+            
+            # Verify ownership
+            if tag.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to update tag {tag_id} belonging to user {tag.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Check for duplicate tag name if name is being changed
+            if 'name' in data and data['name'] != tag.name:
+                existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
+                if existing_tag:
+                    logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                    return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+            
+            # Update tag fields
+            if 'name' in data:
+                tag.name = data['name']
+            
+            if 'color' in data:
+                tag.color = data['color']
+            
+            db.session.commit()
+            
+            logger.info(f"✅ Updated tag {tag_id} for user {user_id}")
+            return jsonify(tag.to_dict()), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error updating tag {tag_id} for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/api/user-tags/<int:tag_id>', methods=['DELETE'])
+    @require_auth
+    def delete_user_tag(user_id, tag_id):
+        """
+        Delete a tag with ownership verification.
+        """
+        try:
+            logger.info(f"🗑️ Deleting tag {tag_id} for user {user_id}")
+            
+            # Check if tag exists
+            tag = Tag.query.get(tag_id)
+            if not tag:
+                logger.error(f"❌ Tag with ID {tag_id} not found")
+                return jsonify({'error': 'Tag not found'}), 404
+            
+            # Verify ownership
+            if tag.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to delete tag {tag_id} belonging to user {tag.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Remove tag from all items first
+            for item in tag.items:
+                if tag in item.tags:
+                    item.tags.remove(tag)
+            
+            # Flush the session to ensure the item-tag relationships are updated
+            db.session.flush()
+            
+            # Delete tag
+            db.session.delete(tag)
+            db.session.commit()
+            
+            logger.info(f"✅ Deleted tag {tag_id} for user {user_id}")
+            return jsonify({'message': f'Tag {tag_id} deleted successfully'}), 200
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"💥 Error deleting tag {tag_id} for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # DASHBOARD API ENDPOINTS
     @app.route('/api/dashboard/kpi-metrics', methods=['GET'])
-    def get_dashboard_kpi_metrics():
+    @require_auth
+    def get_dashboard_kpi_metrics(user_id):
         """
-        Comprehensive endpoint for all dashboard KPI metrics.
-        Ensures consistent calculation methods across all metrics.
+        Get comprehensive dashboard KPI metrics for the current user.
         """
         try:
-            logger.info("📊 Generating comprehensive dashboard KPI metrics")
+            logger.info(f"📊 Generating comprehensive dashboard KPI metrics for user {user_id}")
             
             # Get query parameters for date filtering
             start_date_str = request.args.get('start_date')
@@ -1834,7 +1903,7 @@ def create_app():
             
             # ---- ITEM METRICS ----
             # Get active items (not sold)
-            active_items_query = Item.query.filter(Item.status != 'sold')
+            active_items_query = Item.query.filter(Item.status != 'sold', Item.user_id == user_id)
             
             # Apply date filters if provided
             if start_date:
@@ -1863,8 +1932,8 @@ def create_app():
             potential_profit = total_market_value - total_inventory_cost - total_shipping_cost
             
             # ---- SALES METRICS ----
-            # Get completed sales
-            sales_query = Sale.query.filter(Sale.status == 'completed')
+            # Get completed sales for this user
+            sales_query = Sale.query.filter(Sale.status == 'completed', Sale.user_id == user_id)
             
             # Apply date filters if provided
             if start_date:
@@ -1886,7 +1955,7 @@ def create_app():
             
             for sale in sales:
                 item = Item.query.get(sale.item_id)
-                if item:
+                if item and item.user_id == user_id:  # Verify ownership
                     cost_of_goods_sold += item.purchase_price
                     sold_items_shipping_cost += (item.shipping_price or 0)
             
@@ -1900,8 +1969,8 @@ def create_app():
             )
             
             # ---- EXPENSE METRICS ----
-            # Get expenses
-            expense_query = Expense.query
+            # Get expenses for this user
+            expense_query = Expense.query.filter_by(user_id=user_id)
             
             # Apply date filters if provided
             if start_date:
@@ -1957,6 +2026,7 @@ def create_app():
                 # --- PREVIOUS PERIOD SALES ---
                 prev_sales_query = Sale.query.filter(
                     Sale.status == 'completed',
+                    Sale.user_id == user_id,
                     Sale.sale_date >= prev_start_date,
                     Sale.sale_date < prev_end_date
                 )
@@ -1971,7 +2041,7 @@ def create_app():
                 
                 for sale in prev_sales:
                     item = Item.query.get(sale.item_id)
-                    if item:
+                    if item and item.user_id == user_id:  # Verify ownership
                         prev_cost_of_goods_sold += item.purchase_price
                         prev_sold_items_shipping_cost += (item.shipping_price or 0)
                 
@@ -1985,6 +2055,7 @@ def create_app():
                 
                 # --- PREVIOUS PERIOD EXPENSES ---
                 prev_expense_query = Expense.query.filter(
+                    Expense.user_id == user_id,
                     Expense.expense_date >= prev_start_date,
                     Expense.expense_date < prev_end_date
                 )
@@ -2066,33 +2137,141 @@ def create_app():
                 }
             }
             
-            logger.info("✅ Generated comprehensive dashboard KPI metrics")
+            logger.info(f"✅ Generated comprehensive dashboard KPI metrics for user {user_id}")
             return jsonify(metrics), 200
         except Exception as e:
-            logger.error(f"💥 Error generating dashboard KPI metrics: {str(e)}")
+            logger.error(f"💥 Error generating dashboard KPI metrics for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
-# end of sales  KPI metrics
-    @app.before_request
-    def log_request_info():
-        logger.debug('Headers: %s', request.headers)
-        logger.debug('Body: %s', request.get_data())
 
-    return app
+    # Serve uploaded images with user verification
+    @app.route('/api/uploads/<path:filename>')
+    @require_auth
+    def serve_user_image(user_id, filename):
+        """
+        Serve uploaded images with ownership verification.
+        """
+        try:
+            image_logger.info(f"📷 Image request for: {filename} by user {user_id}")
+            
+            # Check if it's a receipt file (which will have user_id in the filename)
+            if filename.startswith('receipt_'):
+                # Extract user_id from filename (format: receipt_timestamp_user_id_filename.ext)
+                parts = filename.split('_')
+                if len(parts) >= 3:
+                    file_user_id = parts[2]
+                    
+                    # Verify ownership
+                    if file_user_id != user_id:
+                        image_logger.warning(f"🚫 User {user_id} attempted to access receipt {filename} belonging to user {file_user_id}")
+                        return jsonify({'error': 'Unauthorized access'}), 403
+                    
+                    # Serve the file from user's subfolder
+                    image_logger.info(f"✅ Serving receipt: {filename} for user {user_id}")
+                    return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], user_id), filename)
+            
+            # Get the user's subfolder
+            user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+            
+            # Check if file exists in user's folder
+            if os.path.exists(os.path.join(user_upload_folder, filename)):
+                image_logger.info(f"✅ Serving image: {filename} from user {user_id}'s folder")
+                return send_from_directory(user_upload_folder, filename)
+            
+            # If not found in user's folder, check if this is an older image before migration
+            if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], filename)):
+                # For backward compatibility - allow access to files in root uploads folder
+                image_logger.info(f"✅ Serving image: {filename} from root uploads folder (legacy)")
+                return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+            
+            # File not found in either location
+            image_logger.warning(f"🔍 Requested image not found: {filename}")
+            return jsonify({'error': 'Image not found'}), 404
+        except Exception as e:
+            image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    # Check if image exists (continued)
+    @app.route('/api/check-image/<filename>')
+    @require_auth
+    def check_user_image(user_id, filename):
+        """
+        Check if an image exists in the user's uploads directory.
+        """
+        try:
+            image_logger.info(f"Image check request for: {filename} by user {user_id}")
+            
+            # Check user's subfolder first
+            user_filepath = os.path.join(app.config['UPLOAD_FOLDER'], user_id, filename)
+            if os.path.exists(user_filepath):
+                stats = os.stat(user_filepath)
+                image_logger.info(f"✅ Image check: {filename} exists in user {user_id}'s folder, size: {stats.st_size} bytes")
+                return jsonify({
+                    'exists': True,
+                    'filename': filename,
+                    'filepath': user_filepath,
+                    'size': stats.st_size,
+                    'created': stats.st_ctime,
+                    'permissions': oct(stats.st_mode)[-3:]
+                }), 200
+            
+            # For backward compatibility, check root uploads folder
+            root_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            if os.path.exists(root_filepath):
+                stats = os.stat(root_filepath)
+                image_logger.info(f"✅ Image check: {filename} exists in root folder (legacy), size: {stats.st_size} bytes")
+                return jsonify({
+                    'exists': True,
+                    'filename': filename,
+                    'filepath': root_filepath,
+                    'size': stats.st_size,
+                    'created': stats.st_ctime,
+                    'permissions': oct(stats.st_mode)[-3:]
+                }), 200
+            
+            # File not found in either location
+            # Log the complete uploads directory to help troubleshoot
+            try:
+                user_files = os.listdir(os.path.join(app.config['UPLOAD_FOLDER'], user_id)) if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], user_id)) else []
+                root_files = os.listdir(app.config['UPLOAD_FOLDER'])
+                image_logger.warning(f"❌ File not found: {filename}, available files in user dir: {user_files[:10]}, root dir: {root_files[:10]}")
+            except Exception as dir_err:
+                image_logger.error(f"🚫 Error listing directory: {str(dir_err)}")
+            
+            return jsonify({
+                'exists': False,
+                'filename': filename,
+                'attempted_paths': [user_filepath, root_filepath]
+            }), 404
+        except Exception as e:
+            image_logger.error(f"💥 Error checking image {filename}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+        @app.before_request
+        def log_request_info():
+            logger.debug('Headers: %s', request.headers)
+            logger.debug('Body: %s', request.get_data())
+
+        return app
 
 
-app = create_app()
+    app = create_app()
 
+    @app.shell_context_processor
+    def make_shell_context():
+        return {
+            'db': db, 
+            'Item': Item, 
+            'Size': Size, 
+            'Image': Image, 
+            'Tag': Tag, 
+            'Sale': Sale, 
+            'Expense': Expense,
+            'Coplist': Coplist,
+            'UserSettings': UserSettings
+        }
 
-
-
-
-
-@app.shell_context_processor
-def make_shell_context():
-    return {'db': db, 'Item': Item, 'Size': Size, 'Image': Image, 'Tag': Tag, 'Sale': Sale}
-
-if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
-    logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
-    logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    if __name__ == '__main__':
+        logger = logging.getLogger(__name__)
+        logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
+        logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
+        app.run(debug=True, host='127.0.0.1', port=5000)

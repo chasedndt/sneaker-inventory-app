@@ -1,7 +1,8 @@
-// src/services/api.ts (Improved Error Handling for Tags and Listings)
+// src/services/api.ts
 import { CategoryType } from '../components/AddItem/SizesQuantityForm';
 import { getImageUrl, safeImageUrl } from '../utils/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
+import { getAuth } from 'firebase/auth';
 
 export interface ImageFile extends File {
   preview?: string;
@@ -94,20 +95,79 @@ export interface Item {
   tags?: string[];
   listings?: Listing[];
   status?: 'unlisted' | 'listed' | 'sold';
+  user_id?: string; // Add user_id field for user-specific data filtering
 }
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
+// Helper function to get auth token from Firebase
+const getAuthToken = async (): Promise<string | null> => {
+  try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+
+    if (!user) {
+      console.error('No user is currently signed in');
+      return null;
+    }
+
+    const token = await user.getIdToken();
+    return token;
+  } catch (error) {
+    console.error('Error getting authentication token:', error);
+    throw new Error('Failed to get authentication token');
+  }
+};
+
+// Helper function to add auth headers to fetch requests
+const authenticatedFetch = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  try {
+    const token = await getAuthToken();
+    
+    if (!token) {
+      throw new Error('Authentication required. Please log in.');
+    }
+    
+    // Create headers with authentication token
+    const headers = {
+      ...options.headers,
+      'Authorization': `Bearer ${token}`
+    };
+    
+    // Make the authenticated request
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    // Handle authentication errors specifically
+    if (response.status === 401) {
+      throw new Error('Authentication expired or invalid. Please log in again.');
+    }
+    
+    if (response.status === 403) {
+      throw new Error('You do not have permission to access this resource.');
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Authentication error:', error);
+    throw error;
+  }
+};
+
 export const api = {
   testConnection: async () => {
     try {
-      console.log('🔄 Testing connection to API endpoint...');
-      const response = await fetch(`${API_BASE_URL}/test`);
+      console.log('🔄 Testing connection to API endpoint with authentication...');
+      const response = await authenticatedFetch(`${API_BASE_URL}/test`);
+      
       if (!response.ok) {
         console.error(`❌ API test connection failed with status: ${response.status}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      console.log('✅ API connection test successful');
+      
+      console.log('✅ API connection test successful with authentication');
       return await response.json();
     } catch (error) {
       console.error('💥 Connection test failed:', error);
@@ -117,7 +177,14 @@ export const api = {
 
   addItem: async (formData: AddItemFormData, images: ImageFile[]) => {
     try {
-      console.log('🔄 Preparing to add item...');
+      console.log('🔄 Preparing to add item with user authentication...');
+      
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to add items.');
+      }
+      
       // Create a FormData object for multipart request
       const multipartFormData = new FormData();
       
@@ -133,16 +200,26 @@ export const api = {
       console.log('📦 Submitting form data:', formData);
       console.log(`📊 Submitting ${images.length} images`);
       
-      // Make the request
-      console.log('🚀 Sending request to API...');
+      // Make the authenticated request
+      console.log('🚀 Sending authenticated request to API...');
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'POST',
-        credentials: 'include',
-        // Don't set Content-Type header, browser will set it automatically with boundary
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: multipartFormData
       });
       
       if (!response.ok) {
+        // Handle authentication-specific errors
+        if (response.status === 401) {
+          throw new Error('Authentication expired. Please log in again.');
+        }
+        
+        if (response.status === 403) {
+          throw new Error('You do not have permission to add items.');
+        }
+        
         let errorMessage = `HTTP error! status: ${response.status}`;
         try {
           const errorData = await response.json();
@@ -163,20 +240,25 @@ export const api = {
     }
   },
 
-  // Updated method for updating an item
+  // Updated method for updating an item with authentication
   updateItem: async (formData: UpdateItemFormData, images: ImageFile[]) => {
     try {
       if (!formData.id) {
         throw new Error('Item ID is required for update');
       }
       
-      console.log(`🔄 Preparing to update item ${formData.id}...`);
+      console.log(`🔄 Preparing to update item ${formData.id} with user authentication...`);
+      
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to update items.');
+      }
       
       // Create a FormData object for multipart request
       const multipartFormData = new FormData();
       
       // Clean up empty strings that should be null or zero in numeric fields
-      // This prevents the "could not convert string to float: ''" error
       const cleanedFormData = {
         ...formData,
         purchaseDetails: {
@@ -208,42 +290,35 @@ export const api = {
       console.log('📦 Submitting update data:', cleanedFormData);
       console.log(`📊 Submitting ${images?.length || 0} images`);
       
-      // Make the request - Fix: Ensure the endpoint exists on the backend
-      console.log(`🚀 Sending PUT request to API: ${API_BASE_URL}/items/${formData.id}`);
+      // Make the authenticated request
+      console.log(`🚀 Sending authenticated PUT request to API: ${API_BASE_URL}/items/${formData.id}`);
       const response = await fetch(`${API_BASE_URL}/items/${formData.id}`, {
-        method: 'PUT', // Use PUT for updating resources
-        credentials: 'include',
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: multipartFormData
       });
       
       // Handle response
       if (!response.ok) {
+        // Handle authentication-specific errors
+        if (response.status === 401) {
+          throw new Error('Authentication expired. Please log in again.');
+        }
+        
+        if (response.status === 403) {
+          throw new Error('You do not have permission to update this item.');
+        }
+        
         let errorMessage = `HTTP error! status: ${response.status}`;
         
-        // Try to parse error details from response
         try {
           const errorData = await response.json();
           console.error('❌ Error response data:', errorData);
           errorMessage = errorData.error || errorMessage;
         } catch (parseError) {
           console.error('💥 Failed to parse error response:', parseError);
-        }
-        
-        // Use mock response for development if backend isn't ready
-        if (response.status === 405) { // Method Not Allowed
-          console.warn('⚠️ PUT method not implemented on backend, using mock success response');
-          return {
-            message: 'Item updated successfully (mock)',
-            id: formData.id,
-            item: {
-              id: formData.id,
-              productName: formData.productDetails.productName,
-              category: formData.productDetails.category,
-              brand: formData.productDetails.brand,
-              // Include other relevant fields
-              status: formData.status || 'unlisted'
-            }
-          };
         }
         
         throw new Error(errorMessage);
@@ -258,10 +333,16 @@ export const api = {
     }
   },
 
-  // Improved method for updating a single field with better error handling
+  // Improved method for updating a single field with authentication
   updateItemField: async (itemId: number, field: string, value: any) => {
     try {
-      console.log(`🔄 Updating ${field} for item ${itemId}:`, JSON.stringify(value, null, 2));
+      console.log(`🔄 Updating ${field} for item ${itemId} with user authentication:`, JSON.stringify(value, null, 2));
+      
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to update items.');
+      }
       
       // Special handling for tags to ensure proper format
       if (field === 'tags') {
@@ -315,21 +396,30 @@ export const api = {
       
       console.log('📦 Submitting field update:', JSON.stringify(updateData, null, 2));
       
-      // First try to use the PATCH method directly
+      // First try to use the PATCH method with authentication
       try {
-        console.log(`🚀 Sending PATCH request to API: ${API_BASE_URL}/items/${itemId}/field`);
+        console.log(`🚀 Sending authenticated PATCH request to API: ${API_BASE_URL}/items/${itemId}/field`);
         
         const response = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
           method: 'PATCH',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
           },
-          credentials: 'include',
           body: JSON.stringify(updateData)
         });
         
         // Log the response status
         console.log(`🔍 PATCH response status: ${response.status}`);
+        
+        // Handle authentication-specific errors
+        if (response.status === 401) {
+          throw new Error('Authentication expired. Please log in again.');
+        }
+        
+        if (response.status === 403) {
+          throw new Error('You do not have permission to update this item.');
+        }
         
         // Try to get the response text or JSON for more info
         let responseText;
@@ -363,16 +453,27 @@ export const api = {
       } catch (patchError) {
         console.warn(`⚠️ PATCH attempt failed:`, patchError);
         
-        // Fall back to GET + PUT approach
+        // Fall back to GET + PUT approach with authentication
         try {
-          // First, fetch the current item data
-          console.log(`🔄 Fetching current item ${itemId} data for PUT fallback...`);
+          // First, fetch the current item data with authentication
+          console.log(`🔄 Fetching current item ${itemId} data for PUT fallback with authentication...`);
           const getResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
             method: 'GET',
-            credentials: 'include',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
           });
           
           if (!getResponse.ok) {
+            // Handle authentication-specific errors
+            if (getResponse.status === 401) {
+              throw new Error('Authentication expired. Please log in again.');
+            }
+            
+            if (getResponse.status === 403) {
+              throw new Error('You do not have permission to access this item.');
+            }
+            
             throw new Error(`Failed to fetch item data: ${getResponse.status}`);
           }
           
@@ -398,18 +499,27 @@ export const api = {
             item[field] = value;
           }
           
-          // Now do a full PUT request
-          console.log(`🚀 Sending PUT request to API: ${API_BASE_URL}/items/${itemId}`);
+          // Now do a full PUT request with authentication
+          console.log(`🚀 Sending authenticated PUT request to API: ${API_BASE_URL}/items/${itemId}`);
           const putResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
             method: 'PUT',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
             },
-            credentials: 'include',
             body: JSON.stringify(item)
           });
           
           console.log(`🔍 PUT response status: ${putResponse.status}`);
+          
+          // Handle authentication-specific errors
+          if (putResponse.status === 401) {
+            throw new Error('Authentication expired. Please log in again.');
+          }
+          
+          if (putResponse.status === 403) {
+            throw new Error('You do not have permission to update this item.');
+          }
           
           if (!putResponse.ok) {
             let putResponseText = await putResponse.text();
@@ -422,15 +532,7 @@ export const api = {
           return putResponseData;
         } catch (putError) {
           console.error(`💥 PUT fallback also failed:`, putError);
-          
-          // For development, provide a useful mock response indicating both methods failed
-          console.warn('⚠️ Both PATCH and PUT failed, using mock success response for field update');
-          return {
-            message: `Field ${field} updated successfully (mock after both PATCH and PUT failed)`,
-            id: itemId,
-            [field]: value,
-            error: putError instanceof Error ? putError.message : String(putError)
-          };
+          throw putError;
         }
       }
     } catch (error) {
@@ -439,18 +541,34 @@ export const api = {
     }
   },
 
-  // Enhanced Delete method for Issue 3.2
+  // Enhanced Delete method with authentication
   deleteItem: async (itemId: number) => {
     try {
-      console.log(`🔄 Deleting item ${itemId}...`);
+      console.log(`🔄 Deleting item ${itemId} with user authentication...`);
       
-      // First check if this item has any associated sales
-      // If it does, we might need to delete those first or handle them differently
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to delete items.');
+      }
+      
+      // First check if this item has any associated sales with authentication
       try {
         const response = await fetch(`${API_BASE_URL}/items/${itemId}/sales`, {
           method: 'GET',
-          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
         });
+        
+        // Handle authentication-specific errors
+        if (response.status === 401) {
+          throw new Error('Authentication expired. Please log in again.');
+        }
+        
+        if (response.status === 403) {
+          throw new Error('You do not have permission to access this item.');
+        }
         
         if (response.ok) {
           const sales = await response.json();
@@ -462,7 +580,9 @@ export const api = {
             for (const sale of sales) {
               await fetch(`${API_BASE_URL}/sales/${sale.id}`, {
                 method: 'DELETE',
-                credentials: 'include',
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
               });
             }
           }
@@ -471,22 +591,24 @@ export const api = {
         console.warn('⚠️ Error checking for associated sales, continuing with item deletion:', err);
       }
       
-      // Now proceed with deleting the item
+      // Now proceed with deleting the item with authentication
       const response = await fetch(`${API_BASE_URL}/items/${itemId}`, {
         method: 'DELETE',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
+      // Handle authentication-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('You do not have permission to delete this item.');
+      }
+      
       if (!response.ok) {
-        // If DELETE is not implemented, provide a mock success
-        if (response.status === 405) {
-          console.warn('⚠️ DELETE not implemented, using mock success response');
-          return {
-            message: `Item ${itemId} deleted successfully (mock)`,
-            id: itemId
-          };
-        }
-        
         let errorMessage = `HTTP error! status: ${response.status}`;
         try {
           const errorData = await response.json();
@@ -509,11 +631,29 @@ export const api = {
 
   getItems: async () => {
     try {
-      console.log('🔄 Fetching items from API...');
+      console.log('🔄 Fetching items from API with user authentication...');
+      
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view items.');
+      }
+      
       const response = await fetch(`${API_BASE_URL}/items`, {
         method: 'GET',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
+      
+      // Handle authentication-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('You do not have permission to access these items.');
+      }
       
       if (!response.ok) {
         console.error(`❌ API getItems failed with status: ${response.status}`);
@@ -521,7 +661,7 @@ export const api = {
       }
       
       const items = await response.json();
-      console.log(`✅ Received ${items.length} items from API`);
+      console.log(`✅ Received ${items.length} items from API for authenticated user`);
       
       // Enhance items with image URLs for convenience
       const itemsWithImageUrls = items.map((item: Item) => {
@@ -567,11 +707,29 @@ export const api = {
 
   getItem: async (id: number) => {
     try {
-      console.log(`🔄 Fetching item with ID ${id} from API...`);
+      console.log(`🔄 Fetching item with ID ${id} from API with user authentication...`);
+      
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view this item.');
+      }
+      
       const response = await fetch(`${API_BASE_URL}/items/${id}`, {
         method: 'GET',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
+      
+      // Handle authentication-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('You do not have permission to access this item.');
+      }
       
       if (!response.ok) {
         console.error(`❌ API getItem failed with status: ${response.status}`);
@@ -627,8 +785,23 @@ export const api = {
         return false;
       }
       
-      console.log(`🔍 Checking if image exists: ${filename}`);
-      const response = await fetch(`${API_BASE_URL}/check-image/${filename}`);
+      // Get authentication token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in.');
+      }
+      
+      console.log(`🔍 Checking if image exists with authentication: ${filename}`);
+      const response = await fetch(`${API_BASE_URL}/check-image/${filename}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      // Handle authentication-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
       
       if (!response.ok) {
         console.error(`❌ Image check endpoint returned ${response.status} for ${filename}`);
@@ -644,10 +817,12 @@ export const api = {
     }
   },
   
-  // Get all images for an item
+  // Get all images for an item with authentication
   getItemImages: async (itemId: number): Promise<string[]> => {
     try {
-      console.log(`🔄 Fetching images for item ${itemId}...`);
+      console.log(`🔄 Fetching images for item ${itemId} with user authentication...`);
+      
+      // Use the authenticated getItem method
       const item = await api.getItem(itemId);
       
       if (item.images && item.images.length > 0) {
@@ -663,12 +838,12 @@ export const api = {
     }
   },
   
-  // Refresh item data after changes
+  // Refresh item data after changes with authentication
   refreshItems: async () => {
     try {
-      console.log('🔄 Refreshing items data...');
+      console.log('🔄 Refreshing items data with user authentication...');
       const items = await api.getItems();
-      console.log(`✅ Refreshed ${items.length} items`);
+      console.log(`✅ Refreshed ${items.length} items for authenticated user`);
       return items;
     } catch (error) {
       console.error('💥 Error refreshing items:', error);
@@ -681,7 +856,7 @@ export const api = {
 export const useApi = () => {
   const { currentUser } = useAuth();
 
-  // Return the same API object, but potentially with auth context in the future
+  // Return the API object with authentication status
   return {
     ...api,
     isAuthenticated: !!currentUser
