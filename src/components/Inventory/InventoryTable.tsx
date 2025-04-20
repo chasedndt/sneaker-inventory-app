@@ -1,5 +1,6 @@
 // src/components/Inventory/InventoryTable.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Table,
   TableBody,
@@ -23,7 +24,9 @@ import {
   Card,
   CardContent,
   Divider,
-  Badge
+  Badge,
+  CircularProgress,
+  Alert
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -43,6 +46,8 @@ import { InventoryItem, Tag } from '../../pages/InventoryPage';
 import useFormat from '../../hooks/useFormat';
 import dayjs from 'dayjs';
 import ImageViewer from '../common/ImageViewer';
+import { useAuth } from '../../contexts/AuthContext';
+import { api } from '../../services/api';
 
 // Sort order type
 type SortOrder = 'asc' | 'desc' | null;
@@ -93,7 +98,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   tags
 }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { money, date, getCurrentCurrency } = useFormat();
+  const { currentUser, getAuthToken } = useAuth();
+  
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
@@ -115,6 +123,34 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   const [imageViewerOpen, setImageViewerOpen] = useState<boolean>(false);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   
+  // Auth-related states
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(false);
+  
+  // Check authentication before sensitive operations
+  const checkAuth = async (): Promise<boolean> => {
+    if (!currentUser) {
+      setAuthError('You must be logged in to perform this action');
+      return false;
+    }
+    
+    setIsCheckingAuth(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setAuthError('Authentication token is invalid or expired. Please log in again.');
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      setAuthError('Authentication error. Please log in again.');
+      return false;
+    } finally {
+      setIsCheckingAuth(false);
+    }
+  };
+
   // Field types classification for initial sort direction
   const numericFields = ['marketPrice', 'estimatedProfit', 'purchaseTotal', 'shippingAmount', 'roi'];
   const dateFields = ['purchaseDate', 'daysInInventory'];
@@ -202,7 +238,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     onPageChange(newPage);
   };
   
-  const handleStartEditing = (item: InventoryItem) => {
+  const handleStartEditing = async (item: InventoryItem) => {
+    // Check authentication before starting the edit
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      return;
+    }
+    
     setEditingMarketPrice(item.id);
     setMarketPriceValue(item.marketPrice.toString());
     // Focus input on next render cycle
@@ -214,16 +256,42 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
     }, 0);
   };
   
-  const handleSaveMarketPrice = (itemId: number) => {
+  const handleSaveMarketPrice = async (itemId: number) => {
+    // Check authentication before saving changes
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      return;
+    }
+    
     const newPrice = parseFloat(marketPriceValue);
     if (!isNaN(newPrice) && newPrice >= 0) {
-      onUpdateMarketPrice(itemId, newPrice);
+      try {
+        await onUpdateMarketPrice(itemId, newPrice);
+        setAuthError(null);
+      } catch (error: any) {
+        // Handle authentication errors
+        if (error.message.includes('Authentication') || error.message.includes('log in')) {
+          setAuthError('Authentication error: Please log in again.');
+          // Redirect after a brief delay
+          setTimeout(() => {
+            navigate('/login', { 
+              state: { 
+                from: '/inventory',
+                message: 'Your session has expired. Please log in again.' 
+              } 
+            });
+          }, 2000);
+        } else {
+          setAuthError(`Failed to update market price: ${error.message}`);
+        }
+      }
     }
     setEditingMarketPrice(null);
   };
   
   const handleCancelEditing = () => {
     setEditingMarketPrice(null);
+    setAuthError(null);
   };
   
   // Render sort icon for column headers
@@ -316,7 +384,13 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   };
   
   // Handle image click to open the image viewer
-  const handleImageClick = (item: InventoryItem) => {
+  const handleImageClick = async (item: InventoryItem) => {
+    // Check authentication before viewing images
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      return;
+    }
+    
     setSelectedItemId(item.id);
     setImageViewerOpen(true);
   };
@@ -339,8 +413,14 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   };
   
   // Handle listings info click
-  const handleListingsInfoClick = (event: React.MouseEvent<HTMLElement>, item: InventoryItem) => {
+  const handleListingsInfoClick = async (event: React.MouseEvent<HTMLElement>, item: InventoryItem) => {
     if (item.listings && item.listings.length > 0) {
+      // Check authentication before showing listings
+      const isAuthenticated = await checkAuth();
+      if (!isAuthenticated) {
+        return;
+      }
+      
       setListingAnchorEl(event.currentTarget);
       setSelectedListingItem(item);
     }
@@ -349,6 +429,36 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
   const handleListingsInfoClose = () => {
     setListingAnchorEl(null);
     setSelectedListingItem(null);
+  };
+
+  // Handle duplicate button click
+  const handleDuplicateClick = async (item: InventoryItem) => {
+    // Check authentication before duplicating
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) {
+      return;
+    }
+    
+    try {
+      onDuplicateItem(item);
+      setAuthError(null);
+    } catch (error: any) {
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setAuthError('Authentication error: Please log in again.');
+        // Redirect after a brief delay
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+      } else {
+        setAuthError(`Failed to duplicate item: ${error.message}`);
+      }
+    }
   };
   
   // Render tags for an item
@@ -467,6 +577,25 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
 
   return (
     <>
+      {/* Authentication Error Message */}
+      {authError && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2 }}
+          onClose={() => setAuthError(null)}
+        >
+          {authError}
+        </Alert>
+      )}
+      
+      {/* Loading Indicator */}
+      {isCheckingAuth && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <CircularProgress size={24} sx={{ mr: 1 }} />
+          <Typography variant="body2">Verifying authentication...</Typography>
+        </Box>
+      )}
+      
       <Paper sx={{ 
         width: '100%', 
         overflow: 'hidden',

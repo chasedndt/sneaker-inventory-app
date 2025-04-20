@@ -30,3 +30,6 @@ backend/uploads/*
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Firebase credentials
+backend/firebase-credentials.json
