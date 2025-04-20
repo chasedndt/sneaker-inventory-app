@@ -9,7 +9,9 @@ import {
   updateEmail,
   updatePassword,
   reauthenticateWithCredential,
-  EmailAuthProvider
+  EmailAuthProvider,
+  getIdToken,
+  getIdTokenResult
 } from 'firebase/auth';
 import { auth } from '../firebase';
 
@@ -17,12 +19,16 @@ import { auth } from '../firebase';
 interface AuthContextType {
   currentUser: User | null;
   loading: boolean;
+  token: string | null;
+  tokenExpiration: Date | null;
   signup: (email: string, password: string) => Promise<User>;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
   updateUserEmail: (email: string) => Promise<void>;
   updateUserPassword: (password: string) => Promise<void>;
   reauthenticate: (password: string) => Promise<void>;
+  getAuthToken: () => Promise<string | null>;
+  refreshToken: () => Promise<string | null>;
 }
 
 // Create the auth context with a default undefined value
@@ -45,6 +51,8 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [token, setToken] = useState<string | null>(null);
+  const [tokenExpiration, setTokenExpiration] = useState<Date | null>(null);
 
   // Function to sign up a new user
   const signup = (email: string, password: string): Promise<User> => {
@@ -93,11 +101,90 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await reauthenticateWithCredential(currentUser, credential);
   };
 
-  // Effect to handle auth state changes
+  // Function to get the current auth token
+  const getAuthToken = async (): Promise<string | null> => {
+    if (!currentUser) {
+      console.log('No user is logged in, cannot get token');
+      return null;
+    }
+
+    try {
+      // Check if we have a valid token already
+      if (token && tokenExpiration && new Date() < tokenExpiration) {
+        console.log('Using cached token, still valid');
+        return token;
+      }
+
+      // Get a fresh token
+      console.log('Getting fresh token from Firebase');
+      const newToken = await getIdToken(currentUser, true); // force refresh
+      const tokenResult = await getIdTokenResult(currentUser);
+      
+      // Set token and its expiration
+      setToken(newToken);
+      if (tokenResult.expirationTime) {
+        setTokenExpiration(new Date(tokenResult.expirationTime));
+      }
+      
+      return newToken;
+    } catch (error) {
+      console.error('Error getting auth token:', error);
+      return null;
+    }
+  };
+
+  // Function to refresh the token
+  const refreshToken = async (): Promise<string | null> => {
+    if (!currentUser) return null;
+    
+    try {
+      const newToken = await getIdToken(currentUser, true); // force refresh
+      const tokenResult = await getIdTokenResult(currentUser);
+      
+      // Update token state
+      setToken(newToken);
+      if (tokenResult.expirationTime) {
+        setTokenExpiration(new Date(tokenResult.expirationTime));
+      }
+      
+      return newToken;
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return null;
+    }
+  };
+
+  // Get initial token when user logs in
+  useEffect(() => {
+    if (currentUser) {
+      getAuthToken();
+    } else {
+      setToken(null);
+      setTokenExpiration(null);
+    }
+  }, [currentUser]);
+
+  // Set up listener for auth state changes
   useEffect(() => {
     // Subscribe to auth state changes
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
+      
+      // If user is logged in, get token
+      if (user) {
+        try {
+          const newToken = await getIdToken(user);
+          const tokenResult = await getIdTokenResult(user);
+          
+          setToken(newToken);
+          if (tokenResult.expirationTime) {
+            setTokenExpiration(new Date(tokenResult.expirationTime));
+          }
+        } catch (error) {
+          console.error('Error getting initial token:', error);
+        }
+      }
+      
       setLoading(false);
     });
 
@@ -105,16 +192,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // Set up token refresh timer
+  useEffect(() => {
+    if (!token || !tokenExpiration) return;
+    
+    // Calculate time until token needs refresh (5 minutes before expiration)
+    const timeUntilRefresh = tokenExpiration.getTime() - new Date().getTime() - (5 * 60 * 1000);
+    
+    // Set timer to refresh token
+    const refreshTimer = setTimeout(() => {
+      console.log('Token refresh timer triggered');
+      refreshToken();
+    }, Math.max(0, timeUntilRefresh));
+    
+    return () => clearTimeout(refreshTimer);
+  }, [token, tokenExpiration]);
+
   // Create the value object for our context provider
   const value: AuthContextType = {
     currentUser,
     loading,
+    token,
+    tokenExpiration,
     signup,
     login,
     logout,
     updateUserEmail,
     updateUserPassword,
-    reauthenticate
+    reauthenticate,
+    getAuthToken,
+    refreshToken
   };
 
   return (

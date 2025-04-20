@@ -1,5 +1,6 @@
 // src/pages/InventoryPage.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Paper, 
@@ -46,6 +47,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import AddIcon from '@mui/icons-material/Add';
+import LoginIcon from '@mui/icons-material/Login';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -62,9 +64,10 @@ import BatchTagsModal from '../components/Inventory/BatchTagsModal';
 import AddItemModal from '../components/AddItemModal';
 import InventoryFilter, { ActiveFilter } from '../components/Inventory/InventoryFilter';
 
-import { api, Item } from '../services/api';
+import { api, Item, useApi } from '../services/api';
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { tagService } from '../services/tagService';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface InventoryItem extends Item {
   marketPrice: number;
@@ -100,6 +103,10 @@ const calculateDaysInInventory = (purchaseDate: string): number => {
 
 const InventoryPage: React.FC = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
+  const { currentUser, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: apiLoading } = useApi();
+  
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,7 +136,7 @@ const InventoryPage: React.FC = () => {
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
-    severity: 'success' as 'success' | 'info' | 'warning' | 'error'
+    severity: 'success' as 'success' | 'error' | 'info' | 'warning'
   });
   
   // Stock insights state
@@ -167,11 +174,39 @@ const InventoryPage: React.FC = () => {
   // Active filter state
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
 
-  // Fetch items from API
+  // Redirect to login if not authenticated
   useEffect(() => {
+    if (!authLoading && !currentUser) {
+      console.log('User not authenticated, redirecting to login');
+      navigate('/login', { 
+        state: { 
+          from: '/inventory',
+          message: 'Please log in to view your inventory' 
+        } 
+      });
+    }
+  }, [authLoading, currentUser, navigate]);
+
+  // Fetch items from API only when authenticated
+  useEffect(() => {
+    if (!isAuthenticated || authLoading) {
+      return; // Don't fetch if not authenticated or still loading auth
+    }
+    
     const fetchItems = async () => {
       try {
         setLoading(true);
+        
+        // First check if we can connect to the API
+        try {
+          await api.testConnection();
+        } catch (connectionError) {
+          console.error('API connection test failed:', connectionError);
+          setError('Cannot connect to server. Please check your internet connection.');
+          setLoading(false);
+          return;
+        }
+        
         const data = await api.getItems();
         
         // Filter out sold items for inventory page
@@ -206,7 +241,12 @@ const InventoryPage: React.FC = () => {
         setError(null);
       } catch (err: any) {
         console.error('Error fetching inventory items:', err);
-        setError(`Failed to load inventory data: ${err.message}`);
+        // Provide more specific error messages based on error type
+        if (err.message.includes('Authentication')) {
+          setError('Authentication error: Please log in again.');
+        } else {
+          setError(`Failed to load inventory data: ${err.message}`);
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -215,20 +255,32 @@ const InventoryPage: React.FC = () => {
 
     fetchItems();
 
-    // Also fetch tags
+    // Also fetch tags when authenticated
     const fetchTags = async () => {
+      if (!isAuthenticated) return;
+      
       try {
         const tags = await tagService.getTags();
         setTags(tags);
       } catch (err: any) {
         console.error('Error fetching tags:', err);
+        // Don't set the main error state for tags - we can proceed without them
       }
     };
 
     fetchTags();
-  }, []);
+  }, [isAuthenticated, authLoading]);
 
   const handleRefresh = async () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to refresh inventory',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setRefreshing(true);
     try {
       const data = await api.getItems();
@@ -285,6 +337,15 @@ const InventoryPage: React.FC = () => {
   };
 
   const handleUpdateMarketPrice = async (itemId: number, newPrice: number) => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to update market price',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       // First update UI for immediate feedback
       setItems(prevItems => 
@@ -314,16 +375,46 @@ const InventoryPage: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error updating market price:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to update market price: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // If it's an authentication error, show specific message
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error: Please log in again',
+          severity: 'error'
+        });
+        
+        // Redirect to login if authentication failed
+        navigate('/login', { 
+          state: { 
+            from: '/inventory',
+            message: 'Your session has expired. Please log in again.' 
+          } 
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to update market price: ${error.message}`,
+          severity: 'error'
+        });
+      }
+      
+      // Refresh to ensure UI is in sync with backend
+      handleRefresh();
     }
   };
 
   // New handler for marking items as unlisted
   const handleMarkAsUnlisted = async () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to update items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       // First update UI for immediate feedback
       setItems(prevItems => 
@@ -357,15 +448,43 @@ const InventoryPage: React.FC = () => {
       setSelectedItems([]);
     } catch (error: any) {
       console.error('Error marking as unlisted:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to mark as unlisted: ${error.message}`,
-        severity: 'error'
-      });
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error: Please log in again',
+          severity: 'error'
+        });
+        
+        navigate('/login', { 
+          state: { 
+            from: '/inventory',
+            message: 'Your session has expired. Please log in again.' 
+          } 
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to mark as unlisted: ${error.message}`,
+          severity: 'error'
+        });
+      }
+      
+      // Refresh to ensure UI is in sync with backend
+      handleRefresh();
     }
   };
 
   const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to update items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       // If marking as sold, open RecordSaleModal
       if (newStatus === 'sold') {
@@ -413,11 +532,28 @@ const InventoryPage: React.FC = () => {
       setSelectedItems([]);
     } catch (error: any) {
       console.error('Error updating status:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to update status: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error: Please log in again',
+          severity: 'error'
+        });
+        
+        navigate('/login', { 
+          state: { 
+            from: '/inventory',
+            message: 'Your session has expired. Please log in again.' 
+          } 
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to update status: ${error.message}`,
+          severity: 'error'
+        });
+      }
     }
   };
 
@@ -469,6 +605,15 @@ const InventoryPage: React.FC = () => {
   
   // Edit item handlers
   const handleEditItem = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to edit items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     if (selectedItems.length === 1) {
       const itemToEdit = items.find(item => item.id === selectedItems[0]);
       setItemToEdit(itemToEdit);
@@ -489,6 +634,15 @@ const InventoryPage: React.FC = () => {
   
   // Delete functionality
   const handleDeleteClick = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to delete items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     if (selectedItems.length === 0) return;
     setItemsToDelete(selectedItems);
     setDeleteConfirmOpen(true);
@@ -515,11 +669,28 @@ const InventoryPage: React.FC = () => {
       setSelectedItems([]);
     } catch (error: any) {
       console.error('Error deleting items:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to delete items: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Check for authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error: Please log in again',
+          severity: 'error'
+        });
+        
+        navigate('/login', { 
+          state: { 
+            from: '/inventory',
+            message: 'Your session has expired. Please log in again.' 
+          } 
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to delete items: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setLoading(false);
       setDeleteConfirmOpen(false);
@@ -550,6 +721,15 @@ const InventoryPage: React.FC = () => {
   
   // Duplicate item functionality
   const handleDuplicateItem = (item: InventoryItem) => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to duplicate items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setItemToDuplicate(item);
     setDuplicateConfirmOpen(true);
   };
@@ -610,17 +790,34 @@ const InventoryPage: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error duplicating item:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to duplicate item: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Check for authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('log in')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error: Please log in again',
+          severity: 'error'
+        });
+        
+        navigate('/login', { 
+          state: { 
+            from: '/inventory',
+            message: 'Your session has expired. Please log in again.' 
+          } 
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to duplicate item: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setDuplicateConfirmOpen(false);
       setItemToDuplicate(undefined);
     }
   };
-  
+
   const handleDuplicateCancel = () => {
     setDuplicateConfirmOpen(false);
     setItemToDuplicate(undefined);
@@ -628,6 +825,15 @@ const InventoryPage: React.FC = () => {
   
   // Tag management
   const handleOpenTagManager = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to manage tags',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setTagManagerOpen(true);
   };
   
@@ -640,6 +846,15 @@ const InventoryPage: React.FC = () => {
   
   // Batch tags functionality
   const handleOpenBatchTags = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to manage tags',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     if (selectedItems.length === 0) {
       setSnackbar({
         open: true,
@@ -673,6 +888,15 @@ const InventoryPage: React.FC = () => {
 
   // Add Item Modal handlers
   const handleOpenAddItemModal = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to add items',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setIsAddItemModalOpen(true);
   };
 
@@ -694,6 +918,15 @@ const InventoryPage: React.FC = () => {
 
   // Export functionality
   const handleExportCSV = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to export data',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     exportToCSV(filteredItems, 'inventory');
     setSnackbar({
       open: true,
@@ -703,6 +936,15 @@ const InventoryPage: React.FC = () => {
   };
   
   const handleExportExcel = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to export data',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     exportToExcel(filteredItems, 'inventory');
     setSnackbar({
       open: true,
@@ -712,6 +954,15 @@ const InventoryPage: React.FC = () => {
   };
   
   const handleExportPDF = () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to export data',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     exportToPDF(filteredItems, 'inventory');
     setSnackbar({
       open: true,
@@ -803,6 +1054,56 @@ const InventoryPage: React.FC = () => {
     return colorMap;
   }, [tags]);
 
+  // Loading states with authentication context
+  if (authLoading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '50vh' 
+      }}>
+        <CircularProgress />
+        <Typography variant="body1" sx={{ mt: 2 }}>
+          Checking authentication...
+        </Typography>
+      </Box>
+    );
+  }
+  
+  // If not authenticated, show login prompt
+  if (!isAuthenticated && !authLoading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '50vh',
+        p: 3 
+      }}>
+        <Alert 
+          severity="warning" 
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              startIcon={<LoginIcon />}
+              onClick={() => navigate('/login', { state: { from: '/inventory' } })}
+            >
+              Log In
+            </Button>
+          }
+          sx={{ mb: 3, width: '100%', maxWidth: 500 }}
+        >
+          You need to be logged in to view your inventory
+        </Alert>
+      </Box>
+    );
+  }
+  
+  // Show loading spinner when fetching inventory data
   if (loading) {
     return (
       <Box sx={{ 
@@ -816,10 +1117,24 @@ const InventoryPage: React.FC = () => {
     );
   }
 
+  // Show error state
   if (error) {
     return (
       <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error}</Alert>
+        <Alert 
+          severity="error" 
+          action={
+            <Button 
+              color="inherit" 
+              size="small" 
+              onClick={handleRefresh}
+            >
+              Retry
+            </Button>
+          }
+        >
+          {error}
+        </Alert>
       </Box>
     );
   }
