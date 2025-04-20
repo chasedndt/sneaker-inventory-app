@@ -45,8 +45,9 @@ import RecordSaleModal from '../components/Sales/RecordSaleModal';
 import BulkSaleModal from '../components/Sales/BulkSaleModal';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
-import { Item, api } from '../services/api';
+import { Item, api, useApi } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface SalesItem extends Sale {
   itemName: string;
@@ -62,6 +63,9 @@ export interface SalesItem extends Sale {
 
 const SalesPage: React.FC = () => {
   const theme = useTheme();
+  const { currentUser, loading: authLoading } = useAuth();
+  const { isAuthenticated } = useApi();
+  
   const [sales, setSales] = useState<SalesItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +112,18 @@ const SalesPage: React.FC = () => {
   // Fetch sales from API
   useEffect(() => {
     const fetchSales = async () => {
+      // Don't fetch if not authenticated
+      if (!isAuthenticated && !authLoading) {
+        setLoading(false);
+        setError('Authentication required to view sales. Please log in.');
+        return;
+      }
+      
+      // Wait for auth check to complete
+      if (authLoading) {
+        return;
+      }
+      
       try {
         setLoading(true);
         // First get all inventory items
@@ -163,7 +179,13 @@ const SalesPage: React.FC = () => {
         setError(null);
       } catch (err: any) {
         console.error('Error fetching sales data:', err);
-        setError(`Failed to load sales data: ${err.message}`);
+        
+        // Check for authentication errors
+        if (err.message.includes('Authentication') || err.message.includes('Unauthorized')) {
+          setError('Authentication required to view sales. Please log in.');
+        } else {
+          setError(`Failed to load sales data: ${err.message}`);
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -171,9 +193,18 @@ const SalesPage: React.FC = () => {
     };
 
     fetchSales();
-  }, []);
+  }, [isAuthenticated, authLoading]);
 
   const handleRefresh = async () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to refresh sales data.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setRefreshing(true);
     try {
       // First get all inventory items
@@ -227,11 +258,21 @@ const SalesPage: React.FC = () => {
       });
     } catch (err: any) {
       console.error('Error refreshing sales data:', err);
-      setSnackbar({
-        open: true,
-        message: `Failed to refresh: ${err.message}`,
-        severity: 'error'
-      });
+      
+      // Check for authentication errors
+      if (err.message.includes('Authentication') || err.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to refresh: ${err.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setRefreshing(false);
     }
@@ -242,6 +283,15 @@ const SalesPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async (saleIds: number[], newStatus: 'pending' | 'needsShipping' | 'completed') => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to update sale status.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       // Update UI first for immediate feedback
       setSales(prevSales => 
@@ -271,11 +321,21 @@ const SalesPage: React.FC = () => {
       setSelectedSales([]);
     } catch (error: any) {
       console.error('Error updating sale status:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to update status: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to update status: ${error.message}`,
+          severity: 'error'
+        });
+      }
     }
   };
 
@@ -327,6 +387,15 @@ const SalesPage: React.FC = () => {
   
   // Record Sale Modal handlers
   const handleOpenRecordSaleModal = async () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to record sales.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       // Fetch all unsold inventory items
       const items = await api.getItems();
@@ -345,11 +414,21 @@ const SalesPage: React.FC = () => {
       setIsRecordSaleModalOpen(true);
     } catch (error: any) {
       console.error('Error fetching inventory items:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to fetch inventory: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to fetch inventory: ${error.message}`,
+          severity: 'error'
+        });
+      }
     }
   };
   
@@ -362,6 +441,15 @@ const SalesPage: React.FC = () => {
   
   // Bulk Sale Modal handlers
   const handleOpenBulkSaleModal = async () => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to update sales.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     try {
       if (selectedSales.length <= 1) {
         // Get unsold inventory items for normal recording
@@ -385,11 +473,21 @@ const SalesPage: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error preparing for sale recording:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to prepare sale form: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to prepare sale form: ${error.message}`,
+          severity: 'error'
+        });
+      }
     }
   };
   
@@ -402,6 +500,15 @@ const SalesPage: React.FC = () => {
 
   // Handle Delete Sale
   const handleDeleteSale = (saleId: number) => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to delete sales.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setSalesToDelete([saleId]);
     setDeleteConfirmOpen(true);
   };
@@ -424,11 +531,21 @@ const SalesPage: React.FC = () => {
       
     } catch (error: any) {
       console.error('Error deleting sales:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to delete sales: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to delete sales: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setDeleteConfirmOpen(false);
       setSalesToDelete([]);
@@ -444,6 +561,15 @@ const SalesPage: React.FC = () => {
 
   // Handle Restore to Inventory
   const handleRestoreToInventory = (saleId: number) => {
+    if (!isAuthenticated) {
+      setSnackbar({
+        open: true,
+        message: 'Authentication required to restore items to inventory.',
+        severity: 'warning'
+      });
+      return;
+    }
+    
     setSaleToRestore(saleId);
     setRestoreConfirmOpen(true);
   };
@@ -474,11 +600,21 @@ const SalesPage: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error restoring item to inventory:', error);
-      setSnackbar({
-        open: true,
-        message: `Failed to restore item: ${error.message}`,
-        severity: 'error'
-      });
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSnackbar({
+          open: true,
+          message: 'Authentication error. Please log in again.',
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to restore item: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setRestoreConfirmOpen(false);
       setSaleToRestore(null);
@@ -527,6 +663,30 @@ const SalesPage: React.FC = () => {
     const startIndex = page * rowsPerPage;
     return filteredSales.slice(startIndex, startIndex + rowsPerPage);
   }, [filteredSales, page, rowsPerPage]);
+
+  // Display loading or error states if necessary
+  if (authLoading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '50vh' 
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  
+  if (!isAuthenticated && !loading) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Authentication required to view sales data. Please log in.
+        </Alert>
+      </Box>
+    );
+  }
 
   if (loading) {
     return (
@@ -703,7 +863,7 @@ const SalesPage: React.FC = () => {
         </Grid>
       </Paper>
       
-      {/* Sales Table - FIX: Add missing required props */}
+      {/* Sales Table */}
       <SalesTable 
         sales={paginatedSales}
         visibleColumns={visibleColumns}
@@ -739,7 +899,6 @@ const SalesPage: React.FC = () => {
         onClose={handleBulkSaleModalClose}
         sales={selectedSales.map(id => sales.find(sale => sale.id === id)).filter(Boolean) as SalesItem[]}
       />
-      
       
       {/* Delete Confirmation Dialog */}
       <ConfirmationDialog

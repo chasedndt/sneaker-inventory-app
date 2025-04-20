@@ -16,7 +16,8 @@ import {
   Chip,
   useTheme,
   Tooltip,
-  IconButton
+  IconButton,
+  Alert
 } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -28,6 +29,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import useFormat from '../../hooks/useFormat'; // Import the formatting hook
+import { useAuth } from '../../contexts/AuthContext';
+import { useApi } from '../../services/api';
 
 import { SalesItem } from '../../pages/SalesPage';
 
@@ -58,6 +61,8 @@ const SalesTable: React.FC<SalesTableProps> = ({
 }) => {
   const theme = useTheme();
   const { money, date } = useFormat(); // Use the formatting hook
+  const { currentUser } = useAuth();
+  const { isAuthenticated } = useApi();
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -141,6 +146,17 @@ const SalesTable: React.FC<SalesTableProps> = ({
       </Avatar>
     );
   };
+  
+  // If not authenticated, show a message
+  if (!isAuthenticated) {
+    return (
+      <Paper sx={{ p: 3, borderRadius: 2, mb: 2 }}>
+        <Alert severity="warning">
+          Authentication required to view sales data. Please log in.
+        </Alert>
+      </Paper>
+    );
+  }
   
   return (
     <Paper 

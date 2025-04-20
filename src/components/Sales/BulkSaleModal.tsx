@@ -29,7 +29,8 @@ import {
   Avatar,
   Divider,
   Checkbox,
-  Tooltip
+  Tooltip,
+  SelectChangeEvent
 } from '@mui/material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -40,6 +41,8 @@ import dayjs, { Dayjs } from 'dayjs';
 
 import { SalesItem } from '../../pages/SalesPage';
 import { salesApi } from '../../services/salesApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { useApi } from '../../services/api';
 
 interface BulkSaleModalProps {
   open: boolean;
@@ -77,6 +80,9 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   onClose,
   sales
 }) => {
+  const { currentUser, loading: authLoading } = useAuth();
+  const { isAuthenticated } = useApi();
+  
   const [sharedFormData, setSharedFormData] = useState<SharedFormData>({
     platform: '',
     saleDate: dayjs(),
@@ -237,6 +243,12 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   };
   
   const handleSubmit = async () => {
+    // Check if user is authenticated
+    if (!isAuthenticated) {
+      setSubmitError('Authentication required. Please log in to update sales.');
+      return;
+    }
+    
     if (!validateForm() || selectedItems.length === 0) {
       return;
     }
@@ -283,11 +295,53 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
       onClose(true);
     } catch (error: any) {
       console.error('Error updating sales:', error);
-      setSubmitError(`Failed to update sales: ${error.message}`);
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSubmitError('Authentication error: Please log in again to continue.');
+      } else {
+        setSubmitError(`Failed to update sales: ${error.message}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+  
+  // Show authentication message if not authenticated
+  if (!isAuthenticated && !authLoading) {
+    return (
+      <Dialog
+        open={open}
+        onClose={() => onClose(false)}
+        maxWidth="md"
+      >
+        <DialogTitle>Authentication Required</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning">
+            You need to be logged in to update sales. Please log in and try again.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => onClose(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+  
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <Dialog
+        open={open}
+        onClose={() => onClose(false)}
+        maxWidth="md"
+      >
+        <DialogContent sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </DialogContent>
+      </Dialog>
+    );
+  }
   
   return (
     <Dialog

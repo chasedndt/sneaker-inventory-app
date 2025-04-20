@@ -30,8 +30,9 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import CloseIcon from '@mui/icons-material/Close';
 import dayjs, { Dayjs } from 'dayjs';
 
-import { Item, api } from '../../services/api';
+import { Item, api, useApi } from '../../services/api';
 import { salesApi } from '../../services/salesApi';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface RecordSaleModalProps {
   open: boolean;
@@ -60,7 +61,7 @@ interface FormErrors {
   platformFees?: string;
 }
 
-// FIX FOR ISSUE 4.1: Predefined platforms with option for custom input
+// Predefined platforms with option for custom input
 const PREDEFINED_PLATFORMS = ['StockX', 'GOAT', 'eBay', 'Grailed', 'Depop', 'Stadium Goods'];
 const CURRENCIES = ['$', '€', '£', '¥'];
 
@@ -70,6 +71,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   items
 }) => {
   const theme = useTheme();
+  const { currentUser, loading: authLoading } = useAuth();
+  const { isAuthenticated } = useApi();
+  
   const [formData, setFormData] = useState<FormData>({
     itemId: 0,
     platform: '',
@@ -87,13 +91,27 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<Item | null>(null);
   
-  // FIX FOR ISSUE 4.1: Custom platform state
+  // Custom platform state
   const [customPlatforms, setCustomPlatforms] = useState<string[]>([]);
   const [platformOptions, setPlatformOptions] = useState<string[]>(PREDEFINED_PLATFORMS);
   
   // Reset form when modal opens/closes
   useEffect(() => {
     if (open) {
+      // Load any saved custom platforms from localStorage with user-specific key
+      const userKey = currentUser ? `customPlatforms_${currentUser.uid}` : 'customPlatforms';
+      const savedCustomPlatforms = localStorage.getItem(userKey);
+      
+      if (savedCustomPlatforms) {
+        try {
+          const parsedPlatforms = JSON.parse(savedCustomPlatforms);
+          setCustomPlatforms(parsedPlatforms);
+          setPlatformOptions([...PREDEFINED_PLATFORMS, ...parsedPlatforms]);
+        } catch (e) {
+          console.error('Error parsing custom platforms:', e);
+        }
+      }
+      
       setFormData({
         itemId: items.length > 0 ? items[0].id : 0,
         platform: '',
@@ -112,16 +130,8 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       if (items.length > 0) {
         setSelectedItem(items[0]);
       }
-      
-      // Load any saved custom platforms from localStorage
-      const savedCustomPlatforms = localStorage.getItem('customPlatforms');
-      if (savedCustomPlatforms) {
-        const parsedPlatforms = JSON.parse(savedCustomPlatforms);
-        setCustomPlatforms(parsedPlatforms);
-        setPlatformOptions([...PREDEFINED_PLATFORMS, ...parsedPlatforms]);
-      }
     }
-  }, [open, items]);
+  }, [open, items, currentUser]);
   
   // Update selected item when itemId changes
   useEffect(() => {
@@ -144,7 +154,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
     }
   };
   
-  // FIX FOR ISSUE 4.1: Handle platform change with custom input support
+  // Handle platform change with custom input support
   const handlePlatformChange = (event: React.SyntheticEvent, newValue: string | null) => {
     if (!newValue) {
       handleChange('platform', '');
@@ -158,8 +168,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       setCustomPlatforms(updatedCustomPlatforms);
       setPlatformOptions([...PREDEFINED_PLATFORMS, ...updatedCustomPlatforms]);
       
-      // Save to localStorage
-      localStorage.setItem('customPlatforms', JSON.stringify(updatedCustomPlatforms));
+      // Save to localStorage with user-specific key
+      const userKey = currentUser ? `customPlatforms_${currentUser.uid}` : 'customPlatforms';
+      localStorage.setItem(userKey, JSON.stringify(updatedCustomPlatforms));
     }
     
     handleChange('platform', newValue);
@@ -197,6 +208,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   };
   
   const handleSubmit = async () => {
+    if (!isAuthenticated) {
+      setSubmitError('Authentication required. Please log in to record a sale.');
+      return;
+    }
+    
     if (!validateForm()) {
       return;
     }
@@ -228,11 +244,53 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       onClose(true);
     } catch (error: any) {
       console.error('Error recording sale:', error);
-      setSubmitError(`Failed to record sale: ${error.message}`);
+      
+      // Handle authentication errors
+      if (error.message.includes('Authentication') || error.message.includes('Unauthorized')) {
+        setSubmitError('Authentication error: Please log in again to continue.');
+      } else {
+        setSubmitError(`Failed to record sale: ${error.message}`);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
+  
+  // Show authentication message if not authenticated
+  if (!isAuthenticated && !authLoading) {
+    return (
+      <Dialog
+        open={open}
+        onClose={() => onClose(false)}
+        maxWidth="md"
+      >
+        <DialogTitle>Authentication Required</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning">
+            You need to be logged in to record sales. Please log in and try again.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => onClose(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+    );
+  }
+  
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <Dialog
+        open={open}
+        onClose={() => onClose(false)}
+        maxWidth="md"
+      >
+        <DialogContent sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
+        </DialogContent>
+      </Dialog>
+    );
+  }
   
   return (
     <Dialog
@@ -325,7 +383,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                 </FormControl>
               </Grid>
               
-              {/* Platform - FIX FOR ISSUE 4.1: Using Autocomplete instead of Select */}
+              {/* Platform - Using Autocomplete instead of Select */}
               <Grid item xs={12} sm={6}>
                 <Autocomplete
                   value={formData.platform}
