@@ -41,6 +41,8 @@ import dayjs, { Dayjs } from 'dayjs';
 import { InventoryItem } from '../../pages/InventoryPage';
 import { api } from '../../services/api';
 import useFormat from '../../hooks/useFormat';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Listing {
   id?: string;
@@ -79,6 +81,8 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
 }) => {
   const theme = useTheme();
   const { money, getCurrentCurrency } = useFormat();
+  const { currentUser, getAuthToken } = useAuth();
+  const navigate = useNavigate();
   
   const [selectedItemIndex, setSelectedItemIndex] = useState<number>(0);
   const [listings, setListings] = useState<Listing[]>([]);
@@ -96,38 +100,110 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [changesDetected, setChangesDetected] = useState<boolean>(false);
+  const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
   const currencySymbol = getCurrentCurrency();
 
-  // Reset state when modal opens or selected item changes
-  useEffect(() => {
-    if (open && items.length > 0) {
-      setSelectedItemIndex(0);
-      
-      // Initialize listings from the current item
-      const currentItem = items[0];
-      if (currentItem.listings && Array.isArray(currentItem.listings)) {
-        setListings(currentItem.listings.map(listing => ({
-          ...listing,
-          date: dayjs(listing.date)
-        })));
-      } else {
-        setListings([]);
+  // Authentication check function
+  const checkAuthentication = async () => {
+    setAuthCheckingInProgress(true);
+    try {
+      if (!currentUser) {
+        setError('Authentication required. Please log in to manage listings.');
+        setTimeout(() => {
+          onClose(false);
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Please log in to manage your listings.' 
+            } 
+          });
+        }, 2000);
+        return false;
       }
       
-      setNewListing({
-        platform: platforms[0] || '',
-        price: 0,
-        url: '',
-        date: dayjs(),
-        status: 'active'
-      });
-      setIsAddingListing(false);
-      setError(null);
-      setSuccess(null);
-      setChangesDetected(false);
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Authentication token is invalid or expired. Please log in again.');
+        setTimeout(() => {
+          onClose(false);
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
       
-      // Load stored platforms
-      loadPlatforms();
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      setError('Authentication error. Please log in again.');
+      return false;
+    } finally {
+      setAuthCheckingInProgress(false);
+    }
+  };
+
+  // Check authentication and item ownership when modal opens
+  useEffect(() => {
+    if (open && items.length > 0) {
+      const verifyAuthAndLoadData = async () => {
+        const isAuthenticated = await checkAuthentication();
+        if (!isAuthenticated) return;
+        
+        // Verify item ownership
+        try {
+          // Select the first item and try to fetch it to verify ownership
+          const currentItem = items[0];
+          const fetchedItem = await api.getItem(currentItem.id);
+          
+          if (!fetchedItem) {
+            setError('Item not found or you do not have permission to manage its listings.');
+            return;
+          }
+          
+          // Initialize the component with the item's listings
+          setSelectedItemIndex(0);
+          
+          if (currentItem.listings && Array.isArray(currentItem.listings)) {
+            setListings(currentItem.listings.map(listing => ({
+              ...listing,
+              date: dayjs(listing.date)
+            })));
+          } else {
+            setListings([]);
+          }
+          
+          setNewListing({
+            platform: platforms[0] || '',
+            price: 0,
+            url: '',
+            date: dayjs(),
+            status: 'active'
+          });
+          setIsAddingListing(false);
+          setError(null);
+          setSuccess(null);
+          setChangesDetected(false);
+          
+          // Load stored platforms
+          loadPlatforms();
+        } catch (error: any) {
+          // Handle unauthorized access or other errors
+          if (error.message && (
+              error.message.includes('Unauthorized access') ||
+              error.message.includes('permission')
+          )) {
+            setError('You do not have permission to manage listings for this item.');
+          } else {
+            setError(`Error: ${error.message}`);
+          }
+        }
+      };
+      
+      verifyAuthAndLoadData();
     }
   }, [open, items]);
 
@@ -181,7 +257,11 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   };
 
   // Add a new listing
-  const handleAddListing = () => {
+  const handleAddListing = async () => {
+    // Verify authentication before adding a listing
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) return;
+    
     setIsAddingListing(true);
     setNewListing({
       platform: platforms[0] || '',
@@ -257,7 +337,11 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   };
 
   // Delete a listing
-  const handleDeleteListing = (index: number) => {
+  const handleDeleteListing = async (index: number) => {
+    // Verify authentication before deleting a listing
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) return;
+    
     const updatedListings = [...listings];
     updatedListings.splice(index, 1);
     setListings(updatedListings);
@@ -287,6 +371,10 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
       return;
     }
     
+    // Verify authentication before saving changes
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) return;
+    
     setLoading(true);
     setError(null);
     try {
@@ -299,21 +387,44 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
         date: typeof listing.date === 'object' ? listing.date.toISOString() : listing.date
       }));
       
-      // Update the item with new listings
-      await api.updateItemField(currentItem.id, 'listings', formattedListings);
-      
-      // If item is not already marked as listed, update its status
-      if (currentItem.status !== 'listed' && listings.length > 0) {
-        await api.updateItemField(currentItem.id, 'status', 'listed');
+      try {
+        // Update the item with new listings
+        await api.updateItemField(currentItem.id, 'listings', formattedListings);
+        
+        // If item is not already marked as listed, update its status
+        if (currentItem.status !== 'listed' && listings.length > 0) {
+          await api.updateItemField(currentItem.id, 'status', 'listed');
+        }
+        
+        setSuccess('Listings updated successfully');
+        setChangesDetected(false);
+        
+        // Close the modal after a brief delay to show the success message
+        setTimeout(() => {
+          onClose(true);
+        }, 1500);
+      } catch (apiError: any) {
+        // Handle authentication errors specifically
+        if (apiError.message && (
+            apiError.message.includes('Authentication required') ||
+            apiError.message.includes('Authentication expired') ||
+            apiError.message.includes('Authentication token is invalid') ||
+            apiError.message.includes('Unauthorized access')
+        )) {
+          setError(`Authentication error: ${apiError.message}`);
+          setTimeout(() => {
+            onClose(false);
+            navigate('/login', { 
+              state: { 
+                from: '/inventory',
+                message: 'Your session has expired. Please log in again.' 
+              } 
+            });
+          }, 2000);
+        } else {
+          setError(`Failed to save listings: ${apiError.message}`);
+        }
       }
-      
-      setSuccess('Listings updated successfully');
-      setChangesDetected(false);
-      
-      // Close the modal after a brief delay to show the success message
-      setTimeout(() => {
-        onClose(true);
-      }, 1500);
     } catch (err: any) {
       setError(`Failed to save listings: ${err.message}`);
     } finally {
@@ -366,6 +477,19 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
           </Alert>
         )}
         
+        {/* Authentication check in progress */}
+        {authCheckingInProgress && (
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            p: 2
+          }}>
+            <CircularProgress size={24} sx={{ mr: 2 }} />
+            <Typography>Verifying authentication...</Typography>
+          </Box>
+        )}
+        
         {/* Item Selector (only shown if multiple items selected) */}
         {items.length > 1 && (
           <Box sx={{ mb: 3 }}>
@@ -390,30 +514,32 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
         )}
         
         {/* Current Item Details */}
-        <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 1 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">Item Name</Typography>
-              <Typography variant="body1">{currentItem?.productName}</Typography>
+        {currentItem && (
+          <Paper variant="outlined" sx={{ p: 2, mb: 3, borderRadius: 1 }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="text.secondary">Item Name</Typography>
+                <Typography variant="body1">{currentItem?.productName}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="text.secondary">Brand</Typography>
+                <Typography variant="body1">{currentItem?.brand}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="text.secondary">Category</Typography>
+                <Typography variant="body1">{currentItem?.category}</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="text.secondary">Current Status</Typography>
+                <Chip
+                  label={currentItem?.status.charAt(0).toUpperCase() + currentItem?.status.slice(1)}
+                  color={currentItem?.status === 'listed' ? 'success' : 'default'}
+                  size="small"
+                />
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">Brand</Typography>
-              <Typography variant="body1">{currentItem?.brand}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">Category</Typography>
-              <Typography variant="body1">{currentItem?.category}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">Current Status</Typography>
-              <Chip
-                label={currentItem?.status.charAt(0).toUpperCase() + currentItem?.status.slice(1)}
-                color={currentItem?.status === 'listed' ? 'success' : 'default'}
-                size="small"
-              />
-            </Grid>
-          </Grid>
-        </Paper>
+          </Paper>
+        )}
         
         <Divider sx={{ my: 2 }} />
         
@@ -501,7 +627,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
             variant="outlined"
             startIcon={<AddIcon />}
             onClick={handleAddListing}
-            disabled={isAddingListing}
+            disabled={isAddingListing || authCheckingInProgress}
             fullWidth
           >
             Add New Listing
@@ -637,7 +763,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
         <Button
           variant="contained"
           onClick={handleSaveChanges}
-          disabled={!changesDetected || loading}
+          disabled={!changesDetected || loading || authCheckingInProgress}
           startIcon={loading ? <CircularProgress size={20} /> : null}
         >
           {loading ? 'Saving...' : 'Save Changes'}

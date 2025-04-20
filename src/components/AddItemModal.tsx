@@ -23,8 +23,10 @@ import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
 import ImagesUploadForm from './AddItem/ImagesUploadForm';
 import RecoveryDialog from './AddItem/RecoveryDialog';
-import { api, ImageFile } from '../services/api';  // Updated import
+import { api, ImageFile } from '../services/api';
 import { loadFormData, saveFormData, clearFormData } from '../utils/formPersistence';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const steps = [
   'Product Details',
@@ -82,6 +84,11 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
   const [savedData, setSavedData] = useState<any>(null);
+  const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
+  
+  // Auth integration
+  const { currentUser, getAuthToken } = useAuth();
+  const navigate = useNavigate();
 
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
     category: 'Sneakers',
@@ -118,6 +125,9 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
 
   useEffect(() => {
     if (open) {
+      // Check authentication when modal opens
+      checkAuthentication();
+      
       const data = loadFormData();
       if (data) {
         console.log('Recovered form data:', data);
@@ -126,6 +136,49 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
       }
     }
   }, [open]);
+
+  // Authentication check function
+  const checkAuthentication = async () => {
+    setAuthCheckingInProgress(true);
+    try {
+      if (!currentUser) {
+        setSubmitError('Authentication required. Please log in to add items.');
+        setTimeout(() => {
+          onClose();
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Please log in to add items to your inventory.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      const token = await getAuthToken();
+      if (!token) {
+        setSubmitError('Authentication token is invalid or expired. Please log in again.');
+        setTimeout(() => {
+          onClose();
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      setSubmitError('Authentication error. Please log in again.');
+      return false;
+    } finally {
+      setAuthCheckingInProgress(false);
+    }
+  };
 
   useEffect(() => {
     if (open) {
@@ -289,6 +342,12 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     try {
       let isValid = true;
       setSubmitError(null);
+      
+      // Verify authentication on submit
+      if (activeStep === 3) {
+        const isAuthenticated = await checkAuthentication();
+        if (!isAuthenticated) return;
+      }
 
       if (activeStep === 0) {
         isValid = validateProductDetails();
@@ -316,13 +375,36 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
             };
             
             setUploadProgress(50);
-            // Submit form data and images in a single request
-            const response = await api.addItem(formData, images);
             
-            console.log('Form submission response:', response);
-            setUploadProgress(100);
-            clearFormData();
-            handleClose();
+            try {
+              // Submit form data and images in a single request
+              const response = await api.addItem(formData, images);
+              console.log('Form submission response:', response);
+              setUploadProgress(100);
+              clearFormData();
+              handleClose();
+            } catch (error: any) {
+              // Handle authentication errors specifically
+              if (error.message && (
+                  error.message.includes('Authentication required') ||
+                  error.message.includes('Authentication expired') ||
+                  error.message.includes('Authentication token is invalid')
+              )) {
+                setSubmitError(`Authentication error: ${error.message}`);
+                setTimeout(() => {
+                  onClose();
+                  navigate('/login', { 
+                    state: { 
+                      from: '/inventory',
+                      message: 'Your session has expired. Please log in again.' 
+                    } 
+                  });
+                }, 2000);
+              } else {
+                setSubmitError(`API Error: ${error.message || 'Failed to process request'}`);
+              }
+              return;
+            }
           }
         } catch (error: any) {
           console.error('API call failed:', error);
@@ -423,6 +505,20 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
           </IconButton>
         </DialogTitle>
 
+        {/* Authentication check in progress */}
+        {authCheckingInProgress && (
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            p: 2,
+            bgcolor: 'background.paper'
+          }}>
+            <CircularProgress size={24} sx={{ mr: 2 }} />
+            <Typography>Verifying authentication...</Typography>
+          </Box>
+        )}
+
         <Box sx={{ width: '100%', px: 3 }}>
           <Stepper activeStep={activeStep} alternativeLabel>
             {steps.map((label) => (
@@ -486,7 +582,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
         <DialogActions sx={{ p: 3 }}>
           <Button
             onClick={handleBack}
-            disabled={activeStep === 0 || isSubmitting}
+            disabled={activeStep === 0 || isSubmitting || authCheckingInProgress}
             variant="outlined"
           >
             Back
@@ -501,7 +597,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
             }}
             variant="contained"
             color="primary"
-            disabled={isSubmitting}
+            disabled={isSubmitting || authCheckingInProgress}
           >
             {isSubmitting ? 'Submitting...' : activeStep === steps.length - 1 ? 'Add Item' : 'Next'}
           </Button>

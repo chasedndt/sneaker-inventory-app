@@ -20,6 +20,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import { api } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface ImageViewerProps {
   open: boolean;
@@ -35,56 +36,120 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   initialImageIndex = 0
 }) => {
   const theme = useTheme();
-  const { currentUser } = useAuth();
+  const { currentUser, getAuthToken } = useAuth();
+  const navigate = useNavigate();
+  
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(initialImageIndex);
   const [authError, setAuthError] = useState<boolean>(false);
+  const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
+
+  // Authentication check function
+  const checkAuthentication = async () => {
+    setAuthCheckingInProgress(true);
+    try {
+      if (!currentUser) {
+        setAuthError(true);
+        setError('Authentication required. Please log in to view images.');
+        setTimeout(() => {
+          onClose();
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Please log in to view item images.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      const token = await getAuthToken();
+      if (!token) {
+        setAuthError(true);
+        setError('Authentication token is invalid or expired. Please log in again.');
+        setTimeout(() => {
+          onClose();
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      setAuthError(true);
+      setError('Authentication error. Please log in again.');
+      return false;
+    } finally {
+      setAuthCheckingInProgress(false);
+    }
+  };
 
   // Fetch images when the dialog opens
   useEffect(() => {
     if (open && itemId !== null) {
-      // Check if user is authenticated
-      if (!currentUser) {
-        setAuthError(true);
-        setLoading(false);
-        setError('Authentication required. Please log in to view images.');
-        return;
-      }
-
       const fetchImages = async () => {
+        // Verify authentication first
+        const isAuthenticated = await checkAuthentication();
+        if (!isAuthenticated) {
+          setLoading(false);
+          return;
+        }
+        
         try {
           setLoading(true);
           setError(null);
           setAuthError(false);
           
           // Fetch all images for the item with authenticated request
-          const imageFilenames = await api.getItemImages(itemId);
-          
-          if (imageFilenames.length === 0) {
-            setError('No images found for this item');
+          try {
+            const imageFilenames = await api.getItemImages(itemId);
+            
+            if (imageFilenames.length === 0) {
+              setError('No images found for this item');
+              setImages([]);
+            } else {
+              setImages(imageFilenames);
+              // Make sure the initial index is valid
+              setCurrentIndex(Math.min(initialImageIndex, imageFilenames.length - 1));
+            }
+          } catch (apiError: any) {
+            // Handle authentication errors specifically
+            if (apiError.message && (
+                apiError.message.includes('Authentication required') ||
+                apiError.message.includes('Authentication expired') ||
+                apiError.message.includes('Authentication token is invalid') ||
+                apiError.message.includes('Unauthorized access')
+            )) {
+              setAuthError(true);
+              setError(`Authentication error: ${apiError.message}`);
+              setTimeout(() => {
+                onClose();
+                navigate('/login', { 
+                  state: { 
+                    from: '/inventory',
+                    message: 'Your session has expired. Please log in again.' 
+                  } 
+                });
+              }, 2000);
+            } else {
+              console.error('Error fetching images:', apiError);
+              setError(`Failed to load images: ${apiError.message}`);
+            }
             setImages([]);
-          } else {
-            setImages(imageFilenames);
-            // Make sure the initial index is valid
-            setCurrentIndex(Math.min(initialImageIndex, imageFilenames.length - 1));
           }
         } catch (err: any) {
-          console.error('Error fetching images:', err);
+          console.error('Error in image viewer:', err);
           
-          // Check if this is an authentication error
-          if (err.message && (
-              err.message.includes('Authentication required') ||
-              err.message.includes('Authentication expired') ||
-              err.message.includes('permission')
-          )) {
-            setAuthError(true);
-            setError('Authentication error: ' + err.message);
-          } else {
-            setError(`Failed to load images: ${err.message}`);
-          }
-          
+          // Set generic error
+          setError(`Error: ${err.message}`);
           setImages([]);
         } finally {
           setLoading(false);
@@ -160,6 +225,20 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
           <CloseIcon />
         </IconButton>
       </DialogTitle>
+
+      {/* Authentication check in progress */}
+      {authCheckingInProgress && (
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          p: 2,
+          bgcolor: 'background.paper'
+        }}>
+          <CircularProgress size={24} sx={{ mr: 2 }} />
+          <Typography>Verifying authentication...</Typography>
+        </Box>
+      )}
 
       <DialogContent sx={{ p: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
         {loading ? (

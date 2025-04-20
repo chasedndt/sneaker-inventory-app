@@ -26,6 +26,8 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import { Tag } from '../../pages/InventoryPage';
 import { tagService } from '../../services/tagService';
 import { api } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface BatchTagsModalProps {
   open: boolean;
@@ -45,10 +47,14 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   tags
 }) => {
   const theme = useTheme();
+  const { currentUser, getAuthToken } = useAuth();
+  const navigate = useNavigate();
+  
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string | null>(null);
+  const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
   
   // Track tag actions: add, remove, or no change (null)
   const [tagActions, setTagActions] = useState<TagActionState>({});
@@ -56,42 +62,121 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   // Current tags for selected items
   const [itemTags, setItemTags] = useState<Record<number, string[]>>({});
   
+  // Authentication check function
+  const checkAuthentication = async () => {
+    setAuthCheckingInProgress(true);
+    try {
+      if (!currentUser) {
+        setError('Authentication required. Please log in to manage tags.');
+        setTimeout(() => {
+          onClose(false);
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Please log in to manage item tags.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Authentication token is invalid or expired. Please log in again.');
+        setTimeout(() => {
+          onClose(false);
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Authentication check failed:', error);
+      setError('Authentication error. Please log in again.');
+      return false;
+    } finally {
+      setAuthCheckingInProgress(false);
+    }
+  };
+  
   // Initialize when modal opens
   useEffect(() => {
     if (open && itemIds.length > 0) {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      setDebugInfo(null);
-      
-      // Initialize with empty tag actions
-      const initialTagActions: TagActionState = {};
-      tags.forEach(tag => {
-        initialTagActions[tag.id] = null;
-      });
-      setTagActions(initialTagActions);
-      
-      // Fetch current tags for all selected items
-      const fetchItemTags = async () => {
+      const initializeModal = async () => {
+        // Verify authentication first
+        const isAuthenticated = await checkAuthentication();
+        if (!isAuthenticated) return;
+        
+        setLoading(true);
+        setError(null);
+        setSuccess(null);
+        setDebugInfo(null);
+        
+        // Initialize with empty tag actions
+        const initialTagActions: TagActionState = {};
+        tags.forEach(tag => {
+          initialTagActions[tag.id] = null;
+        });
+        setTagActions(initialTagActions);
+        
+        // Fetch current tags for all selected items
         try {
           const itemTagsData: Record<number, string[]> = {};
           
           for (const itemId of itemIds) {
-            const item = await api.getItem(itemId);
-            console.log(`Current tags for item ${itemId}:`, item.tags);
-            itemTagsData[itemId] = item.tags || [];
+            try {
+              const item = await api.getItem(itemId);
+              console.log(`Current tags for item ${itemId}:`, item.tags);
+              itemTagsData[itemId] = item.tags || [];
+            } catch (itemError: any) {
+              // Handle unauthorized access to individual items
+              if (itemError.message && (
+                  itemError.message.includes('Unauthorized access') ||
+                  itemError.message.includes('permission')
+              )) {
+                console.error(`User does not have permission to access item ${itemId}`);
+                // Skip this item but continue with others
+              } else {
+                console.error(`Error fetching item ${itemId}:`, itemError);
+                // For other errors, also skip but log them
+              }
+            }
           }
           
           setItemTags(itemTagsData);
           setLoading(false);
         } catch (err: any) {
-          console.error('Failed to fetch item tags:', err);
-          setError(`Failed to fetch item tags: ${err.message}`);
+          // Handle authentication errors specifically
+          if (err.message && (
+              err.message.includes('Authentication required') ||
+              err.message.includes('Authentication expired') ||
+              err.message.includes('Authentication token is invalid')
+          )) {
+            setError(`Authentication error: ${err.message}`);
+            setTimeout(() => {
+              onClose(false);
+              navigate('/login', { 
+                state: { 
+                  from: '/inventory',
+                  message: 'Your session has expired. Please log in again.' 
+                } 
+              });
+            }, 2000);
+          } else {
+            console.error('Failed to fetch item tags:', err);
+            setError(`Failed to fetch item tags: ${err.message}`);
+          }
           setLoading(false);
         }
       };
       
-      fetchItemTags();
+      initializeModal();
     }
   }, [open, itemIds, tags]);
   
@@ -122,6 +207,10 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
       setError('No tag changes to apply');
       return;
     }
+    
+    // Verify authentication before applying changes
+    const isAuthenticated = await checkAuthentication();
+    if (!isAuthenticated) return;
     
     setLoading(true);
     setError(null);
@@ -164,9 +253,29 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
           console.log(`Updated tags for item ${itemId}:`, currentTags);
           
           // Update the item using the updateItemField method
-          const result = await api.updateItemField(itemId, 'tags', currentTags);
-          console.log(`Update result for item ${itemId}:`, result);
+          try {
+            const result = await api.updateItemField(itemId, 'tags', currentTags);
+            console.log(`Update result for item ${itemId}:`, result);
+          } catch (updateError: any) {
+            // Handle authentication errors specifically
+            if (updateError.message && (
+                updateError.message.includes('Authentication required') ||
+                updateError.message.includes('Authentication expired') ||
+                updateError.message.includes('Authentication token is invalid')
+            )) {
+              throw new Error(`Authentication error: ${updateError.message}`);
+            } else {
+              console.error(`Error updating item ${itemId}:`, updateError);
+              throw new Error(`Error updating item ${itemId}: ${updateError.message}`);
+            }
+          }
         } catch (itemError: any) {
+          // Check if this is an authentication error
+          if (itemError.message && itemError.message.includes('Authentication error')) {
+            // Propagate authentication errors to handle them at the top level
+            throw itemError;
+          }
+          
           console.error(`Error updating item ${itemId}:`, itemError);
           throw new Error(`Error updating item ${itemId}: ${itemError.message}`);
         }
@@ -180,9 +289,23 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
         onClose(true);
       }, 1500);
     } catch (err: any) {
-      console.error('Failed to apply tag changes:', err);
-      setError(`Failed to apply tag changes: ${err.message}`);
-      setDebugInfo(`Error occurred during tag application. Check browser console for details.`);
+      // Handle authentication errors specifically
+      if (err.message && err.message.includes('Authentication error')) {
+        setError(err.message);
+        setTimeout(() => {
+          onClose(false);
+          navigate('/login', { 
+            state: { 
+              from: '/inventory',
+              message: 'Your session has expired. Please log in again.' 
+            } 
+          });
+        }, 2000);
+      } else {
+        console.error('Failed to apply tag changes:', err);
+        setError(`Failed to apply tag changes: ${err.message}`);
+        setDebugInfo(`Error occurred during tag application. Check browser console for details.`);
+      }
     } finally {
       setLoading(false);
     }
@@ -260,6 +383,19 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
               {debugInfo}
             </Typography>
           </Alert>
+        )}
+        
+        {/* Authentication check in progress */}
+        {authCheckingInProgress && (
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            p: 2
+          }}>
+            <CircularProgress size={24} sx={{ mr: 2 }} />
+            <Typography>Verifying authentication...</Typography>
+          </Box>
         )}
         
         {loading && !error && !success ? (
@@ -376,7 +512,7 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
         <Button
           variant="contained"
           onClick={handleApplyChanges}
-          disabled={loading || Object.values(tagActions).every(action => action === null)}
+          disabled={loading || Object.values(tagActions).every(action => action === null) || authCheckingInProgress}
           startIcon={loading ? <CircularProgress size={20} /> : null}
         >
           {loading ? 'Applying...' : 'Apply Changes'}
