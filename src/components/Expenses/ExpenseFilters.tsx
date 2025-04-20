@@ -17,7 +17,8 @@ import {
   Switch,
   Typography,
   useTheme,
-  SelectChangeEvent
+  SelectChangeEvent,
+  Alert
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -25,10 +26,11 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import ClearIcon from '@mui/icons-material/Clear';
-import dayjs, { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 
 import { expensesApi } from '../../services/expensesApi';
 import { ExpenseFilters as ExpenseFiltersType } from '../../models/expenses';
+import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 interface ExpenseFiltersProps {
   onFilterChange: (filters: ExpenseFiltersType) => void;
@@ -42,12 +44,16 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
   activeFiltersCount
 }) => {
   const theme = useTheme();
+  const { currentUser } = useAuth(); // Get current user
   
   // State for expense types dropdown options
   const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
   
   // State for showing/hiding the advanced filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
+  
+  // State for auth errors
+  const [authError, setAuthError] = useState<string | null>(null);
   
   // Filters state
   const [filters, setFilters] = useState<ExpenseFiltersType>({
@@ -82,19 +88,48 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
     }
   }, [initialFilters]);
   
-  // Fetch expense types on component mount
+  // Fetch expense types on component mount - with auth handling
   useEffect(() => {
     const fetchExpenseTypes = async () => {
+      if (!currentUser) {
+        setAuthError('Authentication required to access expense types.');
+        return;
+      }
+      
       try {
         const types = await expensesApi.getExpenseTypes();
         setExpenseTypes(['', ...types]); // Add empty option for "All"
-      } catch (error) {
+        setAuthError(null);
+      } catch (error: any) {
         console.error('Error fetching expense types:', error);
+        
+        // Handle auth errors
+        if (error.message.includes('Authentication') || error.message.includes('token')) {
+          setAuthError(`Authentication error: ${error.message}. Please try logging in again.`);
+        }
+        
+        // Set default types as fallback
+        setExpenseTypes([
+          '',
+          'Shipping',
+          'Packaging', 
+          'Platform Fees',
+          'Storage',
+          'Supplies',
+          'Software',
+          'Marketing',
+          'Travel',
+          'Utilities',
+          'Rent',
+          'Insurance',
+          'Taxes',
+          'Other'
+        ]);
       }
     };
     
     fetchExpenseTypes();
-  }, []);
+  }, [currentUser]);
   
   // Handle filter changes
   const handleFilterChange = (field: keyof ExpenseFiltersType, value: any) => {
@@ -148,6 +183,17 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
       [field]: defaultValue
     });
   };
+  
+  // Show auth error if not authenticated
+  if (authError) {
+    return (
+      <Paper sx={{ mb: 3, p: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {authError}
+        </Alert>
+      </Paper>
+    );
+  }
   
   return (
     <Paper sx={{ 

@@ -28,7 +28,9 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import SortIcon from '@mui/icons-material/Sort';
+import LockIcon from '@mui/icons-material/Lock'; // For auth indication
 import useFormat from '../../hooks/useFormat'; // Import the formatting hook
+import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 import { Expense } from '../../models/expenses';
 
@@ -68,6 +70,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
 }) => {
   const theme = useTheme();
   const { money, date } = useFormat(); // Use the formatting hook
+  const { currentUser } = useAuth(); // Get auth state
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [orderBy, setOrderBy] = React.useState<keyof Expense>('expenseDate');
@@ -227,6 +230,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
     page * rowsPerPage + rowsPerPage
   );
   
+  //// src/components/Expenses/ExpensesTable.tsx (continued)
   // Handle page change
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -240,6 +244,10 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
   
   // Handle action menu
   const handleActionMenuOpen = (event: React.MouseEvent<HTMLElement>, expense: Expense) => {
+    // Check authentication before showing menu
+    if (!currentUser) {
+      return; // Don't open menu if not authenticated
+    }
     setActionMenuAnchorEl(event.currentTarget);
     setActionMenuExpense(expense);
   };
@@ -271,6 +279,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
     }
   };
   
+  // Show loading state
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
@@ -279,11 +288,26 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
     );
   }
   
+  // Show error state
   if (error) {
     return (
       <Alert severity="error" sx={{ mb: 2 }}>
         {error}
       </Alert>
+    );
+  }
+  
+  // If not authenticated, show auth required message
+  if (!currentUser) {
+    return (
+      <Paper sx={{ p: 3, borderRadius: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Authentication required to view expenses
+        </Alert>
+        <Typography variant="body1">
+          Please log in to view and manage your expenses.
+        </Typography>
+      </Paper>
     );
   }
   

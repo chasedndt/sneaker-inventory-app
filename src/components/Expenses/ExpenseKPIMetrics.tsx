@@ -7,7 +7,8 @@ import {
   Typography,
   Divider,
   Tooltip,
-  useTheme
+  useTheme,
+  Alert
 } from '@mui/material';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip } from 'recharts';
 import PaymentsIcon from '@mui/icons-material/Payments';
@@ -16,6 +17,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import InfoIcon from '@mui/icons-material/Info';
 import useFormat from '../../hooks/useFormat'; // Import formatting hook
+import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 import { ExpenseSummary } from '../../models/expenses';
 
@@ -55,6 +57,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
 }) => {
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
+  const { currentUser } = useAuth(); // Get current user
   
   // Format data for the pie chart
   const getPieChartData = (): ExpenseTypeData[] => {
@@ -100,6 +103,20 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
     }
     return null;
   };
+  
+  // If not authenticated, show auth required message
+  if (!currentUser) {
+    return (
+      <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Authentication required to view expense metrics
+        </Alert>
+        <Typography variant="body1">
+          Please log in to view your expense metrics and analytics.
+        </Typography>
+      </Paper>
+    );
+  }
   
   return (
     <Paper sx={{ 
@@ -202,7 +219,7 @@ const ExpenseKPIMetrics: React.FC<ExpenseKPIMetricsProps> = ({
               }
             </Box>
             <Box>
-              <Typography variant="subtitle2" color="text.secondary">
+            <Typography variant="subtitle2" color="text.secondary">
                 Month-over-Month Change
                 <Tooltip title="Change in expenses compared to previous month">
                   <InfoIcon fontSize="small" sx={{ ml: 0.5, mb: 0.5, fontSize: '0.875rem', color: 'text.secondary' }} />

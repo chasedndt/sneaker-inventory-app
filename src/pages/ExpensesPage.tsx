@@ -33,9 +33,13 @@ import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 import { expensesApi } from '../services/expensesApi';
 import { Expense, ExpenseFilters as ExpenseFiltersType } from '../models/expenses';
+import { useAuth } from '../contexts/AuthContext'; // Import auth context
+import { useApi } from '../services/api'; // Import useApi for authenticated API calls
 
 const ExpensesPage: React.FC = () => {
   const theme = useTheme();
+  const { currentUser, loading: authLoading } = useAuth(); // Get auth state
+  const api = useApi(); // Get authenticated API methods
   
   // State for expenses
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -100,8 +104,15 @@ const ExpensesPage: React.FC = () => {
     return count;
   }, [filters]);
   
-  // Fetch expenses from API
+  // Fetch expenses from API - now with auth handling
   const fetchExpenses = useCallback(async (showRefreshing = false) => {
+    // Don't fetch if not authenticated
+    if (!currentUser) {
+      setLoading(false);
+      setError("Authentication required to view expenses");
+      return;
+    }
+    
     try {
       if (showRefreshing) {
         setRefreshing(true);
@@ -113,6 +124,7 @@ const ExpensesPage: React.FC = () => {
       const startDate = filters.startDate ? new Date(filters.startDate) : undefined;
       const endDate = filters.endDate ? new Date(filters.endDate) : undefined;
       
+      // Use authenticated API call
       const expensesData = await expensesApi.getExpenses(startDate, endDate);
       const summaryData = await expensesApi.getExpenseSummary(startDate, endDate);
       
@@ -132,7 +144,13 @@ const ExpensesPage: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Error fetching expenses:', err);
-      setError(`Failed to load expenses: ${err.message}`);
+      
+      // Handle authentication errors specifically
+      if (err.message.includes('Authentication') || err.message.includes('token')) {
+        setError(`Authentication error: ${err.message}. Please try logging in again.`);
+      } else {
+        setError(`Failed to load expenses: ${err.message}`);
+      }
       
       if (showRefreshing) {
         setSnackbar({
@@ -141,12 +159,11 @@ const ExpensesPage: React.FC = () => {
           severity: 'error'
         });
       }
-      // Don't reset the state with mock data here
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filters]);
+  }, [filters, currentUser]);
   
   // Apply filters to expenses
   const applyFilters = useCallback((expensesToFilter: Expense[]) => {
@@ -198,10 +215,12 @@ const ExpensesPage: React.FC = () => {
     setFilteredExpenses(result);
   }, [filters]);
   
-  // Initial fetch
+  // Initial fetch - now checks for authentication first
   useEffect(() => {
-    fetchExpenses();
-  }, [fetchExpenses]);
+    if (!authLoading) { // Only fetch after auth state is determined
+      fetchExpenses();
+    }
+  }, [fetchExpenses, authLoading]);
   
   // Apply filters when expenses or filters change
   useEffect(() => {
@@ -237,53 +256,117 @@ const ExpensesPage: React.FC = () => {
     }
   };
   
-  // Handle adding a new expense
+  // Handle adding a new expense - with auth check
   const handleAddExpense = () => {
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'You must be logged in to add expenses',
+        severity: 'error'
+      });
+      return;
+    }
+    
     setCurrentExpense(null);
     setIsAddExpenseModalOpen(true);
   };
   
-  // Handle saving a new expense
-  const handleSaveExpense = (expense: Expense) => {
-    setExpenses(prev => [expense, ...prev]);
-    setIsAddExpenseModalOpen(false);
-    
-    setSnackbar({
-      open: true,
-      message: 'Expense added successfully',
-      severity: 'success'
-    });
+  // Handle saving a new expense - with auth
+  const handleSaveExpense = async (expense: Expense) => {
+    try {
+      const savedExpense = await expensesApi.createExpense(expense);
+      setExpenses(prev => [savedExpense, ...prev]);
+      setIsAddExpenseModalOpen(false);
+      
+      setSnackbar({
+        open: true,
+        message: 'Expense added successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      // Handle auth errors
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setSnackbar({
+          open: true,
+          message: `Authentication error: ${error.message}. Please try logging in again.`,
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to save expense: ${error.message}`,
+          severity: 'error'
+        });
+      }
+    }
   };
 
-  // Handle editing an expense
+  // Handle editing an expense - with auth check
   const handleEditExpense = (expense: Expense) => {
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'You must be logged in to edit expenses',
+        severity: 'error'
+      });
+      return;
+    }
+    
     setCurrentExpense(expense);
     setIsEditExpenseModalOpen(true);
   };
   
-  // Handle updating an expense
-  const handleUpdateExpense = (updatedExpense: Expense) => {
-    setExpenses(prev => 
-      prev.map(expense => 
-        expense.id === updatedExpense.id ? updatedExpense : expense
-      )
-    );
-    setIsEditExpenseModalOpen(false);
-    
-    setSnackbar({
-      open: true,
-      message: 'Expense updated successfully',
-      severity: 'success'
-    });
+  // Handle updating an expense - with auth
+  const handleUpdateExpense = async (updatedExpense: Expense) => {
+    try {
+      const result = await expensesApi.updateExpense(updatedExpense.id, updatedExpense);
+      
+      setExpenses(prev => 
+        prev.map(expense => 
+          expense.id === updatedExpense.id ? result : expense
+        )
+      );
+      setIsEditExpenseModalOpen(false);
+      
+      setSnackbar({
+        open: true,
+        message: 'Expense updated successfully',
+        severity: 'success'
+      });
+    } catch (error: any) {
+      // Handle auth errors
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setSnackbar({
+          open: true,
+          message: `Authentication error: ${error.message}. Please try logging in again.`,
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to update expense: ${error.message}`,
+          severity: 'error'
+        });
+      }
+    }
   };
   
-  // Handle deleting an expense
+  // Handle deleting an expense - with auth check
   const handleDeleteExpense = (expense: Expense) => {
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'You must be logged in to delete expenses',
+        severity: 'error'
+      });
+      return;
+    }
+    
     setExpenseToDelete(expense);
     setIsDeleteConfirmOpen(true);
   };
   
-  // Handle confirming deletion
+  // Handle confirming deletion - with auth
   const handleConfirmDelete = async () => {
     if (!expenseToDelete) return;
     
@@ -300,26 +383,42 @@ const ExpensesPage: React.FC = () => {
         severity: 'success'
       });
     } catch (error: any) {
-      console.error('Error deleting expense:', error);
-      
-      setSnackbar({
-        open: true,
-        message: `Failed to delete expense: ${error.message}`,
-        severity: 'error'
-      });
+      // Handle auth errors
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setSnackbar({
+          open: true,
+          message: `Authentication error: ${error.message}. Please try logging in again.`,
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to delete expense: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setIsDeleteConfirmOpen(false);
       setExpenseToDelete(null);
     }
   };
   
-  // Handle bulk delete
+  // Handle bulk delete - with auth check
   const handleBulkDelete = () => {
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'You must be logged in to delete expenses',
+        severity: 'error'
+      });
+      return;
+    }
+    
     if (selectedExpenses.length === 0) return;
     setIsBulkDeleteConfirmOpen(true);
   };
   
-  // Handle confirming bulk deletion
+  // Handle confirming bulk deletion - with auth
   const handleConfirmBulkDelete = async () => {
     try {
       // Delete each selected expense
@@ -341,31 +440,74 @@ const ExpensesPage: React.FC = () => {
       // Clear selection
       setSelectedExpenses([]);
     } catch (error: any) {
-      console.error('Error deleting expenses:', error);
-      
-      setSnackbar({
-        open: true,
-        message: `Failed to delete expenses: ${error.message}`,
-        severity: 'error'
-      });
+      // Handle auth errors
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setSnackbar({
+          open: true,
+          message: `Authentication error: ${error.message}. Please try logging in again.`,
+          severity: 'error'
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: `Failed to delete expenses: ${error.message}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setIsBulkDeleteConfirmOpen(false);
     }
   };
   
-  // Handle viewing a receipt
-  const handleViewReceipt = (expense: Expense) => {
-    if (!expense.receiptFilename) return;
-    
-    // Construct URL for receipt
-    const receiptUrl = `http://127.0.0.1:5000/api/uploads/${expense.receiptFilename}`;
-    
-    setCurrentReceiptUrl(receiptUrl);
-    setIsViewReceiptModalOpen(true);
+  // Handle viewing a receipt - with auth check
+  // In ExpensesPage.tsx, change the handleViewReceipt function:
+
+const handleViewReceipt = (expense: Expense) => {
+  if (!currentUser) {
+    setSnackbar({
+      open: true,
+      message: 'You must be logged in to view receipts',
+      severity: 'error'
+    });
+    return;
+  }
+  
+  if (!expense.receiptFilename) return;
+  
+  // Use API_BASE_URL from the API for consistency
+  const API_BASE_URL = 'http://127.0.0.1:5000/api';
+  
+  // Instead of using api.getAuthToken, directly use auth context
+  const getToken = async () => {
+    try {
+      // Simply construct URL without token - the browser will include auth cookies
+      const receiptUrl = `${API_BASE_URL}/uploads/${expense.receiptFilename}`;
+      setCurrentReceiptUrl(receiptUrl);
+      setIsViewReceiptModalOpen(true);
+    } catch (error) {
+      console.error("Error getting receipt:", error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to load receipt',
+        severity: 'error'
+      });
+    }
   };
   
-  // Handle exporting expenses as CSV
+  getToken();
+};
+  
+  // Handle exporting expenses as CSV - with auth check
   const handleExportCSV = () => {
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'You must be logged in to export expenses',
+        severity: 'error'
+      });
+      return;
+    }
+    
     // Get expenses to export (filtered or all)
     const expensesToExport = filteredExpenses.length > 0 ? filteredExpenses : expenses;
     
@@ -409,6 +551,32 @@ const ExpensesPage: React.FC = () => {
   const handleCloseSnackbar = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
+  
+  // Show auth loading state
+  if (authLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+        <Typography variant="h6" sx={{ ml: 2 }}>
+          Authenticating...
+        </Typography>
+      </Box>
+    );
+  }
+  
+  // Show auth required message if not logged in
+  if (!currentUser) {
+    return (
+      <Box sx={{ py: 3, px: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          You must be logged in to view and manage expenses.
+        </Alert>
+        <Typography variant="body1">
+          Please log in to access the expenses page. If you were previously logged in, your session may have expired.
+        </Typography>
+      </Box>
+    );
+  }
   
   return (
     <Box sx={{ py: 3, px: 2, bgcolor: theme.palette.background.default }}>

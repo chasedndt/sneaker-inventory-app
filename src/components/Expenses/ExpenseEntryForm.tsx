@@ -27,6 +27,7 @@ import dayjs from 'dayjs';
 
 import { ExpenseFormData, Expense } from '../../models/expenses';
 import { expensesApi } from '../../services/expensesApi';
+import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 interface ExpenseEntryFormProps {
   initialExpense?: Expense;
@@ -41,6 +42,7 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   onCancel,
   isEditing = false,
 }) => {
+  const { currentUser } = useAuth(); // Get current user
   const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
   const [formData, setFormData] = useState<ExpenseFormData>({
     expenseType: '',
@@ -56,15 +58,34 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   const [receiptName, setReceiptName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  // Fetch expense types on component mount
+  // Check auth status
+  useEffect(() => {
+    if (!currentUser) {
+      setAuthError('You must be logged in to manage expenses.');
+    } else {
+      setAuthError(null);
+    }
+  }, [currentUser]);
+
+  // Fetch expense types on component mount - with auth handling
   useEffect(() => {
     const fetchExpenseTypes = async () => {
+      if (!currentUser) return; // Don't fetch if not authenticated
+      
       try {
         const types = await expensesApi.getExpenseTypes();
         setExpenseTypes(types);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Failed to fetch expense types:', error);
+        
+        // Check if it's an auth error
+        if (error.message.includes('Authentication') || error.message.includes('token')) {
+          setAuthError('Authentication error. Please try logging in again.');
+        }
+        
+        // Fall back to defaults
         setExpenseTypes([
           'Shipping',
           'Packaging',
@@ -84,8 +105,9 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
     };
 
     fetchExpenseTypes();
-  }, []);
+  }, [currentUser]);
 
+  // src/components/Expenses/ExpenseEntryForm.tsx (continued)
   // Initialize form with existing expense data if editing
   useEffect(() => {
     if (initialExpense) {
@@ -144,6 +166,12 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   };
 
   const validateForm = (): boolean => {
+    // Check authentication first
+    if (!currentUser) {
+      setError('Authentication required. Please log in.');
+      return false;
+    }
+    
     if (!formData.expenseType) {
       setError('Expense type is required');
       return false;
@@ -200,11 +228,31 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
       onSave(savedExpense);
     } catch (error: any) {
       console.error('Error saving expense:', error);
-      setError(`Failed to save expense: ${error.message}`);
+      
+      // Handle auth errors specifically
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setError(`Authentication error: ${error.message}. Please try logging in again.`);
+      } else {
+        setError(`Failed to save expense: ${error.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  // Show authentication error if not logged in
+  if (authError) {
+    return (
+      <Paper sx={{ p: 3, m: 0 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {authError}
+        </Alert>
+        <Button onClick={onCancel} variant="outlined">
+          Go Back
+        </Button>
+      </Paper>
+    );
+  }
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs}>

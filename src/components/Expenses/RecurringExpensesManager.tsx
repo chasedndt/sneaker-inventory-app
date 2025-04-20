@@ -34,9 +34,8 @@ import dayjs from 'dayjs';
 
 import { Expense } from '../../models/expenses';
 import { getNextRecurrenceDates } from '../../utils/recurringExpensesUtils';
-
-// Define the API_BASE_URL here to fix the previous error
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
+import { expensesApi } from '../../services/expensesApi';
+import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 interface RecurringExpensesManagerProps {
   expenses: Expense[];
@@ -48,6 +47,7 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
   onRefresh
 }) => {
   const theme = useTheme();
+  const { currentUser } = useAuth(); // Get current user
   const [recurringExpenses, setRecurringExpenses] = useState<Expense[]>([]);
   const [nextDates, setNextDates] = useState<Record<number, Date>>({});
   const [loading, setLoading] = useState<boolean>(false);
@@ -57,6 +57,7 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
   const [detailsOpen, setDetailsOpen] = useState<boolean>(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [expanded, setExpanded] = useState<boolean>(false); // Add this state for collapsible behavior
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Filter recurring expenses
   useEffect(() => {
@@ -74,34 +75,35 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
     setExpanded(!expanded);
   };
 
-  // Generate missing recurring expenses
+  // Generate missing recurring expenses with auth check
   const handleGenerateRecurringExpenses = async () => {
+    // Check authentication first
+    if (!currentUser) {
+      setError('Authentication required. Please log in.');
+      return;
+    }
+    
     try {
       setGeneratingRecurring(true);
       setError(null);
       setSuccess(null);
       
       // Call the API endpoint to generate missing recurring expenses
-      const response = await fetch(`${API_BASE_URL}/expenses/generate-recurring`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
+      const result = await expensesApi.generateRecurringExpenses();
       
-      if (!response.ok) {
-        throw new Error(`Failed to generate recurring expenses: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setSuccess(`Successfully generated ${data.entries?.length || 0} recurring expense entries`);
+      setSuccess(`Successfully generated ${result.count} recurring expense entries`);
       
       // Refresh the expenses list
       onRefresh();
     } catch (error: any) {
       console.error('Error generating recurring expenses:', error);
-      setError(`Failed to generate recurring expenses: ${error.message}`);
+      
+      // Handle auth errors specifically
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
+        setError(`Authentication error: ${error.message}. Please try logging in again.`);
+      } else {
+        setError(`Failed to generate recurring expenses: ${error.message}`);
+      }
     } finally {
       setGeneratingRecurring(false);
     }
@@ -109,6 +111,12 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
   
   // Show detailed info for a recurring expense
   const handleShowDetails = (expense: Expense) => {
+    // Check auth before showing details
+    if (!currentUser) {
+      setError('Authentication required to view expense details.');
+      return;
+    }
+    
     setSelectedExpense(expense);
     setDetailsOpen(true);
   };
@@ -147,7 +155,7 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
             color="primary"
             startIcon={generatingRecurring ? <CircularProgress size={20} color="inherit" /> : <LoopIcon />}
             onClick={handleGenerateRecurringExpenses}
-            disabled={generatingRecurring || recurringExpenses.length === 0}
+            disabled={generatingRecurring || recurringExpenses.length === 0 || !currentUser}
             size="small"
           >
             {generatingRecurring ? 'Generating...' : 'Generate Missing Entries'}
@@ -166,6 +174,12 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
         {success && (
           <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
             {success}
+          </Alert>
+        )}
+        
+        {!currentUser && (
+          <Alert severity="warning" sx={{ mt: 2, mb: 2 }}>
+            You must be logged in to manage recurring expenses.
           </Alert>
         )}
         
@@ -218,7 +232,10 @@ const RecurringExpensesManager: React.FC<RecurringExpensesManagerProps> = ({
                     }
                   />
                   <Tooltip title="View Details">
-                    <IconButton onClick={() => handleShowDetails(expense)}>
+                    <IconButton 
+                      onClick={() => handleShowDetails(expense)}
+                      disabled={!currentUser}
+                    >
                       <InfoIcon />
                     </IconButton>
                   </Tooltip>
