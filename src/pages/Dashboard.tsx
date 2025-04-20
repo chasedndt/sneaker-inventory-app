@@ -25,8 +25,8 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import InfoIcon from '@mui/icons-material/Info';
-import { api, Item } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { useApi, Item } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
@@ -96,6 +96,10 @@ const timeRanges: TimeRange[] = [
 
 const Dashboard: React.FC = () => {
   const theme = useTheme();
+  const { currentUser, loading: authLoading } = useAuth();
+  const { getAuthToken } = useAuth();
+  const api = useApi();
+  
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]); 
@@ -136,70 +140,104 @@ const Dashboard: React.FC = () => {
     }
   }, [items, sales, expenses, startDate, endDate]);
 
-  // Fetch items, sales, and expenses from API
+  // Fetch items, sales, and expenses from API with authentication
   const fetchData = useCallback(async (showRefreshing = false) => {
     try {
+      // Check if user is authenticated
+      if (!currentUser) {
+        console.log('User not authenticated, cannot fetch dashboard data');
+        setError('Please log in to view your dashboard');
+        setLoading(false);
+        return;
+      }
+
       if (showRefreshing) {
         setRefreshing(true);
       } else {
         setLoading(true);
       }
       
-      console.log('🔄 Fetching inventory items, sales, and expenses data...');
+      console.log('🔄 Fetching inventory items, sales, and expenses data for authenticated user...');
       
-      // Fetch items data
-      const itemsData = await api.getItems();
+      // Fetch items data with authentication
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view dashboard data.');
+      }
       
-      // Filter out sold items for active inventory
-      const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
-      console.log(`✅ Received ${activeItems.length} active items from API`);
-      
-      // Fetch sales data
-      const salesData = await salesApi.getSales();
-      console.log(`✅ Received ${salesData.length} sales records from API`);
-      
-      // Debug sales data
-      console.log('📊 Sales data:', salesData);
-      
-      // Fetch expenses data
-      const expensesData = await expensesApi.getExpenses();
-      console.log(`✅ Received ${expensesData.length} expense records from API`);
-      
-      // Debug expenses data
-      console.log('💰 Expenses data:', expensesData);
-      
-      // Update state with all datasets
-      setItems(activeItems);
-      setSales(salesData);
-      setExpenses(expensesData);
-      setError(null);
-      
-      // Show success message if refreshing
-      if (showRefreshing) {
+      try {
+        // Fetch items data
+        const itemsData = await api.getItems();
+        
+        // Filter out sold items for active inventory
+        const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
+        console.log(`✅ Received ${activeItems.length} active items from API for user ${currentUser.uid}`);
+        
+        // Fetch sales data
+        const salesData = await salesApi.getSales();
+        console.log(`✅ Received ${salesData.length} sales records from API for user ${currentUser.uid}`);
+        
+        // Debug sales data
+        console.log('📊 Sales data:', salesData);
+        
+        // Fetch expenses data
+        const expensesData = await expensesApi.getExpenses();
+        console.log(`✅ Received ${expensesData.length} expense records from API for user ${currentUser.uid}`);
+        
+        // Debug expenses data
+        console.log('💰 Expenses data:', expensesData);
+        
+        // Update state with all datasets
+        setItems(activeItems);
+        setSales(salesData);
+        setExpenses(expensesData);
+        setError(null);
+        
+        // Show success message if refreshing
+        if (showRefreshing) {
+          setSnackbar({
+            open: true,
+            message: 'Dashboard data refreshed successfully',
+            severity: 'success'
+          });
+        }
+      } catch (error: any) {
+        console.error('💥 Error fetching data:', error);
+        
+        // Check for auth-specific errors
+        if (error.message.includes('Authentication') || error.message.includes('log in')) {
+          setError('Authentication required. Please log in to view your dashboard data.');
+        } else {
+          setError(`Failed to load dashboard data: ${error.message}`);
+        }
+        
         setSnackbar({
           open: true,
-          message: 'Dashboard data refreshed successfully',
-          severity: 'success'
+          message: `Error loading data: ${error.message}`,
+          severity: 'error'
         });
       }
-    } catch (err: any) {
-      console.error('💥 Error fetching data:', err);
-      setError(`Failed to load dashboard data: ${err.message}`);
+    } catch (error: any) {
+      console.error('💥 Error in fetchData:', error);
+      setError(`Failed to load dashboard data: ${error.message}`);
       setSnackbar({
         open: true,
-        message: `Error loading data: ${err.message}`,
+        message: `Error loading data: ${error.message}`,
         severity: 'error'
       });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [currentUser, getAuthToken, api]);
 
-  // Initial data load
+  // Initial data load after authentication check
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!authLoading) {
+      // Only fetch data if auth loading is complete
+      fetchData();
+    }
+  }, [fetchData, authLoading]);
 
   // Update date range when time filter changes
   useEffect(() => {
@@ -347,7 +385,44 @@ const Dashboard: React.FC = () => {
     };
   };
 
-  // Loading state
+  // Show auth loading state
+  if (authLoading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        gap: 2
+      }}>
+        <CircularProgress />
+        <Typography color={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : 'text.secondary'}>
+          Verifying authentication...
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Show not authenticated state
+  if (!currentUser) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        gap: 2
+      }}>
+        <Alert severity="warning" sx={{ maxWidth: 400 }}>
+          You need to be logged in to view your dashboard.
+        </Alert>
+      </Box>
+    );
+  }
+
+  // Data loading state
   if (loading) {
     return (
       <Box sx={{ 
@@ -433,6 +508,17 @@ const Dashboard: React.FC = () => {
           </Button>
         </Box>
       </Box>
+
+      {/* Error display if any */}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          onClose={() => setError(null)}
+        >
+          {error}
+        </Alert>
+      )}
 
       {/* Main Content Layout */}
       <Box sx={{ 
@@ -541,6 +627,7 @@ const Dashboard: React.FC = () => {
               expenses={expenses}
               startDate={startDate}
               endDate={endDate}
+              currentUser={currentUser}
             />
           </Box>
         </Box>
@@ -561,6 +648,7 @@ const Dashboard: React.FC = () => {
           }}>
             <EnhancedInventoryDisplay 
               items={items.filter(item => item.status !== 'sold')}
+              currentUser={currentUser}
             />
           </Box>
         </Box>

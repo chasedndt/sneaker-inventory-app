@@ -33,3 +33,22 @@ backend/uploads/*
 
 # Firebase credentials
 backend/firebase-credentials.json
+
+
+# Admin Tools Generated Files
+users_export.json
+backend/admin/exports/
+backend/admin/logs/
+backend/admin/*.log
+
+# Firebase Admin SDK Credentials
+backend/firebase-credentials.json
+backend/firebase-admin-key.json
+
+# Admin Tool Temporary Files
+backend/admin/tmp/
+backend/admin/.cache/
+
+# User data exports
+*.users.json
+*.users.csv

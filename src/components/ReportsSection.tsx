@@ -1,372 +1,835 @@
 // src/components/ReportsSection.tsx
-import React, { useMemo, useEffect } from 'react';
-import { Grid, Box, useTheme } from '@mui/material';
-import MetricsCard from './MetricsCard';
+import React, { useState, useEffect } from 'react';
+import {
+  Grid,
+  Paper,
+  Typography,
+  Box,
+  Button,
+  Tab,
+  Tabs,
+  useTheme,
+  CircularProgress,
+  Alert
+} from '@mui/material';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  TooltipProps,
+  XAxis,
+  YAxis
+} from 'recharts';
+import { Dayjs } from 'dayjs';
+import dayjs from 'dayjs';
 import { Item } from '../services/api';
 import { Sale } from '../services/salesApi';
 import { Expense } from '../models/expenses';
-import { calculateTotalExpenses } from '../utils/expensesUtils';
-import { Dayjs } from 'dayjs';
-import useFormat from '../hooks/useFormat'; // Import formatting hook
+import useFormat from '../hooks/useFormat';
+import { dashboardService, ComprehensiveMetrics } from '../services/dashboardService';
+import { User } from 'firebase/auth';
 
-// Props to include sales and expenses data and date filters
+// Define the props for the ReportsSection component
 interface ReportsSectionProps {
   items: Item[];
   sales: Sale[];
   expenses: Expense[];
   startDate: Dayjs | null;
   endDate: Dayjs | null;
+  currentUser: User | null;
 }
 
-// Generate data for the mini charts
-const generateMiniChartData = (baseValue: number, volatility: number, points: number = 5) => {
-  return Array.from({ length: points }, (_, i) => ({
-    date: `${i + 1}`,
-    value: Math.max(0, baseValue + (Math.random() * volatility - volatility / 2))
-  }));
-};
-
-const ReportsSection: React.FC<ReportsSectionProps> = ({ 
-  items, 
-  sales, 
-  expenses,
-  startDate, 
-  endDate 
-}) => {
-  const theme = useTheme();
-  const { money } = useFormat(); // Use the formatting hook
-  
-  // Add direct debugging to see what data is coming in
-  useEffect(() => {
-    console.log('🔍 ReportsSection Props:', {
-      itemsCount: items.length,
-      salesCount: sales.length,
-      expensesCount: expenses.length,
-      startDate: startDate?.format('YYYY-MM-DD'),
-      endDate: endDate?.format('YYYY-MM-DD')
-    });
-    
-    // Debug completed sales
-    const completedSales = sales.filter(sale => sale.status === 'completed');
-    console.log('✅ Completed Sales:', completedSales);
-    
-    // Debug expenses
-    console.log('💰 Expenses:', expenses);
-  }, [items, sales, expenses, startDate, endDate]);
-  
-  // Filter data based on date range
-  const filteredData = useMemo(() => {
-    // Filter items based on date range
-    let filteredItems = [...items];
-    let filteredSales = [...sales];
-    let filteredExpenses = [...expenses];
-    
-    if (startDate && endDate) {
-      const startTimestamp = startDate.startOf('day').valueOf();
-      const endTimestamp = endDate.endOf('day').valueOf();
-      
-      // Filter items by purchase date
-      filteredItems = items.filter(item => {
-        const purchaseDate = new Date(item.purchaseDate).getTime();
-        return purchaseDate >= startTimestamp && purchaseDate <= endTimestamp;
-      });
-      
-      // Filter sales by sale date
-      filteredSales = sales.filter(sale => {
-        const saleDate = new Date(sale.saleDate).getTime();
-        return saleDate >= startTimestamp && saleDate <= endTimestamp;
-      });
-      
-      // Filter expenses by expense date
-      filteredExpenses = expenses.filter(expense => {
-        const expenseDate = new Date(expense.expenseDate).getTime();
-        return expenseDate >= startTimestamp && expenseDate <= endTimestamp;
-      });
-    }
-    
-    // Debug filtered data
-    console.log('🔍 Filtered Data:', {
-      filteredItemsCount: filteredItems.length,
-      filteredSalesCount: filteredSales.length,
-      filteredExpensesCount: filteredExpenses.length
-    });
-    
-    return { filteredItems, filteredSales, filteredExpenses };
-  }, [items, sales, expenses, startDate, endDate]);
-  
-  // FIXED: Calculate profit for a single sale
-  // Fix includes better item lookup and error handling
-  const calculateSaleProfit = (sale: Sale, allItems: Item[]): number => {
-    // Find the corresponding item - either sold or active
-    const soldItem = allItems.find(item => item.id === sale.itemId);
-    
-    if (!soldItem) {
-      console.warn(`No direct item match for sale ID ${sale.id} with itemId ${sale.itemId}`);
-      
-      // If the sale has a profit already calculated, use that
-      if (sale.profit !== undefined) {
-        console.log(`Using pre-calculated profit: ${sale.profit}`);
-        return sale.profit;
-      }
-      
-      // For demo data, use this fixed profit for our example sale
-      if (sale.id === 1) {
-        console.log(`Using hardcoded profit for demo sale: $40.01`);
-        return 40.01;
-      }
-      
-      // If we have the sale price and fees but no item, estimate profit
-      // by subtracting known expenses from the sale price
-      console.log(`Calculating partial profit from available data`);
-      return sale.salePrice - (sale.salesTax || 0) - (sale.platformFees || 0);
-    }
-    
-    // Calculate profit using the actual item data
-    const purchasePrice = soldItem.purchasePrice || 0;
-    const salesTax = sale.salesTax || 0;
-    const platformFees = sale.platformFees || 0;
-    const shippingCost = soldItem.shippingPrice || 0;
-    
-    const profit = sale.salePrice - purchasePrice - salesTax - platformFees - shippingCost;
-    
-    console.log(`📊 Sale ID ${sale.id}: Profit calculation:
-      Sale Price: ${money(sale.salePrice)}
-      Purchase Price: ${money(purchasePrice)}
-      Sales Tax: ${money(salesTax)}
-      Platform Fees: ${money(platformFees)}
-      Shipping Cost: ${money(shippingCost)}
-      Profit: ${money(profit)}
-    `);
-    
-    return profit;
+// Interface for metrics data
+interface MetricsData {
+  inventoryMetrics: {
+    totalInventory: number;
+    unlistedItems: number;
+    listedItems: number;
+    totalInventoryCost: number;
+    totalShippingCost: number;
+    totalMarketValue: number;
+    potentialProfit: number;
   };
-
-  // FIXED: Calculate net profit from sold items with detailed logging
-  const calculateNetProfitFromSoldItems = (filteredSales: Sale[], filteredExpenses: Expense[], allItems: Item[]): number => {
-    console.log('🔎 Starting calculateNetProfitFromSoldItems calculation...');
-    
-    // Only include completed sales
-    const completedSales = filteredSales.filter(sale => sale.status === 'completed');
-    console.log(`✅ Found ${completedSales.length} completed sales in filtered data`);
-    
-    if (completedSales.length === 0) {
-      console.log('⚠️ No completed sales found, returning negative expenses');
-      const totalExpenses = calculateTotalExpenses(filteredExpenses);
-      return -totalExpenses;
-    }
-    
-    // Calculate gross profit from each completed sale
-    let salesProfit = 0;
-    completedSales.forEach(sale => {
-      let saleProfit = 0;
-      
-      // Use manual calculation for every sale to ensure consistency
-      saleProfit = calculateSaleProfit(sale, allItems);
-      salesProfit += saleProfit;
-      
-      console.log(`📊 Sale ID ${sale.id}: Profit = ${money(saleProfit)}`);
-    });
-    
-    console.log(`💵 Total sales profit: ${money(salesProfit)}`);
-    
-    // Calculate total expenses for the period
-    const totalExpenses = calculateTotalExpenses(filteredExpenses);
-    console.log(`💸 Total expenses: ${money(totalExpenses)}`);
-    
-    // Net profit is sales profit minus total expenses in this period
-    const netProfit = salesProfit - totalExpenses;
-    console.log(`🧮 Final calculation: ${money(salesProfit)} - ${money(totalExpenses)} = ${money(netProfit)}`);
-    
-    return netProfit;
+  salesMetrics: {
+    totalSales: number;
+    totalSalesRevenue: number;
+    totalPlatformFees: number;
+    totalSalesTax: number;
+    costOfGoodsSold: number;
+    grossProfit: number;
+    revenueChange: number;
   };
-  
-  // Compute metrics from filtered data
-  const metrics = useMemo(() => {
-    console.log('🔄 Recalculating metrics...');
-    const { filteredItems, filteredSales, filteredExpenses } = filteredData;
-    
-    // Ensure we're only using active inventory (not sold items)
-    const activeItems = items.filter(item => item.status !== 'sold');
-    
-    // Net Profit calculation
-    const potentialProfit = activeItems.reduce((sum, item) => {
-      const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
-      return sum + (marketPrice - item.purchasePrice);
-    }, 0);
-    
-    // Net profit is potential profit minus expenses
-    const netProfit = potentialProfit - calculateTotalExpenses(filteredExpenses);
-    
-    // Sales Income calculation
-    const salesIncome = filteredSales.reduce((sum, sale) => sum + sale.salePrice, 0);
-    
-    // Item Spend calculation
-    const itemSpend = filteredItems.reduce((sum, item) => sum + item.purchasePrice, 0);
-    
-    // ROI calculation
-    const roi = itemSpend > 0 ? (netProfit / itemSpend) * 100 : 0;
-    
-    // Expense Spend calculation
-    const expenseSpend = calculateTotalExpenses(filteredExpenses);
-    
-    // Count metrics
-    const itemsPurchased = filteredItems.length;
-    const itemsSold = filteredSales.length;
-    
-    // Calculate profit from sold items - Using ALL items as a collection to look up from,
-    // but only calculating profits for sales that are within the date filter
-    const soldItemsProfit = calculateNetProfitFromSoldItems(filteredSales, filteredExpenses, items);
-    
-    // Debug the final metrics
-    console.log('📊 Final metrics:', {
-      netProfit,
-      salesIncome,
-      itemSpend,
-      roi,
-      expenseSpend,
-      itemsPurchased,
-      itemsSold,
-      soldItemsProfit
-    });
-    
-    // Default percentage changes for visual indicators
-    const netProfitChange = 5.2;
-    const salesIncomeChange = 12.5;
-    const itemSpendChange = -3.4;
-    const roiChange = 2.8;
-    const expenseSpendChange = 1.9;
-    const itemsPurchasedChange = 15.7;
-    const itemsSoldChange = 8.3;
-    const soldItemsProfitChange = 10.2;
-    
-    return {
-      netProfit,
-      netProfitChange,
-      salesIncome,
-      salesIncomeChange,
-      itemSpend,
-      itemSpendChange,
-      roi,
-      roiChange,
-      expenseSpend,
-      expenseSpendChange,
-      itemsPurchased,
-      itemsPurchasedChange,
-      itemsSold,
-      itemsSoldChange,
-      soldItemsProfit,
-      soldItemsProfitChange
-    };
-  }, [filteredData, items]);
+  expenseMetrics: {
+    totalExpenses: number;
+    expenseByType: Record<string, number>;
+    expenseChange: number;
+  };
+  profitMetrics: {
+    netProfitSold: number;
+    netProfitChange: number;
+    potentialProfit: number;
+    roiSold: number;
+    roiInventory: number;
+    overallRoi: number;
+    roiChange: number;
+  };
+}
 
-  // Log metrics whenever they change
-  useEffect(() => {
-    console.log('📈 Updated metrics:', metrics);
-  }, [metrics]);
+// Define tab interface for type safety
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+// TabPanel component for tab contents
+function TabPanel(props: TabPanelProps) {
+  const { children, value, index, ...other } = props;
 
   return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`metrics-tabpanel-${index}`}
+      aria-labelledby={`metrics-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 0, height: '100%' }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
+// Helper function to format tab aria-controls
+function a11yProps(index: number) {
+  return {
+    id: `metrics-tab-${index}`,
+    'aria-controls': `metrics-tabpanel-${index}`,
+  };
+}
+
+// Main component definition
+const ReportsSection: React.FC<ReportsSectionProps> = ({
+  items,
+  sales,
+  expenses,
+  startDate,
+  endDate,
+  currentUser
+}) => {
+  const theme = useTheme();
+  const { money, percentFormat } = useFormat();
+  
+  // State for metrics data
+  const [metricsData, setMetricsData] = useState<MetricsData | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState(0);
+  
+  // Color schemes for charts
+  const COLORS = [
+    '#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#0088FE',
+    '#00C49F', '#FFBB28', '#FF8042', '#9c27b0', '#3f51b5'
+  ];
+  
+  // Function to fetch comprehensive KPI metrics with authentication
+  const fetchMetricsData = async () => {
+    // Don't fetch if not authenticated
+    if (!currentUser) {
+      setError('Authentication required to fetch metrics data');
+      return;
+    }
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Convert dates to JS Date objects for the API
+      const apiStartDate = startDate ? startDate.toDate() : undefined;
+      const apiEndDate = endDate ? endDate.toDate() : undefined;
+      
+      // Fetch metrics data from the dashboard service
+      const data = await dashboardService.fetchDashboardMetrics(apiStartDate, apiEndDate);
+      setMetricsData(data as unknown as MetricsData);
+      console.log('📊 Fetched comprehensive dashboard metrics:', data);
+    } catch (err: any) {
+      console.error('💥 Error fetching dashboard KPI metrics:', err);
+      setError(`Failed to load metrics: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch metrics when dates or user changes
+  useEffect(() => {
+    if (currentUser) {
+      fetchMetricsData();
+    }
+  }, [startDate, endDate, currentUser]);
+  
+  // Handle tab change
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
+  
+  // Calculate revenue by month from sales data
+  const getRevenueByMonthData = () => {
+    // Group sales by month
+    const salesByMonth: Record<string, number> = {};
+    
+    sales.forEach(sale => {
+      const month = dayjs(sale.saleDate).format('MMM YYYY');
+      if (!salesByMonth[month]) {
+        salesByMonth[month] = 0;
+      }
+      salesByMonth[month] += sale.salePrice;
+    });
+    
+    // Convert to array for chart
+    return Object.entries(salesByMonth).map(([month, amount]) => ({
+      month,
+      amount
+    }));
+  };
+  
+  // Calculate expense distribution for pie chart
+  const getExpenseDistributionData = () => {
+    // Use metrics data if available, otherwise calculate from expenses
+    if (metricsData?.expenseMetrics?.expenseByType) {
+      return Object.entries(metricsData.expenseMetrics.expenseByType)
+        .map(([name, value], index) => ({
+          name,
+          value,
+          color: COLORS[index % COLORS.length]
+        }));
+    }
+    
+    // Fallback calculation from expenses
+    const expensesByType: Record<string, number> = {};
+    
+    expenses.forEach(expense => {
+      if (!expensesByType[expense.expenseType]) {
+        expensesByType[expense.expenseType] = 0;
+      }
+      expensesByType[expense.expenseType] += expense.amount;
+    });
+    
+    return Object.entries(expensesByType).map(([name, value], index) => ({
+      name,
+      value,
+      color: COLORS[index % COLORS.length]
+    }));
+  };
+  
+  // Calculate sales by category
+  const getSalesByCategoryData = () => {
+    const salesByCategory: Record<string, number> = {};
+    
+    sales.forEach(sale => {
+      // Find the corresponding item for the sale
+      const item = items.find(item => item.id === sale.itemId);
+      if (item) {
+        const category = item.category || 'Unknown';
+        if (!salesByCategory[category]) {
+          salesByCategory[category] = 0;
+        }
+        salesByCategory[category] += sale.salePrice;
+      }
+    });
+    
+    return Object.entries(salesByCategory).map(([category, amount], index) => ({
+      category,
+      amount,
+      color: COLORS[index % COLORS.length]
+    }));
+  };
+  
+  // Custom tooltip for charts
+  const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ 
+          backgroundColor: theme.palette.background.paper,
+          padding: '10px',
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: '4px'
+        }}>
+          <p style={{ margin: 0 }}>{`${label || payload[0].name}`}</p>
+          <p style={{ 
+            margin: 0, 
+            color: payload[0].color || theme.palette.primary.main,
+            fontWeight: 'bold'
+          }}>
+            {`${money(payload[0].value || 0)}`}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+  
+  // Custom tooltip for pie charts
+  const PieTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+    if (active && payload && payload.length) {
+      const data = payload[0];
+      return (
+        <div style={{ 
+          backgroundColor: theme.palette.background.paper,
+          padding: '10px',
+          border: `1px solid ${theme.palette.divider}`,
+          borderRadius: '4px'
+        }}>
+          <p style={{ margin: 0 }}>{data.name}</p>
+          <p style={{ 
+            margin: 0, 
+            color: data.color || theme.palette.primary.main,
+            fontWeight: 'bold'
+          }}>
+            {`${money(data.value || 0)}`}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+  
+  // If we're not authenticated, show a message
+  if (!currentUser) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Alert severity="warning">
+          Please log in to view your metrics and reports.
+        </Alert>
+      </Box>
+    );
+  }
+  
+  // If loading, show a loading indicator
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center',
+        height: '100%',
+        p: 3
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+  
+  // If there's an error, show an error message
+  if (error) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">
+          {error}
+        </Alert>
+      </Box>
+    );
+  }
+  
+  // If there's no data, show an empty state
+  if (!items.length && !sales.length && !expenses.length) {
+    return (
+      <Box sx={{ p: 3, textAlign: 'center' }}>
+        <Typography variant="h6" color="text.secondary">
+          No data available for reports
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          Add some items, record sales, or log expenses to see reports here.
+        </Typography>
+        <Button 
+          variant="outlined" 
+          onClick={() => fetchMetricsData()}
+          sx={{ mt: 2 }}
+        >
+          Refresh Data
+        </Button>
+      </Box>
+    );
+  }
+  
+  return (
     <Box sx={{ width: '100%', height: '100%' }}>
-      <Grid container spacing={3}>
-        {/* Net Profit */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Net Profit"
-            value={metrics.netProfit}
-            change={metrics.netProfitChange}
-            data={generateMiniChartData(Math.max(1, metrics.netProfit) * 0.8, Math.max(1, metrics.netProfit) * 0.1, 5)}
-            tooltipText="Estimated profit based on market price difference minus purchase price and expenses"
-            useFormatter={true}
-          />
+      {/* Tabs for different report types */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs 
+          value={activeTab} 
+          onChange={handleTabChange} 
+          aria-label="dashboard metrics tabs"
+          variant="scrollable"
+          scrollButtons="auto"
+        >
+          <Tab label="Overview" {...a11yProps(0)} />
+          <Tab label="Sales" {...a11yProps(1)} />
+          <Tab label="Expenses" {...a11yProps(2)} />
+          <Tab label="Profit & ROI" {...a11yProps(3)} />
+        </Tabs>
+      </Box>
+      
+      {/* Overview Tab */}
+      <TabPanel value={activeTab} index={0}>
+        <Grid container spacing={2} sx={{ mt: 1, height: 'calc(100% - 40px)' }}>
+          {/* Portfolio Overview */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Portfolio Overview
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Total Inventory</Typography>
+                  <Typography variant="h6">
+                    {metricsData?.inventoryMetrics?.totalInventory || items.filter(item => item.status !== 'sold').length}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Active Listings</Typography>
+                  <Typography variant="h6">
+                    {metricsData?.inventoryMetrics?.listedItems || items.filter(item => item.status === 'listed').length}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Total Inventory Value</Typography>
+                  <Typography variant="h6">
+                    {money(metricsData?.inventoryMetrics?.totalInventoryCost || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Market Value</Typography>
+                  <Typography variant="h6">
+                    {money(metricsData?.inventoryMetrics?.totalMarketValue || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Potential Profit</Typography>
+                  <Typography variant="h6" color="success.main">
+                    {money(metricsData?.inventoryMetrics?.potentialProfit || 0)}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  onClick={() => fetchMetricsData()}
+                >
+                  Refresh Metrics
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+          
+          {/* Sales & Expenses Summary */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Sales & Expenses
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Total Sales</Typography>
+                  <Typography variant="h6">
+                    {metricsData?.salesMetrics?.totalSales || sales.length}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Sales Revenue</Typography>
+                  <Typography variant="h6" color="primary.main">
+                    {money(metricsData?.salesMetrics?.totalSalesRevenue || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Total Expenses</Typography>
+                  <Typography variant="h6" color="error.main">
+                    {money(metricsData?.expenseMetrics?.totalExpenses || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Gross Profit</Typography>
+                  <Typography variant="h6" color="success.main">
+                    {money(metricsData?.salesMetrics?.grossProfit || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Net Profit</Typography>
+                  <Typography variant="h6" color={
+                    (metricsData?.profitMetrics?.netProfitSold || 0) >= 0 ? 'success.main' : 'error.main'
+                  }>
+                    {money(metricsData?.profitMetrics?.netProfitSold || 0)}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {startDate && endDate 
+                    ? `Data for ${startDate.format('MMM D, YYYY')} - ${endDate.format('MMM D, YYYY')}`
+                    : 'All time data'
+                  }
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
         </Grid>
-        
-        {/* Sales Income */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Sales Income"
-            value={metrics.salesIncome}
-            change={metrics.salesIncomeChange}
-            data={generateMiniChartData(Math.max(1, metrics.salesIncome) * 0.8, Math.max(1, metrics.salesIncome) * 0.1, 5)}
-            tooltipText="Total revenue from all completed sales"
-            useFormatter={true}
-          />
+      </TabPanel>
+      
+      {/* Sales Tab */}
+      <TabPanel value={activeTab} index={1}>
+        <Grid container spacing={2} sx={{ mt: 1, height: 'calc(100% - 40px)' }}>
+          {/* Sales Over Time Chart */}
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Sales Revenue Over Time
+              </Typography>
+              
+              <Box sx={{ flexGrow: 1, height: 300, mt: 2 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={getRevenueByMonthData()}
+                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip content={CustomTooltip} />
+                    <Legend />
+                    <Bar dataKey="amount" name="Revenue" fill="#8884d8" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {sales.length ? `Showing data for ${sales.length} sales` : 'No sales data available'}
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
+          
+          {/* Sales By Category */}
+          <Grid item xs={12} md={4}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Sales By Category
+              </Typography>
+              
+              <Box sx={{ flexGrow: 1, height: 300, mt: 2 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={getSalesByCategoryData()}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="amount"
+                      nameKey="category"
+                    >
+                      {getSalesByCategoryData().map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={PieTooltip} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Distribution by product category
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
         </Grid>
-
-        {/* Item Spend */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Item Spend"
-            value={metrics.itemSpend}
-            change={metrics.itemSpendChange}
-            data={generateMiniChartData(Math.max(1, metrics.itemSpend) * 0.8, Math.max(1, metrics.itemSpend) * 0.1, 5)}
-            tooltipText="Total amount spent on items currently in inventory"
-            useFormatter={true}
-          />
+      </TabPanel>
+      
+      {/* Expenses Tab */}
+      <TabPanel value={activeTab} index={2}>
+        <Grid container spacing={2} sx={{ mt: 1, height: 'calc(100% - 40px)' }}>
+          {/* Expense Distribution */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Expense Distribution
+              </Typography>
+              
+              <Box sx={{ flexGrow: 1, height: 300, mt: 2 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={getExpenseDistributionData()}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      nameKey="name"
+                    >
+                      {getExpenseDistributionData().map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={PieTooltip} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Total Expenses: {money(metricsData?.expenseMetrics?.totalExpenses || 0)}
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
+          
+          {/* Expense Details */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Expense Details
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Total Expenses</Typography>
+                  <Typography variant="h6">
+                    {money(metricsData?.expenseMetrics?.totalExpenses || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Month-over-Month Change</Typography>
+                  <Typography 
+                    variant="h6" 
+                    color={(metricsData?.expenseMetrics?.expenseChange || 0) > 0 ? 'error.main' : 'success.main'}
+                  >
+                    {percentFormat(metricsData?.expenseMetrics?.expenseChange || 0)}
+                  </Typography>
+                </Box>
+                
+                <Typography variant="subtitle1" sx={{ mt: 1 }}>
+                  Expenses by Type
+                </Typography>
+                
+                {metricsData?.expenseMetrics?.expenseByType && Object.entries(metricsData.expenseMetrics.expenseByType).map(([type, amount], index) => (
+                  <Box key={type} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body1">{type}</Typography>
+                    <Typography variant="body1" fontWeight="medium">
+                      {money(amount)}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {expenses.length ? `Showing data for ${expenses.length} expenses` : 'No expense data available'}
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
         </Grid>
-
-        {/* ROI Percentage */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="ROI Percentage"
-            value={metrics.roi.toFixed(1)}
-            change={metrics.roiChange}
-            data={generateMiniChartData(Math.max(1, metrics.roi) * 0.8, Math.max(1, metrics.roi) * 0.1, 5)}
-            prefix=""
-            suffix="%"
-            tooltipText="Return on investment calculated as (Net Profit / Total Item Spend) × 100"
-            useFormatter={false}
-          />
+      </TabPanel>
+      
+      {/* Profit & ROI Tab */}
+      <TabPanel value={activeTab} index={3}>
+        <Grid container spacing={2} sx={{ mt: 1, height: 'calc(100% - 40px)' }}>
+          {/* Profit Metrics */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                Profit Metrics
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Net Profit (Sold Items)</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.netProfitSold || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {money(metricsData?.profitMetrics?.netProfitSold || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Net Profit Change</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.netProfitChange || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {percentFormat(metricsData?.profitMetrics?.netProfitChange || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Potential Profit (Inventory)</Typography>
+                  <Typography variant="h6" color="info.main">
+                    {money(metricsData?.profitMetrics?.potentialProfit || 0)}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Button 
+                  variant="outlined" 
+                  size="small"
+                  onClick={() => fetchMetricsData()}
+                >
+                  Refresh Metrics
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+          
+          {/* ROI Metrics */}
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ 
+              p: 2, 
+              height: '100%', 
+              display: 'flex', 
+              flexDirection: 'column', 
+              borderRadius: 2,
+              boxShadow: theme.shadows[2]
+            }}>
+              <Typography variant="h6" gutterBottom>
+                ROI Analysis
+              </Typography>
+              
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">ROI on Sold Items</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.roiSold || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {percentFormat(metricsData?.profitMetrics?.roiSold || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">ROI on Current Inventory</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.roiInventory || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {percentFormat(metricsData?.profitMetrics?.roiInventory || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">Overall ROI</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.overallRoi || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {percentFormat(metricsData?.profitMetrics?.overallRoi || 0)}
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="body1">ROI Change</Typography>
+                  <Typography 
+                    variant="h6"
+                    color={(metricsData?.profitMetrics?.roiChange || 0) >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {percentFormat(metricsData?.profitMetrics?.roiChange || 0)}
+                  </Typography>
+                </Box>
+              </Box>
+              
+              <Box sx={{ textAlign: 'center', mt: 'auto', pt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  {startDate && endDate 
+                    ? `Data for ${startDate.format('MMM D, YYYY')} - ${endDate.format('MMM D, YYYY')}`
+                    : 'All time data'
+                  }
+                </Typography>
+              </Box>
+            </Paper>
+          </Grid>
         </Grid>
-
-        {/* Expense Spend */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Expense Spend"
-            value={metrics.expenseSpend}
-            change={metrics.expenseSpendChange}
-            data={generateMiniChartData(Math.max(1, metrics.expenseSpend) * 0.8, Math.max(1, metrics.expenseSpend) * 0.1, 5)}
-            tooltipText="Total expenses excluding inventory purchases"
-            useFormatter={true}
-          />
-        </Grid>
-
-        {/* Items Purchased */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Items Purchased"
-            value={metrics.itemsPurchased.toString()}
-            change={metrics.itemsPurchasedChange}
-            data={generateMiniChartData(Math.max(1, metrics.itemsPurchased), 2, 5)}
-            prefix=""
-            tooltipText="Total number of items purchased during the selected period"
-            useFormatter={false}
-          />
-        </Grid>
-
-        {/* Items Sold */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Items Sold"
-            value={metrics.itemsSold.toString()}
-            change={metrics.itemsSoldChange}
-            data={generateMiniChartData(Math.max(1, metrics.itemsSold), 2, 5)}
-            prefix=""
-            tooltipText="Total number of items sold during the selected period"
-            useFormatter={false}
-          />
-        </Grid>
-
-        {/* Realized Profit - Expenses */}
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Realized Profit - Expenses"
-            value={metrics.soldItemsProfit}
-            change={metrics.soldItemsProfitChange}
-            data={generateMiniChartData(Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.8, Math.max(0.01, Math.abs(metrics.soldItemsProfit)) * 0.1, 5)}
-            tooltipText="Profit from completed sales minus expenses within the period"
-            useFormatter={true}
-          />
-        </Grid>
-      </Grid>
+      </TabPanel>
     </Box>
   );
 };

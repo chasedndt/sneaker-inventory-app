@@ -1,168 +1,165 @@
+// src/components/PortfolioValue.tsx
 import React from 'react';
-import { 
-  Box, 
-  Typography, 
-  Tooltip,
+import {
+  Box,
+  Typography,
+  Paper,
   Theme,
-  useTheme
+  useTheme,
+  Divider,
+  Skeleton
 } from '@mui/material';
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip as RechartsTooltip, 
-  ResponsiveContainer 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  TooltipProps
 } from 'recharts';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import InfoIcon from '@mui/icons-material/Info';
-import useFormat from '../hooks/useFormat'; // Import the formatting hook
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import useFormat from '../hooks/useFormat';
+import { User } from 'firebase/auth';
 
 interface PortfolioValueProps {
   currentValue: number;
   valueChange: number;
   percentageChange: number;
   data: Array<{ date: string; value: number }>;
-  theme?: Theme;
+  theme: Theme;
+  loading?: boolean;
+  currentUser?: User | null;
 }
+
+// Custom tooltip component for the chart
+const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+  const { money } = useFormat();
+  const theme = useTheme();
+  
+  if (active && payload && payload.length) {
+    return (
+      <Paper
+        elevation={3}
+        sx={{
+          p: 1.5,
+          backgroundColor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Typography variant="body2">{label}</Typography>
+        <Typography
+          variant="body1"
+          sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}
+        >
+          {money(payload[0].value || 0)}
+        </Typography>
+      </Paper>
+    );
+  }
+  return null;
+};
 
 const PortfolioValue: React.FC<PortfolioValueProps> = ({
   currentValue,
   valueChange,
   percentageChange,
   data,
-  theme: propTheme
+  theme,
+  loading = false,
+  currentUser = null
 }) => {
-  // Use provided theme or default theme
-  const defaultTheme = useTheme();
-  const theme = propTheme || defaultTheme;
-  const { money } = useFormat(); // Use the formatting hook
-
-  // Fixed styling for dark mode
-  const isDarkMode = theme.palette.mode === 'dark';
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <Box sx={{
-          bgcolor: isDarkMode ? '#1e1e2d' : '#fff',
-          p: 1.5,
-          borderRadius: 1,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-          border: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.1)' : '#e0e0e0'}`
-        }}>
-          <Typography variant="body2" sx={{ 
-            color: isDarkMode ? '#fff' : '#1a1a1a', 
-            fontWeight: 500 
-          }}>
-            {money(payload[0].value)}
-          </Typography>
-          <Typography variant="caption" sx={{ 
-            color: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666' 
-          }}>
-            {payload[0].payload.date}
-          </Typography>
-        </Box>
-      );
-    }
-    return null;
-  };
-
-  // Calculate min and max values for Y-axis
-  const minValue = Math.min(...data.map(item => item.value)) * 0.95; // 5% below min
-  const maxValue = Math.max(...data.map(item => item.value)) * 1.05; // 5% above max
-
+  const { money } = useFormat();
+  
+  // If loading, show skeleton
+  if (loading) {
+    return (
+      <Box sx={{ p: 3, width: '100%', height: '100%' }}>
+        <Skeleton variant="text" width="50%" height={40} />
+        <Skeleton variant="text" width="30%" />
+        <Skeleton variant="rectangular" width="100%" height="80%" sx={{ mt: 2 }} />
+      </Box>
+    );
+  }
+  
+  // If no user is authenticated, show a message
+  if (!currentUser) {
+    return (
+      <Box sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Typography variant="body1" color="text.secondary">
+          Please log in to view your portfolio value
+        </Typography>
+      </Box>
+    );
+  }
+  
   return (
-    <Box sx={{ 
-      p: 0, 
-      bgcolor: isDarkMode ? '#1e1e2d' : '#fff',
-      color: isDarkMode ? '#fff' : 'inherit',
-      height: '100%', // Use full height of the container
-      display: 'flex',
-      flexDirection: 'column'
-    }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'flex-start', 
-        p: 2
-      }}>
-        <Box>
-          <Typography variant="h3" sx={{ 
-            fontWeight: 600,
-            fontSize: '2rem',
-            mb: 0.5,
-            color: isDarkMode ? '#fff' : '#1a1a1a'
-          }}>
+    <Box sx={{ p: 3, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Portfolio Value Title */}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          Total Portfolio Value
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
             {money(currentValue)}
           </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-            <Box sx={{ 
-              display: 'flex', 
+          <Box
+            sx={{
+              display: 'flex',
               alignItems: 'center',
-              color: valueChange >= 0 ? '#4CAF50' : '#f44336'
-            }}>
-              {valueChange >= 0 ? (
-                <TrendingUpIcon fontSize="small" sx={{ mr: 0.5 }} />
-              ) : (
-                <TrendingDownIcon fontSize="small" sx={{ mr: 0.5 }} />
-              )}
-              <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                {money(Math.abs(valueChange))}
-              </Typography>
-            </Box>
-            <Typography variant="body2" sx={{ 
-              color: valueChange >= 0 ? '#4CAF50' : '#f44336',
-              fontWeight: 500
-            }}>
-              ({percentageChange >= 0 ? '+' : ''}{percentageChange}%)
+              backgroundColor: percentageChange >= 0 ? 'success.light' : 'error.light',
+              color: percentageChange >= 0 ? 'success.dark' : 'error.dark',
+              p: 0.5,
+              px: 1,
+              borderRadius: 1,
+            }}
+          >
+            {percentageChange >= 0 ? (
+              <ArrowUpwardIcon sx={{ fontSize: 16 }} />
+            ) : (
+              <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+            )}
+            <Typography variant="body2">
+              {percentageChange >= 0 ? '+' : ''}
+              {percentageChange}% ({money(valueChange)})
             </Typography>
-            <Tooltip title="Total portfolio value based on market prices of all items in inventory">
-              <InfoIcon fontSize="small" sx={{ ml: 1, color: 'text.secondary', cursor: 'help' }} />
-            </Tooltip>
           </Box>
         </Box>
       </Box>
-
-      <Box sx={{ flex: 1, width: '100%', pt: 2 }}>
+      
+      <Divider sx={{ mb: 2 }} />
+      
+      {/* Chart */}
+      <Box sx={{ flex: 1, width: '100%', minHeight: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
-            <CartesianGrid 
-              strokeDasharray="3 3" 
-              stroke={isDarkMode ? 'rgba(255,255,255,0.1)' : '#f5f5f5'} 
-              vertical={false} 
-            />
-            <XAxis 
-              dataKey="date" 
+          <LineChart
+            data={data}
+            margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
               axisLine={false}
               tickLine={false}
-              dy={10}
-              tick={{ 
-                fill: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666', 
-                fontSize: 12 
-              }}
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
             />
-            <YAxis 
+            <YAxis
               axisLine={false}
               tickLine={false}
-              width={80}
-              tickFormatter={(value) => money(value).replace(/(\.\d\d).*/, '$1')} // Format ticks with currency
-              tick={{ 
-                fill: isDarkMode ? 'rgba(255,255,255,0.7)' : '#666', 
-                fontSize: 12 
-              }}
-              domain={[minValue, maxValue]} // Dynamic Y-axis range
+              tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
+              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
             />
-            <RechartsTooltip content={<CustomTooltip />} />
-            <Line 
+            <Tooltip content={<CustomTooltip />} />
+            <Line
               type="monotone"
-              dataKey="value" 
-              stroke="#8884d8" 
-              strokeWidth={2.5}
-              dot={{ fill: '#8884d8', strokeWidth: 2, r: 5 }}
-              activeDot={{ r: 7, fill: '#8884d8' }}
+              dataKey="value"
+              stroke={theme.palette.primary.main}
+              activeDot={{ r: 8 }}
+              strokeWidth={2}
+              dot={{ strokeWidth: 2 }}
             />
           </LineChart>
         </ResponsiveContainer>

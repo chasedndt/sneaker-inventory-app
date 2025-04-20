@@ -19,6 +19,8 @@ from sqlalchemy import func
 import uuid
 import calendar
 from middleware.auth import require_auth, get_user_id_from_token, get_current_user_info
+from admin.admin_routes import admin_routes
+
 
 def convert_to_snake_case(name):
     """Convert a string from camelCase to snake_case."""
@@ -44,6 +46,9 @@ def create_app():
 
     # Register the tag routes blueprint
     app.register_blueprint(tag_routes, url_prefix='/api')
+
+    # Register the admin routes blueprint (add this line)
+    app.register_blueprint(admin_routes, url_prefix='/api')
 
     # Set up standard application logging
     logging.basicConfig(

@@ -1,6 +1,6 @@
 // src/services/dashboardService.ts
-import { useState, useEffect, useCallback } from 'react';
 import { Item } from './api';
+import { useAuth } from '../contexts/AuthContext';
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
@@ -61,9 +61,18 @@ export interface ComprehensiveMetrics {
   };
 }
 
+// Helper function to get auth token - retrieved from window global
+// This is set up in the api.ts file by the useApi hook
+const getAuthToken = async (): Promise<string | null> => {
+  if (window.getAuthToken) {
+    return window.getAuthToken();
+  }
+  return null;
+};
+
 export const dashboardService = {
   /**
-   * Fetches dashboard data from the backend
+   * Fetches dashboard data from the backend with authentication
    * 
    * @async
    * @function fetchDashboardData
@@ -80,7 +89,13 @@ export const dashboardService = {
     options?: { startDate?: Date; endDate?: Date }
   ): Promise<DashboardData> => {
     try {
-      console.log('🚀 Fetching real dashboard data...');
+      console.log('🚀 Fetching real dashboard data with authentication...');
+      
+      // Get auth token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view dashboard data.');
+      }
       
       // Build query parameters
       const params = new URLSearchParams();
@@ -91,11 +106,23 @@ export const dashboardService = {
         params.append('end_date', options.endDate.toISOString());
       }
       
-      // Make the API request
+      // Make the API request with authentication
       const response = await fetch(`${API_BASE_URL}/dashboard/kpi-metrics${params.toString() ? `?${params.toString()}` : ''}`, {
         method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         credentials: 'include'
       });
+      
+      // Handle auth-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('You do not have permission to access this dashboard data.');
+      }
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -131,7 +158,7 @@ export const dashboardService = {
   },
 
   /**
-   * Fetches comprehensive dashboard metrics from the API endpoint
+   * Fetches comprehensive dashboard metrics from the API endpoint with authentication
    * 
    * @async
    * @function fetchDashboardMetrics
@@ -145,7 +172,13 @@ export const dashboardService = {
    */
   fetchDashboardMetrics: async (startDate?: Date, endDate?: Date): Promise<ComprehensiveMetrics> => {
     try {
-      console.log('🚀 Fetching comprehensive dashboard metrics...');
+      console.log('🚀 Fetching comprehensive dashboard metrics with authentication...');
+      
+      // Get auth token
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view dashboard metrics.');
+      }
       
       // Build query parameters
       const params = new URLSearchParams();
@@ -156,14 +189,26 @@ export const dashboardService = {
         params.append('end_date', endDate.toISOString());
       }
       
-      // Make API request
+      // Make API request with authentication
       const url = `${API_BASE_URL}/dashboard/kpi-metrics${params.toString() ? `?${params.toString()}` : ''}`;
-      console.log(`Making request to: ${url}`);
+      console.log(`Making authenticated request to: ${url}`);
       
       const response = await fetch(url, {
         method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         credentials: 'include'
       });
+      
+      // Handle auth-specific errors
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (response.status === 403) {
+        throw new Error('You do not have permission to access this dashboard data.');
+      }
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

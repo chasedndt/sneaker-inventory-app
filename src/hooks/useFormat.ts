@@ -1,83 +1,108 @@
 // src/hooks/useFormat.ts
-import { useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
+import dayjs from 'dayjs';
 
 /**
- * Custom hook for formatting values according to user settings
- * This provides a convenient way to format dates, currency amounts, etc.
- * across the application using the user's preferences
+ * Custom hook for formatting values consistently throughout the app
+ * Leverages the SettingsContext for currency, date formatting, etc.
  */
 const useFormat = () => {
-  const { 
-    formatDate, 
-    formatCurrency, 
-    convertCurrency,
-    currency,
-    dateFormat 
-  } = useSettings();
+  const settings = useSettings();
 
   /**
-   * Format a date according to user's date format preference
-   * @param date - Date to format
+   * Format a monetary value according to user's currency preferences
+   * @param amount Amount to format
+   * @param originalCurrency Optional original currency if different from user's preference
+   * @returns Formatted currency string
+   */
+  const money = (amount: number, originalCurrency?: string): string => {
+    if (isNaN(amount)) {
+      console.warn('Invalid amount provided to money formatter:', amount);
+      amount = 0;
+    }
+    
+    try {
+      // If we have a settings context, use its formatting
+      if (settings) {
+        // Convert currency if needed
+        if (originalCurrency && originalCurrency !== settings.currency) {
+          amount = settings.convertCurrency(amount, originalCurrency);
+        }
+        
+        return settings.formatCurrency(amount);
+      }
+      
+      // Fallback formatting if settings context is not available
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD'
+      }).format(amount);
+    } catch (error) {
+      console.error('Error formatting currency:', error);
+      return `$${amount.toFixed(2)}`;
+    }
+  };
+
+  /**
+   * Format a date value according to user's date format preferences
+   * @param dateValue Date to format (string, Date object, or dayjs object)
    * @returns Formatted date string
    */
-  const date = useCallback((date: Date | string) => {
-    return formatDate(date);
-  }, [formatDate]);
+  const date = (dateValue: string | Date | dayjs.Dayjs): string => {
+    if (!dateValue) {
+      return '';
+    }
+    
+    try {
+      // Convert to dayjs object if it's not already
+      const dayjsDate = dayjs.isDayjs(dateValue) 
+        ? dateValue 
+        : dayjs(dateValue);
+      
+      // Use settings format if available
+      if (settings) {
+        return dayjsDate.format(settings.dateFormat === 'MM/DD/YYYY' 
+          ? 'MM/DD/YYYY'
+          : settings.dateFormat === 'DD/MM/YYYY'
+            ? 'DD/MM/YYYY'
+            : 'YYYY-MM-DD'
+        );
+      }
+      
+      // Fallback format
+      return dayjsDate.format('MM/DD/YYYY');
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return String(dateValue);
+    }
+  };
 
   /**
-   * Format a monetary value according to user's currency preference
-   * @param amount - Amount to format
-   * @returns Formatted currency string
+   * Format a percentage value
+   * @param value Percentage value to format
+   * @param decimals Number of decimal places
+   * @returns Formatted percentage string
    */
-  const money = useCallback((amount: number) => {
-    return formatCurrency(amount);
-  }, [formatCurrency]);
-
-  /**
-   * Convert an amount from one currency to the user's preferred currency
-   * @param amount - Amount to convert
-   * @param fromCurrency - Source currency code
-   * @returns Converted amount (number only, no formatting)
-   */
-  const convert = useCallback((amount: number, fromCurrency: string = 'USD') => {
-    return convertCurrency(amount, fromCurrency);
-  }, [convertCurrency]);
-
-  /**
-   * Convert and format an amount from one currency to the user's preferred currency
-   * @param amount - Amount to convert and format
-   * @param fromCurrency - Source currency code
-   * @returns Formatted currency string
-   */
-  const convertAndFormat = useCallback((amount: number, fromCurrency: string = 'USD') => {
-    const converted = convertCurrency(amount, fromCurrency);
-    return formatCurrency(converted);
-  }, [convertCurrency, formatCurrency]);
-
-  /**
-   * Get the current currency code
-   * @returns Current currency code (e.g., 'USD')
-   */
-  const getCurrentCurrency = useCallback(() => {
-    return currency;
-  }, [currency]);
-
-  /**
-   * Get the current date format
-   * @returns Current date format (e.g., 'MM/DD/YYYY')
-   */
-  const getCurrentDateFormat = useCallback(() => {
-    return dateFormat;
-  }, [dateFormat]);
+  const percentFormat = (value: number, decimals: number = 1): string => {
+    if (isNaN(value)) {
+      console.warn('Invalid value provided to percent formatter:', value);
+      value = 0;
+    }
+    
+    try {
+      const formatted = value.toFixed(decimals);
+      return `${value >= 0 ? '+' : ''}${formatted}%`;
+    } catch (error) {
+      console.error('Error formatting percentage:', error);
+      return `${value}%`;
+    }
+  };
 
   return {
-    date,
     money,
-    convert,
-    convertAndFormat,
-    getCurrentCurrency,
-    getCurrentDateFormat,
+    date,
+    percentFormat
   };
 };
 

@@ -8,19 +8,25 @@ import {
   Tooltip,
   useTheme,
   Paper,
-  Avatar
+  Avatar,
+  Alert,
+  CircularProgress,
+  Button
 } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ShoeIcon from '@mui/icons-material/DoNotStep'; // Better icon for sneakers
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // For image errors
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // For help/info tooltip
+import AddIcon from '@mui/icons-material/Add'; // For add button
 import { Item } from '../services/api';
 import { getImageUrl, checkImageExists, handleImageLoadError } from '../utils/imageUtils';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
+import { User } from 'firebase/auth';
 
 interface EnhancedInventoryDisplayProps {
   items: Item[];
+  currentUser: User | null;
 }
 
 // Helper function to calculate percentage change
@@ -72,16 +78,32 @@ interface ItemWithImage extends Item {
   placeholderMessage?: string;
 }
 
-const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ items }) => {
+const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ 
+  items,
+  currentUser
+}) => {
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
   const [groupedItems, setGroupedItems] = useState<ItemWithImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const apiBaseUrl = 'http://127.0.0.1:5000/api';
+
+  // Check authentication status
+  useEffect(() => {
+    if (!currentUser) {
+      setAuthError('Authentication required to view inventory');
+      setIsLoading(false);
+    } else {
+      setAuthError(null);
+    }
+  }, [currentUser]);
 
   // Effect for grouping and sorting items
   useEffect(() => {
+    if (!currentUser) return; // Don't process items if not authenticated
+    
     try {
       console.log('🔄 Processing inventory items for display...');
       setIsLoading(true);
@@ -95,7 +117,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
 
       // Group and sort items
       const grouped = groupItemsByProduct(items);
-      console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups`);
+      console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups for user ${currentUser.uid}`);
       
       // Enhance the items with image loading state
       const enhancedItems = grouped.map(item => ({
@@ -118,10 +140,12 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     } finally {
       setIsLoading(false);
     }
-  }, [items]);
+  }, [items, currentUser]);
 
   // Effect for loading images
   useEffect(() => {
+    if (!currentUser) return; // Don't load images if not authenticated
+    
     const loadItemImages = async () => {
       console.log('🔄 Loading item images...');
       
@@ -206,7 +230,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     if (groupedItems.length > 0 && groupedItems.some(item => item.imageLoading)) {
       loadItemImages();
     }
-  }, [groupedItems, apiBaseUrl]);
+  }, [groupedItems, apiBaseUrl, currentUser]);
 
   const handleImageError = (itemId: number) => {
     console.error(`❌ Image load error for item ${itemId}`);
@@ -221,9 +245,31 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     );
   };
 
+  // Show authentication error if not logged in
+  if (authError) {
+    return (
+      <Box sx={{ p: 3, borderRadius: 2 }}>
+        <Alert severity="warning">
+          {authError}
+        </Alert>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Please log in to view your inventory items.
+        </Typography>
+      </Box>
+    );
+  }
+
+  // Show loading state
   if (isLoading) {
     return (
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ 
+        p: 3, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center' 
+      }}>
+        <CircularProgress size={32} sx={{ mb: 2 }} />
         <Typography variant="body2" color="text.secondary">
           Loading inventory...
         </Typography>
@@ -231,6 +277,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
     );
   }
 
+  // Show error state
   if (errorMessage) {
     return (
       <Box sx={{ 
@@ -265,6 +312,14 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             Add your first item using the + button
           </Typography>
+          <Button 
+            variant="outlined" 
+            startIcon={<AddIcon />} 
+            size="small"
+            sx={{ mt: 2 }}
+          >
+            Add Item
+          </Button>
         </Box>
       ) : (
         <Box sx={{ 
@@ -274,6 +329,16 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ ite
           width: '100%',
           pr: 1,
         }}>
+          {/* User identification */}
+          <Box sx={{ mb: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary">
+              Viewing inventory for: {currentUser?.email || 'Unknown user'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {groupedItems.length} product groups from {items.length} total items
+            </Typography>
+          </Box>
+          
           {groupedItems.map((item, index) => {
             // For demonstration, using purchasePrice as current value
             const currentValue = item.purchasePrice;
