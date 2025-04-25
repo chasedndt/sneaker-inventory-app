@@ -41,6 +41,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { InventoryItem } from '../../pages/InventoryPage';
 import { api } from '../../services/api';
 import useFormat from '../../hooks/useFormat';
+import { useSettings } from '../../contexts/SettingsContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -80,7 +81,8 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   items
 }) => {
   const theme = useTheme();
-  const { money, getCurrentCurrency } = useFormat();
+  const { money } = useFormat();
+  const { getCurrentCurrency } = useSettings();
   const { currentUser, getAuthToken } = useAuth();
   const navigate = useNavigate();
   

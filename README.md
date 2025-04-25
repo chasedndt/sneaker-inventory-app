@@ -68,3 +68,38 @@ This section has moved here: [https://facebook.github.io/create-react-app/docs/d
 ### `npm run build` fails to minify
 
 This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+
+---
+
+## Backend Setup (Flask API)
+
+This project uses a Python virtual environment for backend dependencies (Flask, Firebase, etc). **You must activate the virtual environment before running backend commands.**
+
+### 1. Activate the virtual environment
+
+From the `backend` directory, run:
+
+```
+.\venv\Scripts\activate
+```
+You should see `(venv)` appear in your terminal prompt.
+
+### 2. Install dependencies (if needed)
+
+If you haven't already, install backend dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+### 3. Run the backend server
+
+With the virtual environment activated:
+
+```
+python app.py
+```
+
+**Note:** You must activate the virtual environment each time you open a new terminal before running backend commands. This is standard practice for Python projects to keep dependencies isolated.
+
+---

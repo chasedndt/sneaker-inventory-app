@@ -104,6 +104,9 @@ const ExpensesPage: React.FC = () => {
     return count;
   }, [filters]);
   
+  // Cooldown state to prevent infinite error loops
+  const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
+
   // Fetch expenses from API - now with auth handling
   const fetchExpenses = useCallback(async (showRefreshing = false) => {
     // Don't fetch if not authenticated

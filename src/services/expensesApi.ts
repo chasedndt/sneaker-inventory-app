@@ -7,6 +7,26 @@ export const API_BASE_URL = 'http://127.0.0.1:5000/api';
 /**
  * Service for interacting with the expenses API
  */
+// --- AUTHENTICATION HELPERS ---
+async function getAuthToken(): Promise<string> {
+  // Try to get the token from the window or context
+  if (typeof window !== 'undefined' && (window as any).getAuthToken) {
+    const token = await (window as any).getAuthToken();
+    if (!token) throw new Error('No auth token found');
+    return token;
+  }
+  throw new Error('No getAuthToken function available on window');
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`
+  };
+  console.log('➡️ Sending Authorization header:', headers['Authorization']);
+  return headers;
+}
+
 export const expensesApi = {
   /**
    * Get all expenses
@@ -36,10 +56,20 @@ export const expensesApi = {
         url += `?${queryString}`;
       }
       
+      // Get the auth headers (with logging)
+      let headers: Record<string, string> = {};
+      try {
+        headers = await getAuthHeaders();
+      } catch (tokenErr) {
+        console.error('❌ Unable to retrieve auth token:', tokenErr);
+        throw new Error('Authentication required. Please log in again.');
+      }
+      console.log('➡️ [getExpenses] Sending headers:', headers);
       // Make the request
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
+        headers,
       });
       
       if (!response.ok) {
@@ -69,9 +99,11 @@ export const expensesApi = {
   getExpense: async (id: number): Promise<Expense> => {
     try {
       console.log(`🔄 Fetching expense with ID ${id} from API...`);
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/expenses/${id}`, {
         method: 'GET',
         credentials: 'include',
+        headers
       });
       
       if (!response.ok) {
@@ -124,11 +156,12 @@ export const expensesApi = {
       }
       
       // Make the request to create the base expense
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/expenses`, {
         method: 'POST',
         credentials: 'include',
-        body: formData,
-        // Don't set Content-Type header, it will be set automatically for multipart/form-data
+        headers,
+        body: formData
       });
       
       if (!response.ok) {
@@ -225,11 +258,12 @@ export const expensesApi = {
       }
       
       // Make the request
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/expenses/${id}`, {
         method: 'PUT',
         credentials: 'include',
-        body: formData,
-        // Don't set Content-Type header, it will be set automatically with boundary
+        headers,
+        body: formData
       });
       
       if (!response.ok) {
@@ -268,9 +302,11 @@ export const expensesApi = {
   deleteExpense: async (id: number): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Deleting expense ${id}...`);
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/expenses/${id}`, {
         method: 'DELETE',
         credentials: 'include',
+        headers
       });
       
       if (!response.ok) {
@@ -322,9 +358,11 @@ export const expensesApi = {
       }
       
       // Make the request
+      const headers = await getAuthHeaders();
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
+        headers
       });
       
       if (!response.ok) {
@@ -355,9 +393,11 @@ export const expensesApi = {
   getExpenseTypes: async (): Promise<string[]> => {
     try {
       console.log('🔄 Fetching expense types from API...');
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/expenses/types`, {
         method: 'GET',
         credentials: 'include',
+        headers
       });
       
       if (!response.ok) {
@@ -412,9 +452,11 @@ export const expensesApi = {
       console.log('🔍 Making API request to:', url);
       
       // Make the request
+      const headers = await getAuthHeaders();
       const response = await fetch(url, {
         method: 'GET',
         credentials: 'include',
+        headers
       });
       
       if (!response.ok) {
@@ -453,12 +495,12 @@ export const expensesApi = {
   generateRecurringExpenses: async (): Promise<{ count: number }> => {
     try {
       console.log('🔄 Generating missing recurring expense entries...');
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
       const response = await fetch(`${API_BASE_URL}/expenses/generate-recurring`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers
       });
       
       if (!response.ok) {

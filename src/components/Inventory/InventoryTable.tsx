@@ -48,6 +48,7 @@ import dayjs from 'dayjs';
 import ImageViewer from '../common/ImageViewer';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
+import { useSettings } from '../../contexts/SettingsContext';
 
 // Sort order type
 type SortOrder = 'asc' | 'desc' | null;
@@ -99,7 +100,8 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
 }) => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { money, date, getCurrentCurrency } = useFormat();
+  const { money, date } = useFormat();
+  const { getCurrentCurrency } = useSettings();
   const { currentUser, getAuthToken } = useAuth();
   
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);

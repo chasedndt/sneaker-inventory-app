@@ -1,7 +1,7 @@
 // src/hooks/useDashboardData.ts
 import { useState, useEffect, useCallback } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
-import { api, Item } from '../services/api';
+import { api, Item, useApi } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
@@ -31,6 +31,7 @@ interface DashboardDataHook extends DashboardData {
  * Custom hook for fetching and filtering dashboard data
  */
 const useDashboardData = (): DashboardDataHook => {
+  const { isAuthenticated, loading: authLoading } = useApi();
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -49,25 +50,13 @@ const useDashboardData = (): DashboardDataHook => {
       
       console.log('🔄 Fetching inventory items, sales, and expenses data...');
       
-      // Fetch items data
-      const itemsData = await api.getItems();
-      
-      // Filter out sold items for active inventory
-      const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
-      console.log(`✅ Received ${activeItems.length} active items from API`);
-      
-      // Fetch sales data
-      const salesData = await salesApi.getSales();
-      console.log(`✅ Received ${salesData.length} sales records from API`);
-      
-      // Fetch expenses data
-      const expensesData = await expensesApi.getExpenses();
-      console.log(`✅ Received ${expensesData.length} expense records from API`);
+      // Fetch all necessary data in one call after authentication
+      const data = await dashboardService.getDashboardData();
       
       // Update state with all datasets
-      setItems(activeItems);
-      setSales(salesData);
-      setExpenses(expensesData);
+      setItems(data.items);
+      setSales(data.sales);
+      setExpenses(data.expenses);
       setError(null);
       
     } catch (err: any) {
@@ -79,10 +68,13 @@ const useDashboardData = (): DashboardDataHook => {
     }
   }, []);
 
-  // Initial data load
+  // Only fetch data after authentication is verified
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isAuthenticated && !authLoading) {
+      fetchData();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, authLoading]);
 
   // Filter data based on date range
   const getFilteredData = (startDate: Dayjs | null, endDate: Dayjs | null): FilteredData => {

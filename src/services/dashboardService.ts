@@ -1,6 +1,9 @@
 // src/services/dashboardService.ts
 import { Item } from './api';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from './api';
+import { salesApi } from './salesApi';
+import { expensesApi } from './expensesApi';
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
@@ -61,6 +64,8 @@ export interface ComprehensiveMetrics {
   };
 }
 
+
+
 // Helper function to get auth token - retrieved from window global
 // This is set up in the api.ts file by the useApi hook
 const getAuthToken = async (): Promise<string | null> => {
@@ -69,6 +74,7 @@ const getAuthToken = async (): Promise<string | null> => {
   }
   return null;
 };
+
 
 export const dashboardService = {
   /**
@@ -222,6 +228,30 @@ export const dashboardService = {
       console.error('💥 Error fetching dashboard metrics:', error);
       
       // If the API fails, throw error for proper handling
+      throw error;
+    }
+  },
+
+  /**
+   * Fetches all dashboard data (items, sales, expenses) in parallel for useDashboardData
+   * @returns {Promise<{items: Item[], sales: Sale[], expenses: Expense[]}>}
+   */
+  getDashboardData: async () => {
+    try {
+      // Ensure authentication
+      const token = await getAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view dashboard data.');
+      }
+      // Fetch all in parallel
+      const [items, sales, expenses] = await Promise.all([
+        api.getItems(),
+        salesApi.getSales(),
+        expensesApi.getExpenses()
+      ]);
+      return { items, sales, expenses };
+    } catch (error) {
+      console.error('💥 Error fetching dashboard data (items, sales, expenses):', error);
       throw error;
     }
   }

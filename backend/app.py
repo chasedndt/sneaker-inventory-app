@@ -18,8 +18,22 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 import uuid
 import calendar
-from middleware.auth import require_auth, get_user_id_from_token, get_current_user_info
+from auth_helpers import require_auth
+from middleware.auth import get_user_id_from_token, get_current_user_info
 from admin.admin_routes import admin_routes
+
+# ── Firebase Admin initialisation ───────────────────────────────────
+import firebase_admin
+from firebase_admin import credentials
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+cred_path = os.path.join(BASE_DIR, "firebase-credentials.json")
+
+# Only initialise once per process
+if not firebase_admin._apps:
+    cred = credentials.Certificate(cred_path)
+    firebase_admin.initialize_app(cred)
+# ────────────────────────────────────────────────────────────────────
 
 
 def convert_to_snake_case(name):
@@ -31,15 +45,10 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     
-    CORS(app, resources={
-        r"/api/*": {
-            "origins": ["http://localhost:3000"],
-            "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],  # Added Authorization header
-            "max_age": 3600,
-            "supports_credentials": True
-        }
-    })
+    # Secure CORS for frontend authentication
+    CORS(app,
+         origins=["http://localhost:3000"],
+         supports_credentials=True)
 
     db.init_app(app)
     Migrate(app, db)
@@ -51,15 +60,16 @@ def create_app():
     app.register_blueprint(admin_routes, url_prefix='/api')
 
     # Set up standard application logging
+    # Reduced log level from DEBUG to INFO to prevent excessive log spamming in production
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
     logger = logging.getLogger(__name__)
 
     # Set up detailed logging for image requests
     image_logger = logging.getLogger('image_requests')
-    image_logger.setLevel(logging.DEBUG)
+    image_logger.setLevel(logging.INFO)  # Reduced from DEBUG to INFO
     handler = logging.FileHandler('image_requests.log')
     handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     image_logger.addHandler(handler)
@@ -76,6 +86,11 @@ def create_app():
     def test_connection():
         logger.info("Test endpoint hit")
         return jsonify({'status': 'connected'}), 200
+
+    # Health check endpoint
+    @app.route('/api/ping', methods=['GET'])
+    def health_check():
+        return jsonify({'status': 'ok'}), 200
     
     # Get user info endpoint
     @app.route('/api/user', methods=['GET'])
@@ -156,7 +171,7 @@ def create_app():
         Get all items with their images for current user.
         """
         try:
-            logger.info(f"📊 Fetching items for user_id: {user_id}")
+            logger.debug(f"📊 Fetching items for user_id: {user_id}")
             items = Item.query.filter_by(user_id=user_id).all()
             
             # Convert items to dictionary format with image URLs
@@ -165,7 +180,7 @@ def create_app():
                 item_dict = item.to_dict()
                 items_data.append(item_dict)
             
-            logger.info(f"✅ Retrieved {len(items_data)} items for user_id: {user_id}")
+            logger.debug(f"✅ Retrieved {len(items_data)} items for user_id: {user_id}")
             return jsonify(items_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")
@@ -685,7 +700,7 @@ def create_app():
         Get all sales for the current user.
         """
         try:
-            logger.info(f"📊 Fetching sales for user_id: {user_id}")
+            logger.debug(f"📊 Fetching sales for user_id: {user_id}")
             sales = Sale.query.filter_by(user_id=user_id).all()
             
             # Convert sales to dictionary format with item details
@@ -728,7 +743,7 @@ def create_app():
                 
                 sales_data.append(sale_dict)
             
-            logger.info(f"✅ Retrieved {len(sales_data)} sales for user_id: {user_id}")
+            logger.debug(f"✅ Retrieved {len(sales_data)} sales for user_id: {user_id}")
             return jsonify(sales_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching sales: {str(e)}")
@@ -1105,6 +1120,7 @@ def create_app():
         try:
             logger.info(f"📋 Fetching expenses for user {user_id}")
             expenses = Expense.query.filter_by(user_id=user_id).order_by(Expense.expense_date.desc()).all()
+            logger.info(f"[EXPENSES] user_id: {user_id}, expenses found: {len(expenses)}")
             return jsonify([expense.to_dict() for expense in expenses])
         except Exception as e:
             logger.error(f"💥 Error fetching expenses for user {user_id}: {str(e)}")
@@ -1882,7 +1898,7 @@ def create_app():
         Get comprehensive dashboard KPI metrics for the current user.
         """
         try:
-            logger.info(f"📊 Generating comprehensive dashboard KPI metrics for user {user_id}")
+            logger.debug(f"📊 Generating comprehensive dashboard KPI metrics for user {user_id}")
             
             # Get query parameters for date filtering
             start_date_str = request.args.get('start_date')
@@ -2142,7 +2158,7 @@ def create_app():
                 }
             }
             
-            logger.info(f"✅ Generated comprehensive dashboard KPI metrics for user {user_id}")
+            logger.debug(f"✅ Generated comprehensive dashboard KPI metrics for user {user_id}")
             return jsonify(metrics), 200
         except Exception as e:
             logger.error(f"💥 Error generating dashboard KPI metrics for user {user_id}: {str(e)}")
@@ -2251,32 +2267,32 @@ def create_app():
             image_logger.error(f"💥 Error checking image {filename}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-        @app.before_request
-        def log_request_info():
-            logger.debug('Headers: %s', request.headers)
-            logger.debug('Body: %s', request.get_data())
+    @app.before_request
+    def log_request_info():
+        logger.debug('Headers: %s', request.headers)
+        logger.debug('Body: %s', request.get_data())
 
-        return app
+    return app
 
 
-    app = create_app()
+app = create_app()
 
-    @app.shell_context_processor
-    def make_shell_context():
-        return {
-            'db': db, 
-            'Item': Item, 
-            'Size': Size, 
-            'Image': Image, 
-            'Tag': Tag, 
-            'Sale': Sale, 
-            'Expense': Expense,
-            'Coplist': Coplist,
-            'UserSettings': UserSettings
-        }
+@app.shell_context_processor
+def make_shell_context():
+    return {
+        'db': db, 
+        'Item': Item, 
+        'Size': Size, 
+        'Image': Image, 
+        'Tag': Tag, 
+        'Sale': Sale, 
+        'Expense': Expense,
+        'Coplist': Coplist,
+        'UserSettings': UserSettings
+    }
 
-    if __name__ == '__main__':
-        logger = logging.getLogger(__name__)
-        logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
-        logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
-        app.run(debug=True, host='127.0.0.1', port=5000)
+if __name__ == '__main__':
+    logger = logging.getLogger(__name__)
+    logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
+    logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
+    app.run(debug=True, host='127.0.0.1', port=5000)

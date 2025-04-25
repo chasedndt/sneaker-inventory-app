@@ -19,7 +19,7 @@ import useFormat from '../hooks/useFormat';
 const SettingsDemo: React.FC = () => {
   const theme = useTheme();
   const { darkMode, currency, dateFormat } = useSettings();
-  const { date, money, convertAndFormat } = useFormat();
+  const { date, money } = useFormat();
   
   // Sample data for demonstration
   const today = new Date();
@@ -109,7 +109,7 @@ const SettingsDemo: React.FC = () => {
         <ListItem>
           <ListItemText 
             primary="Euro Amount (€185.50)" 
-            secondary={convertAndFormat(sampleAmountEUR, 'EUR')} 
+            secondary={money(sampleAmountEUR, 'EUR')} 
             primaryTypographyProps={{ variant: 'body2' }}
             secondaryTypographyProps={{ 
               sx: { 
@@ -122,7 +122,7 @@ const SettingsDemo: React.FC = () => {
         <ListItem>
           <ListItemText 
             primary="British Pound Amount (£156.75)" 
-            secondary={convertAndFormat(sampleAmountGBP, 'GBP')} 
+            secondary={money(sampleAmountGBP, 'GBP')} 
             primaryTypographyProps={{ variant: 'body2' }}
             secondaryTypographyProps={{ 
               sx: { 

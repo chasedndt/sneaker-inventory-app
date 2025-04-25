@@ -173,8 +173,10 @@ const InventoryPage: React.FC = () => {
   
   // Active filter state
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
+  
+  // Cooldown state to prevent infinite error loops
+  const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
 
-  // Redirect to login if not authenticated
   useEffect(() => {
     if (!authLoading && !currentUser) {
       console.log('User not authenticated, redirecting to login');

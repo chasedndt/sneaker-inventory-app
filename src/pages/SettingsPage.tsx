@@ -13,7 +13,6 @@ import {
   Divider,
   Grid,
   useTheme,
-  Alert,
   Snackbar,
   Button,
   RadioGroup,
@@ -27,6 +26,7 @@ import {
   TableHead,
   TableRow
 } from '@mui/material';
+import MuiAlert from '@mui/material/Alert';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
@@ -360,27 +360,20 @@ const SettingsPage: React.FC = () => {
             </Typography>
           </Box>
           <Divider sx={{ mb: 3 }} />
-          
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Export Settings</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Export your settings as a JSON file that you can import later or on another device.
-              </Typography>
-              <Button 
-                variant="outlined" 
+              <Button
+                variant="outlined"
+                startIcon={<SaveIcon />}
                 onClick={() => {
-                  // Create settings object
-                  const exportData = {
-                    darkMode: darkMode,
-                    currency: currency,
-                    dateFormat: dateFormat,
-                    exportDate: new Date().toISOString()
-                  };
-                  
                   // Convert to JSON
+                  const exportData = {
+                    darkMode,
+                    currency,
+                    dateFormat
+                  };
                   const jsonString = JSON.stringify(exportData, null, 2);
-                  
                   // Create download link
                   const blob = new Blob([jsonString], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
@@ -389,11 +382,9 @@ const SettingsPage: React.FC = () => {
                   a.download = `hypelist-settings-${new Date().toISOString().split('T')[0]}.json`;
                   document.body.appendChild(a);
                   a.click();
-                  
                   // Clean up
                   document.body.removeChild(a);
                   URL.revokeObjectURL(url);
-                  
                   setSnackbar({
                     open: true,
                     message: 'Settings exported successfully',
@@ -404,7 +395,6 @@ const SettingsPage: React.FC = () => {
                 Export Settings
               </Button>
             </Grid>
-            
             <Grid item xs={12} md={6}>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Import Settings</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -419,17 +409,13 @@ const SettingsPage: React.FC = () => {
                   type="file"
                   accept=".json"
                   hidden
-                  onChange={(e) => {
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    
                     const reader = new FileReader();
                     reader.onload = (event) => {
                       try {
-                        // Parse the JSON
                         const importedSettings = JSON.parse(event.target?.result as string);
-                        
-                        // Validate the imported settings
                         if (
                           typeof importedSettings.darkMode !== 'boolean' ||
                           typeof importedSettings.currency !== 'string' ||
@@ -437,20 +423,16 @@ const SettingsPage: React.FC = () => {
                         ) {
                           throw new Error('Invalid settings format');
                         }
-                        
                         // Apply the settings immediately
                         if (importedSettings.darkMode !== darkMode) {
                           toggleDarkMode();
                         }
-                        
                         if (importedSettings.currency !== currency) {
                           setCurrency(importedSettings.currency);
                         }
-                        
                         if (importedSettings.dateFormat !== dateFormat) {
                           setDateFormat(importedSettings.dateFormat);
                         }
-                        
                         setSnackbar({
                           open: true,
                           message: 'Settings imported and applied successfully',
@@ -465,7 +447,6 @@ const SettingsPage: React.FC = () => {
                         });
                       }
                     };
-                    
                     reader.readAsText(file);
                   }}
                 />
@@ -474,24 +455,22 @@ const SettingsPage: React.FC = () => {
           </Grid>
         </Paper>
       </Grid>
-
       {/* Notification Snackbar */}
       <Snackbar 
-        open={snackbar.open} 
-        autoHideDuration={6000} 
+        open={snackbar.open}
+        autoHideDuration={6000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert 
-          onClose={handleCloseSnackbar} 
+        <MuiAlert 
+          onClose={handleCloseSnackbar}
           severity={snackbar.severity}
           sx={{ width: '100%' }}
         >
           {snackbar.message}
-        </Alert>
+        </MuiAlert>
       </Snackbar>
     </Box>
   );
 };
-
 export default SettingsPage;

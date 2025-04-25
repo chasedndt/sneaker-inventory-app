@@ -7,91 +7,7 @@ import os
 import json
 import time
 
-# Initialize Firebase Admin with service account
-firebase_initialized = False
 
-def initialize_firebase():
-    global firebase_initialized
-    if not firebase_initialized:
-        try:
-            # Path to service account credentials file
-            service_account_path = os.path.join(os.path.dirname(__file__), '../firebase-credentials.json')
-            
-            # Check if file exists
-            if not os.path.exists(service_account_path):
-                # Create a temporary credentials file from environment variable if available
-                firebase_credentials = os.environ.get('FIREBASE_CREDENTIALS')
-                if firebase_credentials:
-                    try:
-                        # Parse JSON string from environment variable
-                        creds_dict = json.loads(firebase_credentials)
-                        with open(service_account_path, 'w') as f:
-                            json.dump(creds_dict, f)
-                        print(f"✅ Created Firebase credentials file from environment variable")
-                    except Exception as e:
-                        print(f"❌ Failed to create Firebase credentials file from environment: {str(e)}")
-                        return False
-                else:
-                    print(f"❌ Firebase credentials file not found at {service_account_path}")
-                    return False
-            
-            # Initialize Firebase Admin SDK
-            cred = credentials.Certificate(service_account_path)
-            firebase_admin.initialize_app(cred)
-            firebase_initialized = True
-            print("✅ Firebase Admin SDK initialized successfully")
-            return True
-        except Exception as e:
-            print(f"❌ Failed to initialize Firebase Admin SDK: {str(e)}")
-            return False
-    
-    return firebase_initialized
-
-# Decorator for routes that require authentication
-def require_auth(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Get the authorization header
-        auth_header = request.headers.get('Authorization')
-        
-        # Check if header is missing
-        if not auth_header:
-            return jsonify({'error': 'Authorization header is required'}), 401
-        
-        # Format should be "Bearer <token>"
-        parts = auth_header.split()
-        if parts[0].lower() != 'bearer' or len(parts) != 2:
-            return jsonify({'error': 'Authorization header must be in format "Bearer <token>"'}), 401
-        
-        token = parts[1]
-        
-        # Try to verify the token with Firebase
-        try:
-            # Initialize Firebase if not already done
-            if not initialize_firebase():
-                return jsonify({'error': 'Firebase authentication is unavailable'}), 500
-            
-            # Verify the token
-            decoded_token = auth.verify_id_token(token)
-            
-            # Extract user_id
-            user_id = decoded_token['uid']
-            
-            # Pass the user_id to the route handler
-            kwargs['user_id'] = user_id
-            
-            return f(*args, **kwargs)
-        except auth.ExpiredIdTokenError:
-            return jsonify({'error': 'Token has expired. Please log in again.'}), 401
-        except auth.InvalidIdTokenError:
-            return jsonify({'error': 'Invalid token. Please log in again.'}), 401
-        except auth.RevokedIdTokenError:
-            return jsonify({'error': 'Token has been revoked. Please log in again.'}), 401
-        except Exception as e:
-            current_app.logger.error(f"Authentication error: {str(e)}")
-            return jsonify({'error': 'Failed to authenticate token'}), 401
-    
-    return decorated_function
 
 # Decorator for routes that require admin privileges
 def require_admin(f):
@@ -161,10 +77,6 @@ def get_user_id_from_token():
         
         token = parts[1]
         
-        # Initialize Firebase if not already done
-        if not initialize_firebase():
-            return None
-        
         # Verify the token
         decoded_token = auth.verify_id_token(token)
         
@@ -179,9 +91,6 @@ def get_user_id_from_token():
 # Function to check if a user has admin privileges
 def is_admin(user_id):
     try:
-        if not initialize_firebase():
-            return False
-        
         # Get the user's custom claims
         user = auth.get_user(user_id)
         custom_claims = user.custom_claims or {}
@@ -223,9 +132,6 @@ def set_user_admin_status(email, admin_status=True):
     Returns (success, message)
     """
     try:
-        if not initialize_firebase():
-            return False, "Firebase initialization failed"
-        
         # Get the user by email
         try:
             user = auth.get_user_by_email(email)
@@ -251,9 +157,6 @@ def get_all_users(limit=1000):
     Returns list of user records
     """
     try:
-        if not initialize_firebase():
-            return None
-        
         # List all users
         page = auth.list_users()
         users = []
@@ -290,9 +193,6 @@ def create_user(email, password, display_name=None, is_admin=False):
     Returns (success, user_record or error_message)
     """
     try:
-        if not initialize_firebase():
-            return False, "Firebase initialization failed"
-        
         # Create the user
         user_properties = {
             'email': email,
@@ -321,9 +221,6 @@ def delete_user(uid):
     Returns (success, message)
     """
     try:
-        if not initialize_firebase():
-            return False, "Firebase initialization failed"
-        
         # Delete the user
         auth.delete_user(uid)
         return True, f"User {uid} deleted successfully"
@@ -340,9 +237,6 @@ def update_user(uid, properties):
     Returns (success, user_record or error_message)
     """
     try:
-        if not initialize_firebase():
-            return False, "Firebase initialization failed"
-        
         # Update the user
         user_record = auth.update_user(uid, **properties)
         return True, user_record
@@ -358,9 +252,6 @@ def get_user_by_id(uid):
     Returns user record or None
     """
     try:
-        if not initialize_firebase():
-            return None
-        
         user_record = auth.get_user(uid)
         
         return {

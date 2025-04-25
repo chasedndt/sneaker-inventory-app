@@ -59,6 +59,27 @@ export interface UpdateSaleData extends RecordSaleData {
   id: number;
 }
 
+const getAuthToken = async () => {
+  const getToken = window.getAuthToken;
+  if (!getToken) {
+    throw new Error('Authentication function not available.');
+  }
+  const token = await getToken();
+  if (!token) {
+    throw new Error('Authentication required.');
+  }
+  return token;
+};
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const token = await getAuthToken();
+  const headers: Record<string, string> = {
+    'Authorization': `Bearer ${token}`
+  };
+  console.log('➡️ Sending Authorization header:', headers['Authorization']);
+  return headers;
+};
+
 export const salesApi = {
   /**
    * Get all sales
@@ -67,8 +88,10 @@ export const salesApi = {
   getSales: async (): Promise<Sale[]> => {
     try {
       console.log('🔄 Fetching sales from API...');
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/sales`, {
         method: 'GET',
+        headers,
         credentials: 'include',
       });
       
@@ -114,8 +137,10 @@ export const salesApi = {
   getSale: async (id: number): Promise<Sale> => {
     try {
       console.log(`🔄 Fetching sale with ID ${id} from API...`);
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/sales/${id}`, {
         method: 'GET',
+        headers,
         credentials: 'include',
       });
       
@@ -153,11 +178,11 @@ export const salesApi = {
   recordSale: async (saleData: RecordSaleData): Promise<Sale> => {
     try {
       console.log('🔄 Recording new sale...', saleData);
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
       const response = await fetch(`${API_BASE_URL}/sales`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify(saleData),
       });
@@ -185,11 +210,11 @@ export const salesApi = {
   updateSale: async (id: number, saleData: UpdateSaleData): Promise<Sale> => {
     try {
       console.log(`🔄 Updating sale ${id}...`, saleData);
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
       const response = await fetch(`${API_BASE_URL}/sales/${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify(saleData),
       });
@@ -220,6 +245,8 @@ export const salesApi = {
       console.log(`🔄 Updating field ${field} of sale ${id} to ${value}...`);
       
       // Prepare the update data
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
       const updateData = {
         field,
         value
@@ -227,9 +254,7 @@ export const salesApi = {
       
       const response = await fetch(`${API_BASE_URL}/sales/${id}/field`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify(updateData),
       });
@@ -256,8 +281,10 @@ export const salesApi = {
   deleteSale: async (id: number): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Deleting sale ${id}...`);
+      const headers = await getAuthHeaders();
       const response = await fetch(`${API_BASE_URL}/sales/${id}`, {
         method: 'DELETE',
+        headers,
         credentials: 'include',
       });
       
@@ -304,9 +331,11 @@ export const salesApi = {
       
       console.log('🔍 Making API request to:', url);
       
+      const headers = await getAuthHeaders();
       // Make the request
       const response = await fetch(url, {
         method: 'GET',
+        headers,
         credentials: 'include',
       });
       
