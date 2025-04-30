@@ -71,6 +71,14 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
   loading = false,
   currentUser = null
 }) => {
+  // Debug log for all props
+  console.log('[PortfolioValue][DEBUG] Rendered with:', {
+    currentUser,
+    currentValue,
+    valueChange,
+    percentageChange,
+    data
+  });
   const { money } = useFormat();
   
   // If loading, show skeleton

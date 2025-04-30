@@ -20,7 +20,8 @@ import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // Fo
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // For help/info tooltip
 import AddIcon from '@mui/icons-material/Add'; // For add button
 import { Item } from '../services/api';
-import { getImageUrl, checkImageExists, handleImageLoadError } from '../utils/imageUtils';
+import { getImageUrl, checkImageExists, getCategoryPlaceholderImage, handleImageLoadError } from '../utils/imageUtils';
+import { useAuth } from '../contexts/AuthContext';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
 import { User } from 'firebase/auth';
 
@@ -89,6 +90,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const apiBaseUrl = 'http://127.0.0.1:5000/api';
+  const { getAuthToken } = useAuth();
 
   // Check authentication status
   useEffect(() => {
@@ -170,7 +172,20 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
             console.log(`📷 Found image for item ${item.id}: ${firstImage}`);
             
             // Verify the image exists
-            const exists = await checkImageExists(firstImage);
+            const authToken = await getAuthToken();
+            if (!authToken) {
+              console.error('[EnhancedInventoryDisplay] No authToken available for image check. Skipping image existence check.');
+              updatedItems[i] = {
+                ...item,
+                imageLoading: false,
+                imageError: true,
+                placeholderMessage: 'Missing authentication for image check.'
+              };
+              hasChanges = true;
+              continue;
+            }
+            console.log('[EnhancedInventoryDisplay] Using authToken for image check:', authToken ? '[REDACTED]' : 'undefined');
+            const exists = await checkImageExists(firstImage, authToken);
             
             if (exists) {
               console.log(`✅ Image verified for item ${item.id}: ${firstImage}`);

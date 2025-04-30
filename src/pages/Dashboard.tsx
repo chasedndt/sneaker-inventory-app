@@ -98,28 +98,12 @@ const Dashboard: React.FC = () => {
   // --- State for backend health ---
   const [backendStatus, setBackendStatus] = useState<'ok' | 'down' | 'unknown'>('unknown');
   const [backendError, setBackendError] = useState<string | null>(null);
-  // DEBUG: Confirm component function invocation
-  console.log('[Dashboard] Component function invoked');
   const theme = useTheme();
   const auth = useAuth();
   const currentUser = auth.currentUser;
   const authLoading = auth.loading;
   const getAuthToken = auth.getAuthToken;
-
-  // --- DEBUG LOGGING ---
-  useEffect(() => {
-    console.log('[Dashboard] useEffect for authLoading/currentUser ran');
-    console.log('[Dashboard] Auth loading:', authLoading, '| Current user:', currentUser);
-  }, [authLoading, currentUser]);
-
-  // Get api instance (must be at top level, not inside useMemo)
   const api = useApi();
-
-  // Debug backendStatus changes
-  useEffect(() => {
-    console.log('[Dashboard] useEffect for backendStatus:', backendStatus);
-  }, [backendStatus]);
-  
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]); 
@@ -137,6 +121,40 @@ const Dashboard: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
   const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
+
+  // --- DEBUG: Log all main state before render ---
+  console.log('[Dashboard][DEBUG] Render:', {
+    loading,
+    authLoading,
+    backendStatus,
+    backendError,
+    currentUser,
+    items,
+    sales,
+    expenses,
+    error
+  });
+
+  // --- DEBUG LOGGING ---
+  useEffect(() => {
+    console.log('[Dashboard] useEffect for authLoading/currentUser ran');
+    console.log('[Dashboard] Auth loading:', authLoading, '| Current user:', currentUser);
+  }, [authLoading, currentUser]);
+
+  // Debug backendStatus changes
+  useEffect(() => {
+    console.log('[Dashboard] useEffect for backendStatus:', backendStatus);
+  }, [backendStatus]);
+
+  // Debug: Warn if loading is stuck
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.warn('[Dashboard][DEBUG] Loading is still true after 10 seconds!');
+      }
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, [loading]);
 
   // Add debugging to test profit calculation
   useEffect(() => {
@@ -197,7 +215,7 @@ const Dashboard: React.FC = () => {
       }
       if (!currentUser) {
         console.warn('[Dashboard] User not authenticated, cannot fetch dashboard data');
-        setError('Please log in to view your dashboard');
+        setError('Please log in to view your dashboard (user not authenticated).');
         setLoading(false);
         return;
       }
@@ -210,7 +228,10 @@ const Dashboard: React.FC = () => {
       const token = await getAuthToken();
       if (!token) {
         console.error('[Dashboard] No auth token found.');
-        throw new Error('Authentication required. Please log in to view dashboard data.');
+        setError('Authentication token could not be retrieved. Please log out and log in again.');
+        setLoading(false);
+        setRefreshing(false);
+        return;
       }
       try {
         // Fetch items data
@@ -239,6 +260,8 @@ const Dashboard: React.FC = () => {
         setSales(salesData);
         setExpenses(expensesData);
         setError(null);
+        setLoading(false);
+        setRefreshing(false);
         
         // Show success message if refreshing
         if (showRefreshing) {
@@ -249,54 +272,24 @@ const Dashboard: React.FC = () => {
           });
         }
       } catch (error: any) {
-        console.error('💥 Error fetching data:', error);
-        
-        // Prevent infinite reload: show error only once per 5 seconds
-        if (error.message && (error.message.includes('Authentication') || error.message.includes('401'))) {
-          if (!authErrorCooldown) {
-            console.warn('[Dashboard] Authentication error handler triggered. Showing snackbar and enabling cooldown.');
-            setSnackbar({
-              open: true,
-              message: 'Authentication error. Please check backend logs or login again.',
-              severity: 'error'
-            });
-            setAuthErrorCooldown(true);
-            setTimeout(() => {
-              setAuthErrorCooldown(false);
-              console.log('[Dashboard] Auth error cooldown expired.');
-            }, 5000);
-          } else {
-            console.log('[Dashboard] Auth error cooldown active. Skipping repeated error display.');
-          }
-        } else {
-          setError(`Failed to load dashboard data: ${error.message}`);
-          setSnackbar({
-            open: true,
-            message: `Error loading data: ${error.message}`,
-            severity: 'error'
-          });
-        }
+        console.error('[Dashboard] Error fetching dashboard data:', error);
+        setError('Error fetching dashboard data: ' + (error.message || error.toString()));
+        setLoading(false);
+        setRefreshing(false);
       }
     } catch (error: any) {
-      // If fetch fails due to network/backend down, show backend error and stop retrying
-      if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
-        setBackendStatus('down');
-        setBackendError('Backend is unreachable. Please check your server.');
-        setError('Backend is unreachable. Please check your server.');
-      } else {
-        setError(`Failed to load dashboard data: ${error.message}`);
-      }
+      console.error('[Dashboard] Error during fetchData:', error);
+      setError('Error during fetchData: ' + (error.message || error.toString()));
       setLoading(false);
       setRefreshing(false);
     }
-  }, [currentUser, getAuthToken, api, checkBackend]);
+  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus]);
 
   // Backend health check on mount and when user logs in/out
   useEffect(() => {
     checkBackend();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]); // On mount and user change
-
 
   // Initial data load after authentication check
   // Only fetch data on mount or when auth finishes and backend is up
@@ -488,7 +481,10 @@ const Dashboard: React.FC = () => {
         gap: 2
       }}>
         <Alert severity="warning" sx={{ maxWidth: 400 }}>
-          You need to be logged in to view your dashboard.
+          <strong>Not Authenticated:</strong> You need to be logged in to view your dashboard.<br />
+          <span style={{ fontSize: '0.9em', color: '#888' }}>
+            (If you are logged in and see this, there may be an issue with authentication state propagation. Try refreshing, logging out, and logging in again.)
+          </span>
         </Alert>
       </Box>
     );
@@ -509,6 +505,16 @@ const Dashboard: React.FC = () => {
         <Typography color={theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.7)' : 'text.secondary'}>
           Loading your dashboard...
         </Typography>
+        {authLoading && (
+          <Typography color="error" sx={{ mt: 1 }}>
+            Waiting for authentication to complete...
+          </Typography>
+        )}
+        {!authLoading && !currentUser && (
+          <Typography color="error" sx={{ mt: 1 }}>
+            No authenticated user found. Please log in.
+          </Typography>
+        )}
       </Box>
     );
   }

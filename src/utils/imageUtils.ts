@@ -28,15 +28,27 @@ export const getImageUrl = (filename: string | undefined, itemId?: number): stri
  * @param filename The filename to check
  * @returns Promise<boolean> indicating if the image exists
  */
-export const checkImageExists = async (filename: string | undefined): Promise<boolean> => {
+/**
+ * Checks if an image exists on the server for the authenticated user.
+ * @param filename The filename to check
+ * @param authToken The authentication token (required)
+ * @returns Promise<boolean> indicating if the image exists
+ */
+export const checkImageExists = async (filename: string | undefined, authToken: string): Promise<boolean> => {
   if (!filename) {
     console.error('❌ Empty filename provided to checkImageExists');
+    return false;
+  }
+  if (!authToken) {
+    console.error('❌ Missing authToken in checkImageExists');
     return false;
   }
   
   try {
     console.log(`🔍 Checking if image exists: ${filename}`);
-    const response = await fetch(`${API_BASE_URL}/check-image/${filename}`);
+    const response = await fetch(`${API_BASE_URL}/check-image/${filename}`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
     
     if (!response.ok) {
       console.error(`❌ Image check failed with status ${response.status} for ${filename}`);

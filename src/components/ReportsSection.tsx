@@ -133,6 +133,16 @@ const ReportsSection: React.FC<ReportsSectionProps> = ({
   
   // State for metrics data
   const [metricsData, setMetricsData] = useState<MetricsData | null>(null);
+  // Debug log for all props and metrics state
+  console.log('[ReportsSection][DEBUG] Rendered with:', {
+    items,
+    sales,
+    expenses,
+    startDate,
+    endDate,
+    currentUser,
+    metricsData
+  });
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(0);
