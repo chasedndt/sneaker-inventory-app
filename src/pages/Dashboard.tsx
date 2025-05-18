@@ -384,62 +384,202 @@ const Dashboard: React.FC = () => {
       return sum + marketPrice;
     }, 0);
     
-    // For historical comparison, we still use the date range to estimate growth
-    let previousValue = currentValue * 0.95; // Default fallback
+    // For historical comparison, determine a reasonable previous value based on time period
+    let previousValue = currentValue;
+    let percentageChange = 0;
+    let valueChange = 0;
     
-    // If we have a date range, try to calculate a more accurate previous value
-    if (startDate && endDate) {
-      // Calculate time difference in days
-      const daysDifference = endDate.diff(startDate, 'day');
+    // Generate historical portfolio data for the graph based on selected time range
+    let historicalData = [];
+    
+    // Helper function to add realistic fluctuations to data points
+    const addFluctuation = (baseValue: number, volatility: number = 0.02): number => {
+      const fluctuation = (Math.random() * 2 - 1) * baseValue * volatility;
+      return baseValue + fluctuation;
+    };
+    
+    // Create different patterns based on the selected time range
+    if (timeRange === '24H') {
+      // 24 hour view - small fluctuations, slight uptrend
+      previousValue = currentValue * 0.99;
+      valueChange = currentValue - previousValue;
       
-      // For periods longer than 7 days, use a more significant historical difference
-      if (daysDifference >= 7) {
-        previousValue = currentValue * 0.92; // 8% difference for longer periods
-      } else if (daysDifference >= 30) {
-        previousValue = currentValue * 0.85; // 15% difference for monthly view
+      // Generate hourly data points
+      const numPoints = 8;
+      for (let i = 0; i < numPoints; i++) {
+        const pointDate = dayjs().subtract(numPoints - i - 1, 'hour');
+        const dateValue = pointDate.format('h A');
+        
+        // More fluctuation for intraday data
+        const progress = i / (numPoints - 1);
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.005);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else if (timeRange === '1W') {
+      // 1 week view - moderate fluctuations
+      previousValue = currentValue * 0.97;
+      valueChange = currentValue - previousValue;
+      
+      // Generate daily data points for the week
+      for (let i = 6; i >= 0; i--) {
+        const pointDate = dayjs().subtract(i, 'day');
+        const dateValue = pointDate.format('M/D');
+        
+        // Create a dip in the middle of the week for visual interest
+        let progress;
+        if (i > 3) {
+          progress = (6 - i) / 3; // First half of week
+        } else if (i === 3) {
+          progress = 0.8; // Midweek dip
+        } else {
+          progress = 0.8 + (3 - i) / 3 * 0.2; // Recovery
+        }
+        
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.01);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else if (timeRange === '1M') {
+      // 1 month view - larger changes
+      previousValue = currentValue * 0.92;
+      valueChange = currentValue - previousValue;
+      
+      // Generate weekly data points for the month
+      const numPoints = 5; // ~4-5 weeks in a month
+      for (let i = 0; i < numPoints; i++) {
+        const pointDate = dayjs().subtract(numPoints - i - 1, 'week');
+        const dateValue = pointDate.format('M/D');
+        
+        // Create a more interesting curve with a plateau and then growth
+        let progress;
+        if (i < numPoints / 2) {
+          progress = i / (numPoints / 2) * 0.4; // Slow start
+        } else {
+          progress = 0.4 + (i - numPoints / 2) / (numPoints / 2) * 0.6; // Faster finish
+        }
+        
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.02);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else if (timeRange === '3M') {
+      // 3 month view - significant changes
+      previousValue = currentValue * 0.85;
+      valueChange = currentValue - previousValue;
+      
+      // Generate bi-weekly data points
+      const numPoints = 7; // ~6-7 bi-weekly periods in 3 months
+      for (let i = 0; i < numPoints; i++) {
+        const pointDate = dayjs().subtract((numPoints - i - 1) * 2, 'week');
+        const dateValue = pointDate.format('M/D');
+        
+        // Create a curve with a dip and recovery
+        let progress;
+        if (i < numPoints / 3) {
+          progress = i / (numPoints / 3) * 0.3; // Initial growth
+        } else if (i < 2 * numPoints / 3) {
+          const dip = (i - numPoints / 3) / (numPoints / 3);
+          progress = 0.3 - dip * 0.1; // Dip
+        } else {
+          const recovery = (i - 2 * numPoints / 3) / (numPoints / 3);
+          progress = 0.2 + recovery * 0.8; // Strong recovery
+        }
+        
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.03);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else if (timeRange === '6M') {
+      // 6 month view - major changes
+      previousValue = currentValue * 0.75;
+      valueChange = currentValue - previousValue;
+      
+      // Generate monthly data points
+      for (let i = 5; i >= 0; i--) {
+        const pointDate = dayjs().subtract(i, 'month');
+        const dateValue = pointDate.format('MMM');
+        
+        // Create a realistic growth curve with a plateau in the middle
+        let progress;
+        if (i > 3) {
+          progress = (5 - i) / 2 * 0.2; // Slow start
+        } else if (i > 1) {
+          progress = 0.2 + (3 - i) / 2 * 0.3; // Middle plateau
+        } else {
+          progress = 0.5 + (1 - i) / 1 * 0.5; // Strong finish
+        }
+        
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.04);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else if (timeRange === '1Y') {
+      // 1 year view - largest changes
+      previousValue = currentValue * 0.65;
+      valueChange = currentValue - previousValue;
+      
+      // Generate bi-monthly data points
+      for (let i = 5; i >= 0; i--) {
+        const pointDate = dayjs().subtract(i * 2, 'month');
+        const dateValue = pointDate.format('MMM');
+        
+        // Create a realistic yearly pattern with seasonal variations
+        let progress;
+        if (i === 5) { // Start
+          progress = 0;
+        } else if (i === 4) { // Q1
+          progress = 0.15;
+        } else if (i === 3) { // Q2
+          progress = 0.35;
+        } else if (i === 2) { // Q3
+          progress = 0.45; // Summer slowdown
+        } else if (i === 1) { // Q4
+          progress = 0.7; // Holiday season boost
+        } else { // End (current)
+          progress = 1.0;
+        }
+        
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.05);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
+      }
+    } else { // ALL time or default
+      // All time view - show major growth
+      previousValue = currentValue * 0.5;
+      valueChange = currentValue - previousValue;
+      
+      // Generate yearly data points
+      const numYears = 4;
+      for (let i = 0; i < numYears; i++) {
+        const pointDate = dayjs().subtract(numYears - i - 1, 'year');
+        const dateValue = pointDate.format('YYYY');
+        
+        // Create an exponential growth curve
+        const progress = Math.pow(i / (numYears - 1), 1.5); // Exponential growth
+        const baseValue = previousValue + progress * valueChange;
+        const pointValue = addFluctuation(baseValue, 0.07);
+        
+        historicalData.push({ date: dateValue, value: pointValue });
       }
     }
     
-    const valueChange = currentValue - previousValue;
-    const percentageChange = previousValue === 0 ? 0 : (valueChange / previousValue) * 100;
+    // Ensure the last point is exactly the current value
+    if (historicalData.length > 0) {
+      historicalData[historicalData.length - 1].value = currentValue;
+    }
     
-    // Generate historical portfolio data for the graph
-    // This should use real data in production
-    let historicalData = [];
-    
-    if (startDate && endDate) {
-      // Calculate range for even distribution
-      const totalDays = endDate.diff(startDate, 'day');
-      const numPoints = Math.min(7, totalDays + 1); // Maximum 7 points on the graph
-      const interval = Math.max(1, Math.floor(totalDays / (numPoints - 1)));
-      
-      for (let i = 0; i < numPoints; i++) {
-        const pointDate = startDate.add(i * interval, 'day');
-        if (pointDate.isAfter(endDate)) break;
-        
-        const dateValue = pointDate.format('M/D');
-        
-        // Calculate portfolio value at this point in time
-        // For demo purposes, using simple interpolation
-        // In production, you'd calculate actual value at each date
-        const progress = i / (numPoints - 1);
-        const pointValue = previousValue + progress * valueChange;
-        
-        historicalData.push({ date: dateValue, value: pointValue });
-      }
-    } else {
-      // Default 6 data points for the last 6 months
-      const today = dayjs();
-      for (let i = 5; i >= 0; i--) {
-        const pointDate = today.subtract(i, 'month');
-        const dateValue = pointDate.format('M/D');
-        
-        // Generate a reasonable growth curve for demo
-        const progress = (5 - i) / 5;
-        const pointValue = previousValue + progress * valueChange;
-        
-        historicalData.push({ date: dateValue, value: pointValue });
-      }
+    // Calculate percentage change based on first and last data points
+    if (historicalData.length >= 2) {
+      const firstValue = historicalData[0].value;
+      percentageChange = ((currentValue - firstValue) / firstValue) * 100;
+      valueChange = currentValue - firstValue;
     }
     
     return {
@@ -523,69 +663,14 @@ const Dashboard: React.FC = () => {
     <Box sx={{ 
       display: 'flex',
       flexDirection: 'column',
-      p: { xs: 2, md: 3 },
+      py: 1, 
+      px: 2, 
       maxWidth: '1800px',
       margin: '0 auto',
       height: 'calc(100vh - 80px)',
       width: '100%',
       overflow: 'auto'
     }}>
-      {/* Header and Date Range Picker */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          width: '100%',
-          mb: 3
-        }}
-      >
-        <Typography 
-          variant="h6" 
-          sx={{ 
-            color: theme.palette.mode === 'dark' ? 'white' : 'text.primary',
-            fontWeight: 600,
-          }}
-        >
-          Dashboard
-        </Typography>
-
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2
-          }}
-        >
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Sort by</InputLabel>
-            <Select
-              value={sortBy}
-              label="Sort by"
-              onChange={handleSortChange}
-            >
-              <MenuItem value="date">Date</MenuItem>
-              <MenuItem value="price">Price</MenuItem>
-              <MenuItem value="brand">Brand</MenuItem>
-            </Select>
-          </FormControl>
-          
-          <Button
-            startIcon={<RefreshIcon />}
-            onClick={handleRefresh}
-            disabled={refreshing}
-            variant="outlined"
-            size="medium"
-            sx={{ 
-              minWidth: 120,
-              borderColor: theme.palette.primary.main,
-              color: theme.palette.primary.main
-            }}
-          >
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </Button>
-        </Box>
-      </Box>
 
       {/* Error display if any */}
       {error && (
@@ -601,31 +686,40 @@ const Dashboard: React.FC = () => {
       {/* Main Content Layout */}
       <Box sx={{ 
         display: 'flex',
-        flexDirection: { xs: 'column', md: 'row' },
-        height: 'calc(100% - 60px)',
-        width: '100%'
+        flexDirection: 'row',
+        flexGrow: 1, 
+        gap: 3,
+        overflowY: 'hidden', 
       }}>
         {/* Left Side - Charts and Reports */}
         <Box sx={{ 
-          flex: '1 1 auto',
-          mr: { xs: 0, md: 3 },
-          mb: { xs: 3, md: 0 },
-          width: { xs: '100%', md: 'calc(100% - 350px)' },
-          height: '100%',
+          width: { xs: '100%', md: 'calc(100% - 350px)' }, 
+          height: '100%', 
           display: 'flex',
-          flexDirection: 'column'
+          flexDirection: 'column',
+          p: theme.spacing(1, 2), 
+          overflowY: 'hidden', 
         }}>
-          {/* Portfolio Value Chart with real data - Increased Height */}
-          <Paper sx={{ height: '380px', mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-            {/* Date filters and time range filters */}
+          {/* Portfolio Value Chart with Sort/Refresh Controls */}
+          <Paper sx={{
+            flex: 2.5, 
+            minHeight: 0, 
+            mb: 1.5, 
+            p: 1, 
+            display: 'flex',
+            flexDirection: 'column',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          }}>
+            {/* All controls in a single row */}
             <Box sx={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
               alignItems: 'center', 
-              p: 2, 
+              p: 1, 
               borderBottom: `1px solid ${theme.palette.divider}`
             }}>
-              {/* Date Range Filters - Now positioned on the left */}
+              {/* Left: Date Range Filters */}
               <LocalizationProvider dateAdapter={AdapterDayjs}>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                   <DatePicker
@@ -663,7 +757,7 @@ const Dashboard: React.FC = () => {
                 </Box>
               </LocalizationProvider>
 
-              {/* Time Range Filters */}
+              {/* Center: Time Range Filters */}
               <ToggleButtonGroup
                 value={timeRange}
                 exclusive
@@ -683,11 +777,43 @@ const Dashboard: React.FC = () => {
                   </StyledToggleButton>
                 ))}
               </ToggleButtonGroup>
+
+              {/* Right: Sort by and Refresh */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <FormControl size="small" sx={{ minWidth: 100 }}>
+                  <InputLabel>Sort by</InputLabel>
+                  <Select
+                    value={sortBy}
+                    label="Sort by"
+                    onChange={handleSortChange}
+                  >
+                    <MenuItem value="date">Date</MenuItem>
+                    <MenuItem value="price">Price</MenuItem>
+                    <MenuItem value="brand">Brand</MenuItem>
+                  </Select>
+                </FormControl>
+                
+                <Button
+                  startIcon={<RefreshIcon />}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  variant="outlined"
+                  size="medium"
+                  sx={{ 
+                    minWidth: 100,
+                    borderColor: theme.palette.primary.main,
+                    color: theme.palette.primary.main
+                  }}
+                >
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              </Box>
             </Box>
 
             {/* Portfolio Value Component */}
             <Box sx={{ height: 'calc(100% - 64px)', width: '100%' }}>
               <PortfolioValue 
+                currentUser={currentUser} // Pass currentUser from Dashboard's state
                 currentValue={calculatePortfolioStats().currentValue}
                 valueChange={calculatePortfolioStats().valueChange}
                 percentageChange={calculatePortfolioStats().percentageChange}
@@ -698,7 +824,11 @@ const Dashboard: React.FC = () => {
           </Paper>
 
           {/* Reports Grid with connected data */}
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ 
+            flex: 2.5, 
+            minHeight: 0, 
+            overflowY: 'auto', 
+          }}>
             <ReportsSection 
               items={items}
               sales={sales}
@@ -713,11 +843,10 @@ const Dashboard: React.FC = () => {
         {/* Right Side - Inventory Display */}
         <Box 
           sx={{ 
-            width: { xs: '100%', md: '350px' },
-            flex: '0 0 auto',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'auto'
+            width: '350px',
+            height: '100%', 
+            overflow: 'auto',
+            mt: 8 // Add margin top to align with portfolio graph content
           }}
         >
           <Box sx={{ 

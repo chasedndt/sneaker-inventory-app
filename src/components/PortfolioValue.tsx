@@ -22,6 +22,7 @@ import {
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import useFormat from '../hooks/useFormat';
+import { useAuth } from '../contexts/AuthContext';
 import { User } from 'firebase/auth';
 
 interface PortfolioValueProps {
@@ -62,27 +63,30 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
   return null;
 };
 
-const PortfolioValue: React.FC<PortfolioValueProps> = ({
-  currentValue,
-  valueChange,
-  percentageChange,
-  data,
-  theme,
-  loading = false,
-  currentUser = null
-}) => {
+const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
+  const theme = useTheme();
+  const { money } = useFormat();
+  const { currentUser: ctxUser } = useAuth();
+
+  const user: User | null | undefined = props.currentUser ?? ctxUser;
+
   // Debug log for all props
   console.log('[PortfolioValue][DEBUG] Rendered with:', {
-    currentUser,
-    currentValue,
-    valueChange,
-    percentageChange,
-    data
+    currentUser: user,
+    currentValue: props.currentValue,
+    valueChange: props.valueChange,
+    percentageChange: props.percentageChange,
+    data: props.data,
+    loading: props.loading
   });
-  const { money } = useFormat();
-  
+
+  // Early-return only when absolutely no user is present
+  if (!user) {
+    return null;
+  }
+
   // If loading, show skeleton
-  if (loading) {
+  if (props.loading) {
     return (
       <Box sx={{ p: 3, width: '100%', height: '100%' }}>
         <Skeleton variant="text" width="50%" height={40} />
@@ -91,60 +95,49 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
       </Box>
     );
   }
-  
-  // If no user is authenticated, show a message
-  if (!currentUser) {
-    return (
-      <Box sx={{ p: 3, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="body1" color="text.secondary">
-          Please log in to view your portfolio value
-        </Typography>
-      </Box>
-    );
-  }
-  
+
   return (
-    <Box sx={{ p: 3, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ p: 2, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Portfolio Value Title */}
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 1 }}>
         <Typography variant="body2" color="text.secondary">
           Total Portfolio Value
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-          <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
-            {money(currentValue)}
+          <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+            {money(props.currentValue)}
           </Typography>
           <Box
             sx={{
               display: 'flex',
               alignItems: 'center',
-              backgroundColor: percentageChange >= 0 ? 'success.light' : 'error.light',
-              color: percentageChange >= 0 ? 'success.dark' : 'error.dark',
-              p: 0.5,
-              px: 1,
+              backgroundColor: props.percentageChange >= 0 ? 'success.light' : 'error.light',
+              color: props.percentageChange >= 0 ? 'success.dark' : 'error.dark',
+              p: 0.3,
+              px: 0.8,
               borderRadius: 1,
             }}
           >
-            {percentageChange >= 0 ? (
+            {props.percentageChange >= 0 ? (
               <ArrowUpwardIcon sx={{ fontSize: 16 }} />
             ) : (
               <ArrowDownwardIcon sx={{ fontSize: 16 }} />
             )}
             <Typography variant="body2">
-              {percentageChange >= 0 ? '+' : ''}
-              {percentageChange}% ({money(valueChange)})
+              {props.percentageChange >= 0 ? '+' : ''}
+              {props.percentageChange}% ({money(props.valueChange)})
             </Typography>
           </Box>
         </Box>
       </Box>
       
-      <Divider sx={{ mb: 2 }} />
+      <Divider sx={{ mb: 1 }} />
       
       {/* Chart */}
       <Box sx={{ flex: 1, width: '100%', minHeight: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={data}
+            data={props.data}
             margin={{ top: 5, right: 5, left: 5, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -158,7 +151,17 @@ const PortfolioValue: React.FC<PortfolioValueProps> = ({
               axisLine={false}
               tickLine={false}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
-              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+              tickFormatter={(value) => {
+                // Format based on value magnitude
+                if (value >= 1000000) {
+                  return `$${(value / 1000000).toFixed(1)}M`;
+                } else if (value >= 1000) {
+                  return `$${(value / 1000).toFixed(0)}k`;
+                } else {
+                  return `$${value.toFixed(0)}`;
+                }
+              }}
+              domain={['dataMin - dataMin * 0.05', 'dataMax + dataMax * 0.05']} // Add 5% padding
             />
             <Tooltip content={<CustomTooltip />} />
             <Line

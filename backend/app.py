@@ -22,6 +22,11 @@ from auth_helpers import require_auth
 from middleware.auth import get_user_id_from_token, get_current_user_info
 from admin.admin_routes import admin_routes
 
+# Unicode console fix
+import sys, os, codecs
+if os.name == "nt" and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+
 # ── Firebase Admin initialisation ───────────────────────────────────
 import firebase_admin
 from firebase_admin import credentials
@@ -35,6 +40,8 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 # ────────────────────────────────────────────────────────────────────
 
+# Define a module-level logger
+logger = logging.getLogger(__name__)
 
 def convert_to_snake_case(name):
     """Convert a string from camelCase to snake_case."""
@@ -65,14 +72,34 @@ def create_app():
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s'
     )
-    logger = logging.getLogger(__name__)
 
-    # Set up detailed logging for image requests
-    image_logger = logging.getLogger('image_requests')
-    image_logger.setLevel(logging.INFO)  # Reduced from DEBUG to INFO
-    handler = logging.FileHandler('image_requests.log')
-    handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    image_logger.addHandler(handler)
+    # --- Logging Refinement Start ---
+    # Ensure the root logger does not have a FileHandler for 'image_requests.log'
+    # This prevents app.logger (if it propagates to root) from writing general logs there.
+    root_logger = logging.getLogger() 
+    image_log_path = os.path.join(os.path.dirname(__file__), 'image_requests.log')
+    for handler in root_logger.handlers[:]: # Iterate over a copy of the handlers list
+        if isinstance(handler, logging.FileHandler):
+            # Check if the handler's baseFilename matches our target log file path
+            if os.path.abspath(handler.baseFilename) == os.path.abspath(image_log_path):
+                root_logger.removeHandler(handler)
+                # Optional: log that we removed a handler from root, to app.logger if already configured, or print
+                # print(f"Removed lingering FileHandler for {image_log_path} from root logger.") 
+    # --- Logging Refinement End ---
+
+    # Configure a dedicated logger for image requests
+    # Using a distinct name for the logger instance
+    img_req_logger = logging.getLogger('sneaker_app.image_requests') 
+    img_req_logger.setLevel(logging.INFO)
+    # Crucial: Prevents logs from going to parent/root loggers (and thus console if root is configured for that level)
+    img_req_logger.propagate = False 
+    
+    # Ensure handler is only added once even if create_app is called multiple times (though not typical for top-level)
+    # Or if the logger instance persists across calls in some wsgi environments.
+    if not img_req_logger.handlers:
+        img_file_handler = logging.FileHandler('image_requests.log')
+        img_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        img_req_logger.addHandler(img_file_handler)
 
     # Create upload directory if it doesn't exist
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -758,6 +785,12 @@ def create_app():
         """
         try:
             logger.info(f"📝 Creating new sale record for user_id: {user_id}")
+            
+            # Check if we have JSON data
+            if not request.json:
+                logger.error("❌ No sale data provided")
+                return jsonify({'error': 'Missing sale data'}), 400
+            
             data = request.json
             
             # Validate required fields
@@ -2166,106 +2199,42 @@ def create_app():
 
     # Serve uploaded images with user verification
     @app.route('/api/uploads/<path:filename>')
-    @require_auth
-    def serve_user_image(user_id, filename):
+    def serve_user_image(filename): # CORRECTED SIGNATURE
         """
-        Serve uploaded images with ownership verification.
+        Serve uploaded images.
+        The 'filename' path is expected to be 'user_id/actual_image_name.ext'.
         """
-        try:
-            image_logger.info(f"📷 Image request for: {filename} by user {user_id}")
-            
-            # Check if it's a receipt file (which will have user_id in the filename)
-            if filename.startswith('receipt_'):
-                # Extract user_id from filename (format: receipt_timestamp_user_id_filename.ext)
-                parts = filename.split('_')
-                if len(parts) >= 3:
-                    file_user_id = parts[2]
-                    
-                    # Verify ownership
-                    if file_user_id != user_id:
-                        image_logger.warning(f"🚫 User {user_id} attempted to access receipt {filename} belonging to user {file_user_id}")
-                        return jsonify({'error': 'Unauthorized access'}), 403
-                    
-                    # Serve the file from user's subfolder
-                    image_logger.info(f"✅ Serving receipt: {filename} for user {user_id}")
-                    return send_from_directory(os.path.join(app.config['UPLOAD_FOLDER'], user_id), filename)
-            
-            # Get the user's subfolder
-            user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
-            
-            # Check if file exists in user's folder
-            if os.path.exists(os.path.join(user_upload_folder, filename)):
-                image_logger.info(f"✅ Serving image: {filename} from user {user_id}'s folder")
-                return send_from_directory(user_upload_folder, filename)
-            
-            # If not found in user's folder, check if this is an older image before migration
-            if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], filename)):
-                # For backward compatibility - allow access to files in root uploads folder
-                image_logger.info(f"✅ Serving image: {filename} from root uploads folder (legacy)")
-                return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
-            
-            # File not found in either location
-            image_logger.warning(f"🔍 Requested image not found: {filename}")
-            return jsonify({'error': 'Image not found'}), 404
-        except Exception as e:
-            image_logger.error(f"💥 Error serving image {filename}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+        img_req_logger_instance = logging.getLogger('sneaker_app.image_requests')
+        img_req_logger_instance.info(f"Image request for: {filename}")
+        
+        # Basic security check: prevent directory traversal
+        if '..' in filename or filename.startswith('/'):
+            img_req_logger_instance.warning(f"Potential directory traversal attempt: {filename}")
+            return jsonify({"error": "Invalid path"}), 400
 
-    # Check if image exists (continued)
-    @app.route('/api/check-image/<filename>')
-    @require_auth
-    def check_user_image(user_id, filename):
-        """
-        Check if an image exists in the user's uploads directory.
-        """
         try:
-            image_logger.info(f"Image check request for: {filename} by user {user_id}")
+            # Construct the full path to the image
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
             
-            # Check user's subfolder first
-            user_filepath = os.path.join(app.config['UPLOAD_FOLDER'], user_id, filename)
-            if os.path.exists(user_filepath):
-                stats = os.stat(user_filepath)
-                image_logger.info(f"✅ Image check: {filename} exists in user {user_id}'s folder, size: {stats.st_size} bytes")
-                return jsonify({
-                    'exists': True,
-                    'filename': filename,
-                    'filepath': user_filepath,
-                    'size': stats.st_size,
-                    'created': stats.st_ctime,
-                    'permissions': oct(stats.st_mode)[-3:]
-                }), 200
+            if os.path.exists(image_path):
+                img_req_logger_instance.info(f"Serving image: {image_path}")
+                return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=False)
+            else:
+                # Log that the image was not found, and serve a placeholder
+                img_req_logger_instance.warning(f"Image not found: {image_path}. Serving placeholder.")
+                static_folder_images = os.path.join(current_app.static_folder, 'images') # Assuming placeholder is in static/images
+                placeholder_path = os.path.join(static_folder_images, 'placeholder.png')
             
-            # For backward compatibility, check root uploads folder
-            root_filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            if os.path.exists(root_filepath):
-                stats = os.stat(root_filepath)
-                image_logger.info(f"✅ Image check: {filename} exists in root folder (legacy), size: {stats.st_size} bytes")
-                return jsonify({
-                    'exists': True,
-                    'filename': filename,
-                    'filepath': root_filepath,
-                    'size': stats.st_size,
-                    'created': stats.st_ctime,
-                    'permissions': oct(stats.st_mode)[-3:]
-                }), 200
-            
-            # File not found in either location
-            # Log the complete uploads directory to help troubleshoot
-            try:
-                user_files = os.listdir(os.path.join(app.config['UPLOAD_FOLDER'], user_id)) if os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], user_id)) else []
-                root_files = os.listdir(app.config['UPLOAD_FOLDER'])
-                image_logger.warning(f"❌ File not found: {filename}, available files in user dir: {user_files[:10]}, root dir: {root_files[:10]}")
-            except Exception as dir_err:
-                image_logger.error(f"🚫 Error listing directory: {str(dir_err)}")
-            
-            return jsonify({
-                'exists': False,
-                'filename': filename,
-                'attempted_paths': [user_filepath, root_filepath]
-            }), 404
+            if os.path.exists(placeholder_path):
+                img_req_logger_instance.info(f"Serving placeholder image for: {filename} from {static_folder_images}")
+                return send_from_directory(static_folder_images, 'placeholder.png', as_attachment=False)
+            else:
+                # If placeholder itself is not found, return a generic 404
+                img_req_logger_instance.error(f"Placeholder image not found at: {placeholder_path}")
+                return jsonify({"error": "Image and placeholder not found"}), 404
         except Exception as e:
-            image_logger.error(f"💥 Error checking image {filename}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            img_req_logger_instance.error(f"Error serving image {filename}: {e}", exc_info=True) # Log full traceback
+            return jsonify({"error": "Server error while serving image"}), 500
 
     @app.before_request
     def log_request_info():
@@ -2292,7 +2261,27 @@ def make_shell_context():
     }
 
 if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
-    logger.info(f"🚀 Starting Flask application on http://127.0.0.1:5000")
-    logger.info(f"📁 Upload directory: {app.config['UPLOAD_FOLDER']}")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app = create_app()
+
+    # Use app.config.get() for startup messages. 
+    # Provide string literal defaults for logging if the keys might not be in app.config yet.
+    host_to_log = app.config.get('HOST', '127.0.0.1') 
+    port_to_log = app.config.get('PORT', 5000)
+
+    app.logger.info(f"Starting Flask application on http://{host_to_log}:{port_to_log}")
+    app.logger.info(f"Upload directory: {app.config.get('UPLOAD_FOLDER', 'Not Set')}")
+    app.logger.info(f"Database URI: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not Set')}")
+    app.logger.info(f"JWT Secret Key: {'Set' if app.config.get('JWT_SECRET_KEY') else 'Not Set'}")
+
+    upload_folder = app.config.get('UPLOAD_FOLDER')
+    if upload_folder and not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
+        app.logger.info(f"Created upload directory: {upload_folder}")
+
+    # Let app.run() use its internal defaults if HOST/PORT are not in app.config
+    # by passing None if the key is not found.
+    run_host = app.config.get('HOST') 
+    run_port = app.config.get('PORT')
+    run_debug = app.config.get('DEBUG')
+
+    app.run(host=run_host, port=run_port, debug=run_debug)

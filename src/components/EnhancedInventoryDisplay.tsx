@@ -5,22 +5,20 @@ import {
   Typography, 
   Grid, 
   Chip,
-  Tooltip,
-  useTheme,
   Paper,
-  Avatar,
   Alert,
   CircularProgress,
-  Button
+  Button,
+  useTheme,
+  Tooltip
 } from '@mui/material';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ShoeIcon from '@mui/icons-material/DoNotStep'; // Better icon for sneakers
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // For image errors
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'; // For help/info tooltip
 import AddIcon from '@mui/icons-material/Add'; // For add button
 import { Item } from '../services/api';
-import { getImageUrl, checkImageExists, getCategoryPlaceholderImage, handleImageLoadError } from '../utils/imageUtils';
+import { getCategoryPlaceholderImage } from '../utils/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
 import { User } from 'firebase/auth';
@@ -89,7 +87,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const apiBaseUrl = 'http://127.0.0.1:5000/api';
+  const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
   const { getAuthToken } = useAuth();
 
   // Check authentication status
@@ -119,22 +117,16 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
 
       // Group and sort items
       const grouped = groupItemsByProduct(items);
-      console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups for user ${currentUser.uid}`);
+      console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups`);
       
-      // Enhance the items with image loading state
-      const enhancedItems = grouped.map(item => ({
+      // Add image loading state to each item
+      const withImageState = grouped.map(item => ({
         ...item,
         imageLoading: true,
         imageError: false
       }));
       
-      // Sort items by date (newest first)
-      const sorted = [...enhancedItems].sort((a, b) => {
-        return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
-      });
-      
-      console.log(`✅ Sorted items by date`);
-      setGroupedItems(sorted);
+      setGroupedItems(withImageState);
       setErrorMessage(null);
     } catch (error: any) {
       console.error('💥 Error processing inventory items:', error);
@@ -144,122 +136,6 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     }
   }, [items, currentUser]);
 
-  // Effect for loading images
-  useEffect(() => {
-    if (!currentUser) return; // Don't load images if not authenticated
-    
-    const loadItemImages = async () => {
-      console.log('🔄 Loading item images...');
-      
-      // Make a copy of the current items
-      const updatedItems = [...groupedItems];
-      let hasChanges = false;
-      
-      // Process items that are still in loading state
-      for (let i = 0; i < updatedItems.length; i++) {
-        const item = updatedItems[i];
-        
-        // Skip if we already processed this item
-        if (!item.imageLoading) continue;
-        
-        try {
-          console.log(`🔍 Processing images for item ${item.id}: ${item.productName}`);
-          
-          // Check if the item has images
-          if (item.images && item.images.length > 0) {
-            // Get the first image
-            const firstImage = item.images[0];
-            console.log(`📷 Found image for item ${item.id}: ${firstImage}`);
-            
-            // Verify the image exists
-            const authToken = await getAuthToken();
-            if (!authToken) {
-              console.error('[EnhancedInventoryDisplay] No authToken available for image check. Skipping image existence check.');
-              updatedItems[i] = {
-                ...item,
-                imageLoading: false,
-                imageError: true,
-                placeholderMessage: 'Missing authentication for image check.'
-              };
-              hasChanges = true;
-              continue;
-            }
-            console.log('[EnhancedInventoryDisplay] Using authToken for image check:', authToken ? '[REDACTED]' : 'undefined');
-            const exists = await checkImageExists(firstImage, authToken);
-            
-            if (exists) {
-              console.log(`✅ Image verified for item ${item.id}: ${firstImage}`);
-              // Update the item with image info
-              updatedItems[i] = {
-                ...item,
-                imageUrl: getImageUrl(firstImage, item.id),
-                imageLoading: false,
-                imageError: false,
-              };
-            } else {
-              console.warn(`⚠️ Image does not exist for item ${item.id}: ${firstImage}`);
-              // Mark as error
-              updatedItems[i] = {
-                ...item,
-                imageLoading: false,
-                imageError: true,
-                placeholderMessage: `Image not found on server: ${firstImage}`
-              };
-            }
-            
-            hasChanges = true;
-          } else {
-            console.log(`⚠️ No images found for item ${item.id}`);
-            // Mark as processed with no images
-            updatedItems[i] = {
-              ...item,
-              imageLoading: false,
-              imageError: true,
-              placeholderMessage: 'No images available'
-            };
-            
-            hasChanges = true;
-          }
-        } catch (error) {
-          console.error(`💥 Error loading image for item ${item.id}:`, error);
-          // Mark as error
-          updatedItems[i] = {
-            ...item,
-            imageLoading: false,
-            imageError: true,
-            placeholderMessage: 'Error loading image'
-          };
-          
-          hasChanges = true;
-        }
-      }
-      
-      // Update state only if we made changes
-      if (hasChanges) {
-        console.log('✅ Updating item images display state');
-        setGroupedItems(updatedItems);
-      }
-    };
-    
-    // Only run if there are items with images in loading state
-    if (groupedItems.length > 0 && groupedItems.some(item => item.imageLoading)) {
-      loadItemImages();
-    }
-  }, [groupedItems, apiBaseUrl, currentUser]);
-
-  const handleImageError = (itemId: number) => {
-    console.error(`❌ Image load error for item ${itemId}`);
-    setGroupedItems(prev => 
-      prev.map(item => 
-        item.id === itemId ? { 
-          ...item, 
-          imageError: true,
-          placeholderMessage: 'Failed to load image' 
-        } : item
-      )
-    );
-  };
-
   // Show authentication error if not logged in
   if (authError) {
     return (
@@ -267,9 +143,6 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         <Alert severity="warning">
           {authError}
         </Alert>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-          Please log in to view your inventory items.
-        </Typography>
       </Box>
     );
   }
@@ -278,13 +151,13 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   if (isLoading) {
     return (
       <Box sx={{ 
-        p: 3, 
         display: 'flex', 
         flexDirection: 'column', 
         alignItems: 'center', 
-        justifyContent: 'center' 
+        justifyContent: 'center',
+        p: 3 
       }}>
-        <CircularProgress size={32} sx={{ mb: 2 }} />
+        <CircularProgress size={40} sx={{ mb: 2 }} />
         <Typography variant="body2" color="text.secondary">
           Loading inventory...
         </Typography>
@@ -292,7 +165,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     );
   }
 
-  // Show error state
+  // Show error message if any
   if (errorMessage) {
     return (
       <Box sx={{ 
@@ -310,6 +183,20 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
 
   return (
     <Box sx={{ width: '100%' }}>
+      {/* Header section to match the portfolio graph structure */}
+      <Box sx={{ 
+        height: '64px', 
+        p: 2,
+        display: 'flex',
+        alignItems: 'flex-end',
+        borderBottom: `1px solid ${theme.palette.divider}`,
+        pb: 1
+      }}>
+        <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
+          Inventory Items
+        </Typography>
+      </Box>
+
       {groupedItems.length === 0 ? (
         <Box sx={{ 
           display: 'flex', 
@@ -318,7 +205,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           justifyContent: 'center',
           p: 4, 
           bgcolor: '#f9f9f9', 
-          borderRadius: 2
+          borderRadius: 2,
+          mt: 2
         }}>
           <ShoeIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
           <Typography variant="body1" color="text.secondary">
@@ -342,18 +230,9 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           flexDirection: 'column',
           gap: 2,
           width: '100%',
-          pr: 1,
+          p: 2,
+          pt: 1
         }}>
-          {/* User identification */}
-          <Box sx={{ mb: 1 }}>
-            <Typography variant="subtitle2" color="text.secondary">
-              Viewing inventory for: {currentUser?.email || 'Unknown user'}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {groupedItems.length} product groups from {items.length} total items
-            </Typography>
-          </Box>
-          
           {groupedItems.map((item, index) => {
             // For demonstration, using purchasePrice as current value
             const currentValue = item.purchasePrice;
@@ -362,116 +241,52 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
             // Get colors for this card
             const colors = getGradientColors(item.category);
             
-            // Determine what to show in the image area
-            let imageContent;
-            if (item.imageLoading) {
-              // Loading state
-              imageContent = (
-                <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-                  <Typography variant="caption" color="rgba(255,255,255,0.8)">Loading...</Typography>
-                </Box>
-              );
-            } else if (item.imageError || !item.imageUrl) {
-              // Error state or no image
-              imageContent = (
-                <Tooltip title={item.placeholderMessage || 'Image not available'}>
-                  <Box sx={{ 
-                    display: 'flex', 
-                    flexDirection: 'column', 
-                    alignItems: 'center', 
-                    justifyContent: 'center',
-                    height: '100%'
-                  }}>
-                    <ImageNotSupportedIcon sx={{ fontSize: 36, color: 'rgba(255,255,255,0.7)', mb: 1 }} />
-                    <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)', textAlign: 'center' }}>
-                      {item.category}
-                    </Typography>
-                  </Box>
-                </Tooltip>
-              );
-            } else {
-              // Image found
-              imageContent = (
-                <img 
-                  src={item.imageUrl}
-                  alt={item.productName}
-                  onError={() => handleImageError(item.id)}
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain'
-                  }}
-                />
-              );
-            }
-            
             return (
               <Paper 
                 key={`${item.id}-${index}`}
                 sx={{
-                  p: 2.5,
-                  borderRadius: 3,
-                  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-                  background: `linear-gradient(135deg, ${colors.start}, ${colors.end})`,
-                  color: 'white',
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
-                  }
+                  overflow: 'hidden',
+                  borderRadius: '12px',
+                  background: `linear-gradient(135deg, ${colors.start} 0%, ${colors.end} 100%)`,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 }}
+                elevation={1}
               >
-                <Grid container spacing={2} alignItems="center">
-                  {/* Left side - Image or Icon */}
+                <Grid container>
+                  {/* Image area - left side */}
                   <Grid item xs={4}>
-                    <Box 
-                      sx={{
-                        width: '100%',
-                        height: '100px',
-                        borderRadius: 2,
-                        overflow: 'hidden',
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        position: 'relative'
-                      }}
-                    >
-                      {imageContent}
-                      <Chip 
-                        label={item.category} 
-                        size="small"
-                        sx={{ 
-                          position: 'absolute',
-                          top: 8,
-                          left: 8,
-                          height: '20px',
-                          backgroundColor: 'rgba(255,255,255,0.25)',
-                          color: 'white',
-                          fontWeight: 600,
-                          fontSize: '0.65rem'
+                    <Box sx={{ 
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      p: 1,
+                      bgcolor: 'rgba(0,0,0,0.2)'
+                    }}>
+                      <Box 
+                        component="img"
+                        src={getCategoryPlaceholderImage(item.category)}
+                        alt={item.productName}
+                        sx={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'contain',
+                          borderRadius: '8px'
                         }}
                       />
                     </Box>
                   </Grid>
                   
-                  {/* Right side - Item details */}
+                  {/* Content area - right side */}
                   <Grid item xs={8}>
-                    <Box sx={{ 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      pl: 1 // Add padding to the left to move text away from image
-                    }}>
+                    <Box sx={{ p: 1.5 }}>
                       <Typography 
-                        variant="h6" 
-                        component="h3" 
+                        variant="subtitle1" 
                         sx={{ 
-                          fontWeight: 600,
-                          mb: 0.5,
-                          fontSize: '1.1rem',
+                          fontWeight: 700,
                           color: 'white',
-                          textShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                          mb: 0.5,
+                          fontSize: '1rem',
                           lineHeight: 1.2
                         }}
                       >
@@ -480,9 +295,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                       
                       <Box sx={{ 
                         display: 'flex', 
-                        alignItems: 'center', 
                         justifyContent: 'space-between',
-                        mb: 1
+                        alignItems: 'center' 
                       }}>
                         <Typography 
                           variant="body2" 
@@ -524,7 +338,6 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {/* Use the money formatter here */}
                           {item.count > 1 ? money(item.totalValue) : money(item.purchasePrice)}
                         </Typography>
                         
