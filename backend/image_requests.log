@@ -6825,3 +6825,183 @@
 2025-05-17 23:45:21,343 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
 2025-05-17 23:45:21,398 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
 2025-05-17 23:45:21,398 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:09:37,387 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:09:37,388 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:09:37,388 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:10:21,807 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:10:21,808 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:10:21,808 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:10:29,649 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:10:29,650 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:10:29,650 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:11:06,833 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:11:06,833 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:11:06,833 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:11:14,174 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:11:14,175 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:11:14,175 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:28:27,865 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:28:27,866 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:28:27,866 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:28:43,624 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:28:43,624 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:28:43,625 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:29:33,432 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:29:33,432 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:29:33,432 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:29:41,738 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:29:41,738 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:29:41,739 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:29:53,848 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:29:53,848 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:29:53,848 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:00,777 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:00,777 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:32:00,777 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:05,493 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:05,493 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:11,112 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:11,113 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:32:11,113 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:11,113 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:11,114 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:32:11,115 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:17,018 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:17,018 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:17,724 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:17,724 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:32:17,724 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:17,725 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:17,726 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:32:17,726 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:32:41,571 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:32:41,571 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:33:04,703 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:33:04,703 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:33:04,704 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:33:04,705 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:33:04,706 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:33:04,706 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:36:30,492 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:30,492 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:38,262 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:38,263 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:36:38,263 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:38,264 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:36:38,264 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:36:38,265 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:36:45,361 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:45,361 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:51,485 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:51,485 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:36:51,486 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:36:51,486 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:36:51,486 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:36:51,486 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:14,423 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:14,423 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:37:14,423 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:21,519 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:21,519 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:23,093 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:23,094 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:37:23,095 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:23,095 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:23,095 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:37:23,096 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:30,482 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:30,482 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:44,538 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:44,538 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:46,849 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:46,850 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:37:46,850 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:46,851 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:46,851 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:37:46,851 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:37:52,943 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:37:52,943 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:39:40,107 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:39:40,107 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:39:40,108 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:39:40,108 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:39:40,108 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:39:40,109 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:39:59,212 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:39:59,212 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:39:59,212 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:39:59,213 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:39:59,213 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:39:59,214 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:15,113 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:15,113 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:40:15,114 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:15,114 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:15,114 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:40:15,115 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:24,809 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:24,810 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:40:24,811 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:24,811 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:24,811 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:40:24,811 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:31,020 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:31,020 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:40:31,020 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:40:36,499 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:40:36,500 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:41:20,489 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:41:20,489 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:41:20,493 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:41:20,494 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:41:20,495 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:41:20,495 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:41:27,707 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:41:27,707 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:42:30,511 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:42:30,511 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:45:20,110 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:45:20,111 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:45:20,111 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:45:20,111 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:45:20,111 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:45:20,112 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:47:16,271 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:47:16,271 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:47:16,271 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:47:16,273 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:47:16,273 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:47:16,274 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:56:11,732 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:56:11,734 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:56:11,734 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:56:11,734 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:56:11,735 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:56:11,735 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:58:11,910 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:58:11,911 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:58:11,911 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 01:58:11,912 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 01:58:11,912 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 01:58:11,912 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:15:21,474 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:15:21,477 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:15:21,478 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:15:21,479 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:15:21,479 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:15:21,479 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:15:46,419 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:15:46,420 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:15:46,420 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:15:46,420 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:15:46,420 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:15:46,420 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:15:58,967 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:15:58,969 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:15:58,969 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:16:00,615 - INFO - Image request for: Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:16:00,615 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_36_1747528320_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:16:00,616 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png
+2025-05-18 18:16:00,796 - INFO - Image request for: Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-18 18:16:00,796 - WARNING - Image not found: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\Screenshot_227_1745772534_PpdcAvliVrR4zBAH6WGBeLqd0c73.png. Serving placeholder.
+2025-05-18 18:16:00,796 - ERROR - Placeholder image not found at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\static\images\placeholder.png

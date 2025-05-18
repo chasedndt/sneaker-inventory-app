@@ -183,19 +183,6 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
 
   return (
     <Box sx={{ width: '100%' }}>
-      {/* Header section to match the portfolio graph structure */}
-      <Box sx={{ 
-        height: '64px', 
-        p: 2,
-        display: 'flex',
-        alignItems: 'flex-end',
-        borderBottom: `1px solid ${theme.palette.divider}`,
-        pb: 1
-      }}>
-        <Typography variant="h6" sx={{ fontWeight: 'medium' }}>
-          Inventory Items
-        </Typography>
-      </Box>
 
       {groupedItems.length === 0 ? (
         <Box sx={{ 
@@ -228,10 +215,9 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         <Box sx={{ 
           display: 'flex',
           flexDirection: 'column',
-          gap: 2,
+          gap: 3,
           width: '100%',
-          p: 2,
-          pt: 1
+          pb: 2
         }}>
           {groupedItems.map((item, index) => {
             // For demonstration, using purchasePrice as current value
@@ -246,32 +232,57 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                 key={`${item.id}-${index}`}
                 sx={{
                   overflow: 'hidden',
-                  borderRadius: '12px',
+                  borderRadius: '16px',
                   background: `linear-gradient(135deg, ${colors.start} 0%, ${colors.end} 100%)`,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
+                  },
+                  height: '180px',
+                  width: '100%'
                 }}
                 elevation={1}
               >
-                <Grid container>
+                <Grid container spacing={0}>
                   {/* Image area - left side */}
                   <Grid item xs={4}>
                     <Box sx={{ 
-                      height: '100%',
+                      height: '180px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      p: 1,
-                      bgcolor: 'rgba(0,0,0,0.2)'
+                      position: 'relative',
+                      bgcolor: 'rgba(255,255,255,0.15)',
+                      borderRight: '1px solid rgba(255,255,255,0.1)'
                     }}>
                       <Box 
                         component="img"
-                        src={getCategoryPlaceholderImage(item.category)}
+                        src={item.imageUrl || getCategoryPlaceholderImage(item.category) || "/images/placeholder.png"}
                         alt={item.productName}
+                        onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+                          (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category) || "/images/placeholder.png";
+                        }}
                         sx={{
                           width: '100%',
                           height: '100%',
-                          objectFit: 'contain',
-                          borderRadius: '8px'
+                          objectFit: 'cover',
+                          objectPosition: 'center'
+                        }}
+                      />
+                      <Chip 
+                        label={item.category} 
+                        size="small"
+                        sx={{ 
+                          position: 'absolute',
+                          top: 8,
+                          left: 8,
+                          height: '20px',
+                          backgroundColor: 'rgba(255,255,255,0.25)',
+                          color: 'white',
+                          fontWeight: 600,
+                          fontSize: '0.65rem'
                         }}
                       />
                     </Box>
@@ -279,25 +290,26 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                   
                   {/* Content area - right side */}
                   <Grid item xs={8}>
-                    <Box sx={{ p: 1.5 }}>
-                      <Typography 
-                        variant="subtitle1" 
-                        sx={{ 
-                          fontWeight: 700,
-                          color: 'white',
-                          mb: 0.5,
-                          fontSize: '1rem',
-                          lineHeight: 1.2
-                        }}
-                      >
-                        {item.productName}
-                      </Typography>
-                      
-                      <Box sx={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        alignItems: 'center' 
-                      }}>
+                    <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <Box>
+                        <Typography 
+                          variant="subtitle1" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: 'white',
+                            mb: 0.5,
+                            fontSize: '1.1rem',
+                            lineHeight: 1.2
+                          }}
+                        >
+                          {item.productName}
+                        </Typography>
+                        
+                        <Box sx={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between',
+                          alignItems: 'center' 
+                        }}>
                         <Typography 
                           variant="body2" 
                           sx={{ 
@@ -323,12 +335,13 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                           />
                         )}
                       </Box>
+                      </Box>
                       
                       <Box sx={{ 
                         display: 'flex', 
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        mt: 0.5
+                        mt: 'auto'
                       }}>
                         <Typography 
                           variant="h6" 
@@ -338,7 +351,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {item.count > 1 ? money(item.totalValue) : money(item.purchasePrice)}
+                          {money(item.purchasePrice)}
                         </Typography>
                         
                         <Box sx={{ 

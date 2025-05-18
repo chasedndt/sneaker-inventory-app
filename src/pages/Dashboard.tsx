@@ -843,15 +843,38 @@ const Dashboard: React.FC = () => {
         {/* Right Side - Inventory Display */}
         <Box 
           sx={{ 
-            width: '350px',
+            width: '480px',
             height: '100%', 
             overflow: 'auto',
-            mt: 8 // Add margin top to align with portfolio graph content
+            mt: 0,
+            ml: 0.5,
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
           <Box sx={{ 
-            height: '100%',
-            overflow: 'auto'
+            p: 2,
+            pt: 3,
+            pb: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                fontWeight: 600, 
+                fontSize: '1.1rem',
+                color: theme.palette.mode === 'dark' ? '#fff' : '#333'
+              }}
+            >
+              Inventory Items
+            </Typography>
+          </Box>
+          <Box sx={{ 
+            flexGrow: 1,
+            overflow: 'auto',
+            px: 2
           }}>
             <EnhancedInventoryDisplay 
               items={items.filter(item => item.status !== 'sold')}
