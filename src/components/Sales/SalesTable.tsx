@@ -124,12 +124,21 @@ const SalesTable: React.FC<SalesTableProps> = ({
 
   // Render image avatar
   const renderImage = (item: SalesItem) => {
-    // Get the image URL with user ID included
-    const imageSource = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
+    // Check for both images array and imageUrl, prioritizing images array if available
+    let imageSource;
+    
+    if (item.images && item.images.length > 0) {
+      // Use the first image from the images array
+      imageSource = getImageUrl(item.images[0], item.id, currentUser?.uid);
+    } else if (item.imageUrl) {
+      // Fall back to imageUrl if images array is not available
+      imageSource = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
+    }
     
     // Add debugging for image URLs
     console.log(`Sales item ${item.id} image:`, {
       imageUrl: item.imageUrl,
+      images: item.images,
       userId: currentUser?.uid,
       constructedUrl: imageSource
     });
@@ -140,7 +149,17 @@ const SalesTable: React.FC<SalesTableProps> = ({
           src={imageSource} 
           alt={item.itemName}
           variant="rounded"
-          sx={{ width: 48, height: 48 }}
+          sx={{ 
+            width: 48, 
+            height: 48,
+            cursor: 'pointer',
+            '&:hover': {
+              opacity: 0.8,
+              boxShadow: `0 0 0 2px ${theme.palette.primary.main}`,
+              transform: 'scale(1.05)',
+              transition: 'all 0.2s ease-in-out'
+            }
+          }}
         />
       );
     }

@@ -59,6 +59,7 @@ export interface SalesItem extends Sale {
   daysToSell: number;
   ROI: number;
   imageUrl?: string;
+  images?: string[];
 }
 
 const SalesPage: React.FC = () => {
@@ -169,6 +170,7 @@ const SalesPage: React.FC = () => {
             size: item.size,
             purchasePrice: item.purchasePrice,
             imageUrl: item.imageUrl,
+            images: item.images, // Include the images array
             profit,
             daysToSell,
             ROI: parseFloat(ROI.toFixed(2))
@@ -244,6 +246,7 @@ const SalesPage: React.FC = () => {
           size: item.size,
           purchasePrice: item.purchasePrice,
           imageUrl: item.imageUrl,
+          images: item.images, // Include the images array
           profit,
           daysToSell,
           ROI: parseFloat(ROI.toFixed(2))
