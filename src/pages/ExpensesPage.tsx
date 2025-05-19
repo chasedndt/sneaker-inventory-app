@@ -278,7 +278,11 @@ const ExpensesPage: React.FC = () => {
   const handleSaveExpense = async (expense: Expense) => {
     try {
       const savedExpense = await expensesApi.createExpense(expense);
-      setExpenses(prev => [savedExpense, ...prev]);
+      
+      // Instead of adding to existing expenses, fetch all expenses again to ensure consistency
+      // This prevents duplicate expenses when navigating away and back to the page
+      await fetchExpenses(false);
+      
       setIsAddExpenseModalOpen(false);
       
       setSnackbar({
@@ -322,13 +326,12 @@ const ExpensesPage: React.FC = () => {
   // Handle updating an expense - with auth
   const handleUpdateExpense = async (updatedExpense: Expense) => {
     try {
-      const result = await expensesApi.updateExpense(updatedExpense.id, updatedExpense);
+      await expensesApi.updateExpense(updatedExpense.id, updatedExpense);
       
-      setExpenses(prev => 
-        prev.map(expense => 
-          expense.id === updatedExpense.id ? result : expense
-        )
-      );
+      // Instead of manually updating the state, fetch all expenses again
+      // This ensures consistency and prevents potential duplicate issues
+      await fetchExpenses(false);
+      
       setIsEditExpenseModalOpen(false);
       
       setSnackbar({
@@ -376,9 +379,8 @@ const ExpensesPage: React.FC = () => {
     try {
       await expensesApi.deleteExpense(expenseToDelete.id);
       
-      setExpenses(prev => 
-        prev.filter(expense => expense.id !== expenseToDelete.id)
-      );
+      // Instead of manually updating the state, fetch all expenses again
+      await fetchExpenses(false);
       
       setSnackbar({
         open: true,
@@ -429,10 +431,8 @@ const ExpensesPage: React.FC = () => {
         selectedExpenses.map(id => expensesApi.deleteExpense(id))
       );
       
-      // Update local state
-      setExpenses(prev => 
-        prev.filter(expense => !selectedExpenses.includes(expense.id))
-      );
+      // Instead of manually updating the state, fetch all expenses again
+      await fetchExpenses(false);
       
       setSnackbar({
         open: true,
