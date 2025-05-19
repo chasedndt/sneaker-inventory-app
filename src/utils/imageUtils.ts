@@ -11,14 +11,26 @@ const API_BASE_URL = 'http://127.0.0.1:5000/api';
  * 
  * @param filename The filename of the image
  * @param itemId Optional item ID for logging purposes
+ * @param userId Optional user ID for path construction
  * @returns The full URL for the image, or undefined if no filename provided
  */
-export const getImageUrl = (filename: string | undefined, itemId?: number): string | undefined => {
+export const getImageUrl = (filename: string | undefined, itemId?: number, userId?: string): string | undefined => {
   if (!filename) {
     console.log(`❌ No image filename provided${itemId ? ` for item ${itemId}` : ''}`);
-    return undefined; // Changed from null to undefined
+    return undefined;
   }
   
+  // If the filename already contains a full URL, return it directly
+  if (filename.startsWith('http')) {
+    return filename;
+  }
+  
+  // Include the user ID in the path if provided
+  if (userId) {
+    return `${API_BASE_URL}/uploads/${userId}/${filename}`;
+  }
+  
+  // Fall back to the original path structure
   return `${API_BASE_URL}/uploads/${filename}`;
 };
 

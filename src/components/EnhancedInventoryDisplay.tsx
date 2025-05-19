@@ -18,7 +18,7 @@ import ShoeIcon from '@mui/icons-material/DoNotStep'; // Better icon for sneaker
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported'; // For image errors
 import AddIcon from '@mui/icons-material/Add'; // For add button
 import { Item } from '../services/api';
-import { getCategoryPlaceholderImage } from '../utils/imageUtils';
+import { getCategoryPlaceholderImage, safeImageUrl, getImageUrl } from '../utils/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
 import { User } from 'firebase/auth';
@@ -115,17 +115,104 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         return;
       }
 
+      // COMPREHENSIVE IMAGE PATH DEBUGGING
+      console.log('%c📸 DETAILED IMAGE PATH DEBUGGING', 'background: #222; color: #bada55; font-size: 16px; padding: 4px;');
+      console.log('API Base URL:', apiBaseUrl);
+      
+      // Log all items to see their structure
+      items.forEach((item, index) => {
+        console.log(`%c🔎 ITEM ${index + 1}: ${item.productName}`, 'background: #444; color: #fff; font-size: 14px; padding: 2px;');
+        console.log('Full item data:', item); // Log the entire item object
+        
+        // Image property debugging
+        console.log(`ID: ${item.id}`);
+        console.log(`Category: ${item.category}`);
+        console.log(`imageUrl property: ${item.imageUrl || 'undefined'}`);
+        console.log(`images array: ${JSON.stringify(item.images || [])}`);
+        
+        // Detailed path analysis
+        if (item.imageUrl) {
+          console.log('%c📝 IMAGE URL ANALYSIS:', 'color: #ff9800; font-weight: bold;');
+          console.log(`Raw imageUrl: ${item.imageUrl}`);
+          
+          // Check if it's a full URL or just a filename
+          const isFullUrl = item.imageUrl.includes('http');
+          console.log(`Is full URL: ${isFullUrl}`);
+          
+          if (isFullUrl) {
+            // Parse the URL to extract components
+            try {
+              const url = new URL(item.imageUrl);
+              console.log(`Protocol: ${url.protocol}`);
+              console.log(`Host: ${url.hostname}`);
+              console.log(`Path: ${url.pathname}`);
+              console.log(`Filename: ${url.pathname.split('/').pop()}`);
+            } catch (e) {
+              console.log(`Invalid URL: ${item.imageUrl}`);
+            }
+          }
+          
+          // Log possible URL constructions
+          console.log(`Possible URL 1: ${apiBaseUrl}/uploads/${item.imageUrl}`);
+          console.log(`Possible URL 2: http://localhost:5000/api/uploads/${item.imageUrl}`);
+          console.log(`Possible URL 3: http://127.0.0.1:5000/api/uploads/${item.imageUrl}`);
+        }
+        
+        if (item.images && item.images.length > 0) {
+          console.log('%c📝 IMAGES ARRAY ANALYSIS:', 'color: #4caf50; font-weight: bold;');
+          console.log(`Images array length: ${item.images.length}`);
+          
+          item.images.forEach((img, imgIndex) => {
+            console.log(`Image ${imgIndex + 1}: ${img}`);
+            console.log(`Possible URL: ${apiBaseUrl}/uploads/${img}`);
+          });
+        }
+        
+        // Log creation and update timestamps
+        // Use optional chaining to safely access properties that might not exist in the Item type
+        if ((item as any).created_at) {
+          console.log(`Created at: ${(item as any).created_at}`);
+        }
+        if ((item as any).updated_at) {
+          console.log(`Updated at: ${(item as any).updated_at}`);
+        }
+        
+        console.log('-----------------------------------');
+      });
+
       // Group and sort items
       const grouped = groupItemsByProduct(items);
       console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups`);
       
-      // Add image loading state to each item
-      const withImageState = grouped.map(item => ({
-        ...item,
-        imageLoading: true,
-        imageError: false
-      }));
+      // Add image loading state to each item and ensure imageUrl is properly set
+      const withImageState = grouped.map(item => {
+        // Use the getImageUrl utility to construct proper URL with user ID
+        
+        // If item has images array but no imageUrl, use the first image
+        let imageUrl;
+        if (item.images && item.images.length > 0) {
+          imageUrl = getImageUrl(item.images[0], item.id, currentUser?.uid);
+        } else if (item.imageUrl) {
+          imageUrl = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
+        }
+        
+        // Add debugging for image URLs
+        console.log(`Dashboard item ${item.id} image:`, {
+          imageUrl: item.imageUrl,
+          firstImage: item.images && item.images.length > 0 ? item.images[0] : null,
+          userId: currentUser?.uid,
+          constructedUrl: imageUrl
+        });
+        
+        return {
+          ...item,
+          imageUrl,
+          imageLoading: true,
+          imageError: false
+        };
+      });
       
+      console.log('Processed items with images:', withImageState);
       setGroupedItems(withImageState);
       setErrorMessage(null);
     } catch (error: any) {
@@ -257,12 +344,14 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                       bgcolor: 'rgba(255,255,255,0.15)',
                       borderRight: '1px solid rgba(255,255,255,0.1)'
                     }}>
+                      {/* Use the correct image path that includes the user ID */}
                       <Box 
                         component="img"
-                        src={item.imageUrl || getCategoryPlaceholderImage(item.category) || "/images/placeholder.png"}
+                        src={item.imageUrl || getCategoryPlaceholderImage(item.category)}
                         alt={item.productName}
-                        onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-                          (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category) || "/images/placeholder.png";
+                        onError={(e) => {
+                          console.log(`Image failed to load for ${item.productName}`);
+                          (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category);
                         }}
                         sx={{
                           width: '100%',

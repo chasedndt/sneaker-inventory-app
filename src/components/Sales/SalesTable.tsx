@@ -31,6 +31,7 @@ import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import useFormat from '../../hooks/useFormat'; // Import the formatting hook
 import { useAuth } from '../../contexts/AuthContext';
 import { useApi } from '../../services/api';
+import { getImageUrl } from '../../utils/imageUtils';
 
 import { SalesItem } from '../../pages/SalesPage';
 
@@ -123,10 +124,20 @@ const SalesTable: React.FC<SalesTableProps> = ({
 
   // Render image avatar
   const renderImage = (item: SalesItem) => {
-    if (item.imageUrl) {
+    // Get the image URL with user ID included
+    const imageSource = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
+    
+    // Add debugging for image URLs
+    console.log(`Sales item ${item.id} image:`, {
+      imageUrl: item.imageUrl,
+      userId: currentUser?.uid,
+      constructedUrl: imageSource
+    });
+    
+    if (imageSource) {
       return (
         <Avatar 
-          src={item.imageUrl} 
+          src={imageSource} 
           alt={item.itemName}
           variant="rounded"
           sx={{ width: 48, height: 48 }}

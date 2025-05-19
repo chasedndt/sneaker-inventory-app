@@ -169,8 +169,16 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     setCurrentIndex((prevIndex) => (prevIndex < images.length - 1 ? prevIndex + 1 : 0));
   };
 
-  // Get current image URL
-  const currentImageUrl = images.length > 0 ? getImageUrl(images[currentIndex]) : '';
+  // Get current image URL with user ID in the path
+  const currentImageUrl = images.length > 0 ? 
+    (() => {
+      const url = getImageUrl(images[currentIndex], undefined, currentUser?.uid);
+      console.log(`Main image URL: ${url}`);
+      console.log(`Main image filename: ${images[currentIndex]}`);
+      console.log(`User ID for main image: ${currentUser?.uid}`);
+      return url;
+    })() : 
+    '';
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -372,7 +380,13 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
               >
                 <Box
                   component="img"
-                  src={getImageUrl(image)}
+                  src={(() => {
+                    const thumbUrl = getImageUrl(image, undefined, currentUser?.uid);
+                    console.log(`Thumbnail ${index} URL: ${thumbUrl}`);
+                    console.log(`User ID: ${currentUser?.uid}`);
+                    console.log(`Image filename: ${image}`);
+                    return thumbUrl;
+                  })()}
                   alt={`Thumbnail ${index + 1}`}
                   sx={{
                     width: '100%',
@@ -381,6 +395,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
                   }}
                   onError={(e) => {
                     // If thumbnail fails to load, show placeholder
+                    console.error(`Failed to load thumbnail ${index}: ${image}`);
                     (e.target as HTMLImageElement).src = '/placeholder-image-svg.svg';
                   }}
                 />
