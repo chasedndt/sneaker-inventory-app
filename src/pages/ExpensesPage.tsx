@@ -277,13 +277,25 @@ const ExpensesPage: React.FC = () => {
   // Handle saving a new expense - with auth
   const handleSaveExpense = async (expense: Expense) => {
     try {
-      const savedExpense = await expensesApi.createExpense(expense);
-      
-      // Instead of adding to existing expenses, fetch all expenses again to ensure consistency
-      // This prevents duplicate expenses when navigating away and back to the page
-      await fetchExpenses(false);
-      
+      // First close the modal to prevent multiple submissions
       setIsAddExpenseModalOpen(false);
+      
+      // Set loading state to indicate processing
+      setLoading(true);
+      
+      // Make sure we're not creating recurring entries automatically
+      // This prevents the duplicate expense issue
+      const expenseToSave = {
+        ...expense,
+        // Add a flag to explicitly control recurring entry generation
+        generateRecurringEntries: false
+      };
+      
+      // Save the expense
+      await expensesApi.createExpense(expenseToSave);
+      
+      // Fetch all expenses to update the list
+      await fetchExpenses(false);
       
       setSnackbar({
         open: true,
@@ -305,6 +317,8 @@ const ExpensesPage: React.FC = () => {
           severity: 'error'
         });
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -326,13 +340,25 @@ const ExpensesPage: React.FC = () => {
   // Handle updating an expense - with auth
   const handleUpdateExpense = async (updatedExpense: Expense) => {
     try {
-      await expensesApi.updateExpense(updatedExpense.id, updatedExpense);
-      
-      // Instead of manually updating the state, fetch all expenses again
-      // This ensures consistency and prevents potential duplicate issues
-      await fetchExpenses(false);
-      
+      // First close the modal to prevent multiple submissions
       setIsEditExpenseModalOpen(false);
+      
+      // Set loading state to indicate processing
+      setLoading(true);
+      
+      // Make sure we're not creating recurring entries automatically
+      // This prevents the duplicate expense issue
+      const expenseToUpdate = {
+        ...updatedExpense,
+        // Add a flag to explicitly control recurring entry generation
+        generateRecurringEntries: false
+      };
+      
+      // Update the expense
+      await expensesApi.updateExpense(expenseToUpdate.id, expenseToUpdate);
+      
+      // Fetch all expenses to update the list
+      await fetchExpenses(false);
       
       setSnackbar({
         open: true,
@@ -354,6 +380,8 @@ const ExpensesPage: React.FC = () => {
           severity: 'error'
         });
       }
+    } finally {
+      setLoading(false);
     }
   };
   

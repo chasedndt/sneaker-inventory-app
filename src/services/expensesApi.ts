@@ -201,25 +201,21 @@ export const expensesApi = {
       const createdExpense = await response.json();
       console.log(`✅ Expense created successfully:`, createdExpense);
       
-      // Handle recurring entries if needed
-      if (expenseData.isRecurring && expenseData.recurrencePeriod) {
+      // Handle recurring entries if needed - but only if explicitly requested
+      // We're disabling automatic creation of recurring entries to prevent duplicates
+      // Instead, we'll rely on the backend or a separate process to generate these
+      if (expenseData.isRecurring && expenseData.recurrencePeriod && expenseData.generateRecurringEntries) {
         try {
           // Generate recurring entries
           const recurringEntries = generateRecurringExpenseEntries(createdExpense);
           console.log(`Generated ${recurringEntries.length} recurring entries`);
           
-          // Create each recurring entry (but don't wait for them to complete)
-          // This is a fire-and-forget approach for better UX
-          Promise.all(
-            recurringEntries.map(entry => 
-              // Set isRecurring to false for the generated entries to avoid infinite recursion
-              expensesApi.createExpense({ ...entry, isRecurring: false })
-            )
-          ).then(results => {
-            console.log(`✅ Created ${results.length} recurring entries`);
-          }).catch(err => {
-            console.error('Error creating recurring entries:', err);
-          });
+          // Log the recurring entries but don't create them automatically
+          // This prevents duplicate expenses from being created
+          console.log('Would create recurring entries:', recurringEntries);
+          
+          // If we need to actually create these entries, we should do it through a separate API endpoint
+          // or have the backend handle it automatically
         } catch (err) {
           console.error('Error generating recurring entries:', err);
         }
