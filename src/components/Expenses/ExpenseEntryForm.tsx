@@ -1,5 +1,5 @@
 // src/components/Expenses/ExpenseEntryForm.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Button,
@@ -195,24 +195,45 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
     return true;
   };
 
+  // Use a ref to track if the form is currently submitting
+  const isSubmittingRef = useRef<boolean>(false);
+  
+  // Generate a unique form submission ID to prevent duplicate submissions
+  const [submissionId] = useState<string>(`expense-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     
+    // Check if the form validation passes
     if (!validateForm()) {
       return;
     }
     
+    // Prevent duplicate submissions
+    if (isSubmittingRef.current) {
+      console.log('💡 Form already submitting, preventing duplicate submission');
+      return;
+    }
+    
+    // Mark form as submitting
+    isSubmittingRef.current = true;
     setLoading(true);
     
     try {
-      // Prepare expense data for API
+      // Prepare expense data for API with unique submission ID
       const expenseData = {
         ...formData,
         amount: parseFloat(formData.amount),
         expenseDate: formData.expenseDate.toISOString(),
-        receipt
+        receipt,
+        // Add unique submission ID to prevent duplicate backend processing
+        submissionId,
+        // Disable recurring expense generation
+        generateRecurringEntries: false
       };
+      
+      console.log(`🧾 Submitting expense with ID ${submissionId}`);
       
       let savedExpense: Expense;
       
@@ -224,8 +245,13 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         savedExpense = await expensesApi.createExpense(expenseData);
       }
       
+      console.log(`✅ Successfully saved expense with ID ${submissionId}`);
+      
       // Call the onSave callback with the saved expense
-      onSave(savedExpense);
+      // Use timeout to ensure UI has time to update before we close the form
+      setTimeout(() => {
+        onSave(savedExpense);
+      }, 100);
     } catch (error: any) {
       console.error('Error saving expense:', error);
       
@@ -236,7 +262,11 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         setError(`Failed to save expense: ${error.message}`);
       }
     } finally {
-      setLoading(false);
+      // Allow resubmitting after a delay to prevent accidental double-clicks
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+        setLoading(false);
+      }, 1000);
     }
   };
 

@@ -130,6 +130,9 @@ export const expensesApi = {
     }
   },
   
+  // Track processed submission IDs to prevent duplicate submissions
+  _processedSubmissionIds: new Set<string>(),
+  
   /**
    * Create a new expense record.
    * If the expense is recurring, also generates recurring entries
@@ -138,6 +141,19 @@ export const expensesApi = {
    */
   createExpense: async (expenseData: any): Promise<Expense> => {
     try {
+      // Check for duplicate submission using submissionId
+      if (expenseData.submissionId) {
+        // If this submission ID has already been processed, return the cached response
+        if (expensesApi._processedSubmissionIds.has(expenseData.submissionId)) {
+          console.warn(`⚠️ Duplicate submission detected with ID: ${expenseData.submissionId}. Ignoring.`);
+          throw new Error('This expense has already been submitted. Please refresh the page to see your expenses.');
+        }
+        
+        // Add this submission ID to the processed set
+        expensesApi._processedSubmissionIds.add(expenseData.submissionId);
+        console.log(`🔢 Processing new submission ID: ${expenseData.submissionId}`);
+      }
+      
       console.log('🔄 Creating new expense...', expenseData);
       
       // Create FormData object for multipart request (for receipt upload)
@@ -236,6 +252,19 @@ export const expensesApi = {
    */
   updateExpense: async (id: number, expenseData: any): Promise<Expense> => {
     try {
+      // Check for duplicate submission using submissionId
+      if (expenseData.submissionId) {
+        // If this submission ID has already been processed, return the cached response
+        if (expensesApi._processedSubmissionIds.has(expenseData.submissionId)) {
+          console.warn(`⚠️ Duplicate update submission detected with ID: ${expenseData.submissionId}. Ignoring.`);
+          throw new Error('This expense update has already been submitted. Please refresh the page to see your expenses.');
+        }
+        
+        // Add this submission ID to the processed set
+        expensesApi._processedSubmissionIds.add(expenseData.submissionId);
+        console.log(`🔢 Processing update submission ID: ${expenseData.submissionId}`);
+      }
+      
       console.log(`🔄 Updating expense ${id}...`, expenseData);
       
       // Create FormData object for multipart request (for receipt upload)
