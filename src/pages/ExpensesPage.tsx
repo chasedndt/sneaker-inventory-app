@@ -275,33 +275,27 @@ const ExpensesPage: React.FC = () => {
   };
   
   // Handle saving a new expense - with auth
+  // IMPORTANT: This function is called by ExpenseEntryForm after it has already created the expense
+  // We should NOT create the expense again, just update the UI
   const handleSaveExpense = async (expense: Expense) => {
     try {
-      // First close the modal immediately to prevent double submissions from UI
+      // Close modals and clear current expense
       setIsAddExpenseModalOpen(false);
-      setCurrentExpense(null); // Clear the current expense
+      setCurrentExpense(null);
       
-      // Set loading state to indicate processing
+      // Set loading state
       setLoading(true);
       
-      console.log('🔵 handleSaveExpense triggered for expense:', expense.expenseType, expense.amount);
+      console.log('🔵 handleSaveExpense received already saved expense:', expense.id, expense.expenseType);
       
-      // Make sure we're not creating recurring entries automatically
-      // This prevents the duplicate expense issue
-      const expenseToSave = {
-        ...expense,
-        // Add a flag to explicitly control recurring entry generation
-        generateRecurringEntries: false
-      };
+      // CRITICAL: Do NOT create the expense again!
+      // The expense has already been created by ExpenseEntryForm
       
-      // Save the expense - the API will handle deduplication for us
-      await expensesApi.createExpense(expenseToSave);
-      
-      console.log('✅ Expense saved successfully, fetching updated expense list');
-      
-      // Fetch all expenses to update the list
+      // Just refresh the expense list to show the new expense
+      console.log('🔄 Refreshing expense list after expense was saved');
       await fetchExpenses(false);
       
+      // Show success message
       setSnackbar({
         open: true,
         message: 'Expense added successfully',
@@ -310,19 +304,8 @@ const ExpensesPage: React.FC = () => {
     } catch (error: any) {
       console.error('❌ Error in handleSaveExpense:', error);
       
-      // Handle duplicate submission errors
-      if (error.message.includes('already been submitted')) {
-        setSnackbar({
-          open: true,
-          message: error.message,
-          severity: 'info'
-        });
-        
-        // Refresh expenses to show what's actually in the database
-        await fetchExpenses(false);
-      }
-      // Handle auth errors
-      else if (error.message.includes('Authentication') || error.message.includes('token')) {
+      // Error handling
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
         setSnackbar({
           open: true,
           message: `Authentication error: ${error.message}. Please try logging in again.`,
@@ -331,7 +314,7 @@ const ExpensesPage: React.FC = () => {
       } else {
         setSnackbar({
           open: true,
-          message: `Failed to add expense: ${error.message}`,
+          message: `Error refreshing expenses: ${error.message}`,
           severity: 'error'
         });
       }
@@ -356,38 +339,27 @@ const ExpensesPage: React.FC = () => {
   };
   
   // Handle updating an expense - with auth
+  // IMPORTANT: This function is called by ExpenseEntryForm after it has already updated the expense
+  // We should NOT update the expense again, just update the UI
   const handleUpdateExpense = async (updatedExpense: Expense) => {
     try {
-      // First close the modal immediately to prevent double submissions from UI
+      // Close modals and clear current expense
       setIsEditExpenseModalOpen(false);
-      setCurrentExpense(null); // Clear the current expense
+      setCurrentExpense(null);
       
-      // Set loading state to indicate processing
+      // Set loading state
       setLoading(true);
       
-      console.log('🔵 handleUpdateExpense triggered for expense:', updatedExpense.id, updatedExpense.expenseType);
+      console.log('🔵 handleUpdateExpense received already updated expense:', updatedExpense.id, updatedExpense.expenseType);
       
-      // Add a submission ID to track this specific update operation
-      const submissionId = `update-${updatedExpense.id}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      // CRITICAL: Do NOT update the expense again!
+      // The expense has already been updated by ExpenseEntryForm
       
-      // Make sure we're not creating recurring entries automatically
-      // This prevents the duplicate expense issue
-      const expenseToUpdate = {
-        ...updatedExpense,
-        // Add a flag to explicitly control recurring entry generation
-        generateRecurringEntries: false,
-        // Add the submission ID for deduplication
-        submissionId
-      };
-      
-      // Update the expense
-      await expensesApi.updateExpense(expenseToUpdate.id, expenseToUpdate);
-      
-      console.log('✅ Expense updated successfully, fetching updated expense list');
-      
-      // Fetch all expenses to update the list
+      // Just refresh the expense list to show the updated expense
+      console.log('🔄 Refreshing expense list after expense was updated');
       await fetchExpenses(false);
       
+      // Show success message
       setSnackbar({
         open: true,
         message: 'Expense updated successfully',
@@ -396,19 +368,8 @@ const ExpensesPage: React.FC = () => {
     } catch (error: any) {
       console.error('❌ Error in handleUpdateExpense:', error);
       
-      // Handle duplicate submission errors
-      if (error.message.includes('already been submitted')) {
-        setSnackbar({
-          open: true,
-          message: error.message,
-          severity: 'info'
-        });
-        
-        // Refresh expenses to show what's actually in the database
-        await fetchExpenses(false);
-      }
-      // Handle auth errors
-      else if (error.message.includes('Authentication') || error.message.includes('token')) {
+      // Error handling
+      if (error.message.includes('Authentication') || error.message.includes('token')) {
         setSnackbar({
           open: true,
           message: `Authentication error: ${error.message}. Please try logging in again.`,
@@ -417,7 +378,7 @@ const ExpensesPage: React.FC = () => {
       } else {
         setSnackbar({
           open: true,
-          message: `Failed to update expense: ${error.message}`,
+          message: `Error refreshing expenses: ${error.message}`,
           severity: 'error'
         });
       }
