@@ -114,7 +114,20 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         setIsLoading(false);
         return;
       }
-
+      
+      // Get all items, group them, then take only the first 4 (most recent)
+      const grouped = groupItemsByProduct(items);
+      
+      // Sort by purchase date (newest first)
+      grouped.sort((a, b) => {
+        const dateA = new Date(a.purchaseDate).getTime();
+        const dateB = new Date(b.purchaseDate).getTime();
+        return dateB - dateA;
+      });
+      
+      // Limit to 4 items for the dashboard display
+      const limitedItems = grouped.slice(0, 4);
+      
       // COMPREHENSIVE IMAGE PATH DEBUGGING
       console.log('%c📸 DETAILED IMAGE PATH DEBUGGING', 'background: #222; color: #bada55; font-size: 16px; padding: 4px;');
       console.log('API Base URL:', apiBaseUrl);
@@ -180,11 +193,10 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         console.log('-----------------------------------');
       });
 
-      // Group and sort items
-      const grouped = groupItemsByProduct(items);
-      console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups`);
+      // Use the limitedItems we created earlier
+      console.log(`✅ Grouped ${items.length} items into ${limitedItems.length} product groups (showing ${limitedItems.length} on dashboard)`);
             // Add image loading state to each item and ensure imageUrl is properly set
-      const withImageState = grouped.map(item => {
+      const withImageState = limitedItems.map(item => {
         // Use the getImageUrl utility to construct proper URL with user ID
         
         // If item has images array but no imageUrl, use the first image
@@ -327,7 +339,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                     transform: 'translateY(-4px)',
                     boxShadow: '0 8px 20px rgba(0,0,0,0.2)',
                   },
-                  height: '180px',
+                  height: '160px', // Reduced from 180px to 160px
                   width: '100%'
                 }}
                 elevation={1}
@@ -336,7 +348,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                   {/* Image area - left side */}
                   <Grid item xs={4}>
                     <Box sx={{ 
-                      height: '180px',
+                      height: '160px', // Reduced to match card height
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',

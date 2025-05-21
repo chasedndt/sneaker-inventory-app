@@ -280,9 +280,6 @@ const SalesTable: React.FC<SalesTableProps> = ({
               {visibleColumns.size && (
                 <TableCell sx={{ minWidth: 80 }}>Size</TableCell>
               )}
-              
-              {/* Actions Column */}
-              <TableCell sx={{ minWidth: 120 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
           
@@ -460,43 +457,6 @@ const SalesTable: React.FC<SalesTableProps> = ({
                         {sale.size || '-'}
                       </TableCell>
                     )}
-                    
-                    {/* Actions Column */}
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Restore to Inventory">
-                          <IconButton 
-                            size="small" 
-                            color="primary"
-                            onClick={() => onRestoreToInventory(sale.id)}
-                            sx={{ 
-                              bgcolor: 'rgba(25, 118, 210, 0.08)',
-                              '&:hover': {
-                                bgcolor: 'rgba(25, 118, 210, 0.15)'
-                              }
-                            }}
-                          >
-                            <KeyboardReturnIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        
-                        <Tooltip title="Delete Sale">
-                          <IconButton 
-                            size="small" 
-                            color="error"
-                            onClick={() => onDeleteSale(sale.id)}
-                            sx={{ 
-                              bgcolor: 'rgba(211, 47, 47, 0.08)',
-                              '&:hover': {
-                                bgcolor: 'rgba(211, 47, 47, 0.15)'
-                              }
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
                   </TableRow>
                 );
               })

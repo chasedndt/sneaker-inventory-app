@@ -35,6 +35,8 @@ import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
 import PaymentIcon from '@mui/icons-material/Payment';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
+import DeleteIcon from '@mui/icons-material/Delete';
 import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
@@ -800,6 +802,7 @@ const SalesPage: React.FC = () => {
           
           {selectedSales.length > 0 ? (
             <>
+              {/* Show these buttons when sales are selected */}
               <Grid item>
                 <Button 
                   variant="outlined" 
@@ -832,18 +835,76 @@ const SalesPage: React.FC = () => {
                   Mark as Completed
                 </Button>
               </Grid>
+              
+              {/* Show these buttons only when exactly one sale is selected */}
+              {selectedSales.length === 1 && (
+                <>
+                  <Grid item>
+                    <Button 
+                      variant="outlined" 
+                      color="primary"
+                      size="small"
+                      startIcon={<KeyboardReturnIcon />}
+                      onClick={() => handleRestoreToInventory(selectedSales[0])}
+                    >
+                      Return to Inventory
+                    </Button>
+                  </Grid>
+                  
+                  <Grid item>
+                    <Button 
+                      variant="outlined" 
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteSale(selectedSales[0])}
+                    >
+                      Delete Sale
+                    </Button>
+                  </Grid>
+                </>
+              )}
             </>
           ) : (
-            <Grid item>
-              <Button 
-                variant="contained" 
-                color="primary"
-                size="small"
-                onClick={handleOpenRecordSaleModal}
-              >
-                Record Sale
-              </Button>
-            </Grid>
+            <>
+              {/* Always show these buttons in the toolbar when no sales are selected */}
+              <Grid item>
+                <Button 
+                  variant="contained" 
+                  color="primary"
+                  size="small"
+                  onClick={handleOpenRecordSaleModal}
+                >
+                  Record Sale
+                </Button>
+              </Grid>
+              
+              <Grid item>
+                <Button 
+                  variant="outlined" 
+                  color="primary"
+                  size="small"
+                  startIcon={<KeyboardReturnIcon />}
+                  disabled={true}
+                  sx={{ opacity: 0.6 }}
+                >
+                  Return to Inventory
+                </Button>
+              </Grid>
+              
+              <Grid item>
+                <Button 
+                  variant="outlined" 
+                  color="error"
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  disabled={true}
+                  sx={{ opacity: 0.6 }}
+                >
+                  Delete Sale
+                </Button>
+              </Grid>
+            </>
           )}
           
           <Grid item sx={{ ml: 'auto' }}>
