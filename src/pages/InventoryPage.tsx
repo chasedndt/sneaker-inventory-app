@@ -125,7 +125,7 @@ const InventoryPage: React.FC = () => {
     brand: true,
     reference: true,
     sku: true,
-    daysInInventory: true,
+    daysInInventory: false, // Set to false by default
     roi: true,
     purchaseTotal: true,
     shippingAmount: true,
