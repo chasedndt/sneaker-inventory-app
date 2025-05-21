@@ -183,8 +183,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       // Group and sort items
       const grouped = groupItemsByProduct(items);
       console.log(`✅ Grouped ${items.length} items into ${grouped.length} product groups`);
-      
-      // Add image loading state to each item and ensure imageUrl is properly set
+            // Add image loading state to each item and ensure imageUrl is properly set
       const withImageState = grouped.map(item => {
         // Use the getImageUrl utility to construct proper URL with user ID
         
@@ -195,6 +194,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         } else if (item.imageUrl) {
           imageUrl = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
         }
+        
         
         // Add debugging for image URLs
         console.log(`Dashboard item ${item.id} image:`, {
@@ -307,8 +307,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           pb: 2
         }}>
           {groupedItems.map((item, index) => {
-            // For demonstration, using purchasePrice as current value
-            const currentValue = item.purchasePrice;
+            // Use market price if available, otherwise fall back to purchase price
+            const currentValue = item.marketPrice || item.purchasePrice * 1.2;
             const change = calculateChange(item.purchasePrice, currentValue);
             
             // Get colors for this card
@@ -440,45 +440,63 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(item.purchasePrice)}
+                          {money(item.marketPrice || item.purchasePrice * 1.2)}
                         </Typography>
                         
-                        <Box sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center',
-                          backgroundColor: change >= 0 ? 'rgba(67, 217, 173, 0.2)' : 'rgba(255, 99, 99, 0.2)',
-                          borderRadius: '12px',
-                          padding: '4px 8px'
-                        }}>
-                          {change >= 0 ? (
-                            <ArrowUpwardIcon 
-                              fontSize="small" 
+                        <Tooltip
+                          title={
+                            <Box>
+                              <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                                Unrealized Profit: {money((item.marketPrice || item.purchasePrice * 1.2) - item.purchasePrice)}
+                              </Typography>
+                            </Box>
+                          }
+                          arrow
+                          placement="top"
+                        >
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            backgroundColor: change >= 0 ? 'rgba(67, 217, 173, 0.2)' : 'rgba(255, 99, 99, 0.2)',
+                            borderRadius: '12px',
+                            padding: '4px 8px',
+                            cursor: 'pointer',
+                            transition: 'transform 0.2s ease-in-out, box-shadow 0.1s ease-in-out',
+                            '&:hover': {
+                              transform: 'translateY(-2px)',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.15)'
+                            }
+                          }}>
+                            {change >= 0 ? (
+                              <ArrowUpwardIcon 
+                                fontSize="small" 
+                                sx={{ 
+                                  fontSize: '0.875rem',
+                                  color: 'rgb(67, 217, 173)'
+                                }}
+                              />
+                            ) : (
+                              <ArrowDownwardIcon 
+                                fontSize="small" 
+                                sx={{ 
+                                  fontSize: '0.875rem',
+                                  color: 'rgb(255, 99, 99)'
+                                }}
+                              />
+                            )}
+                            <Typography 
+                              variant="caption" 
                               sx={{ 
-                                fontSize: '0.875rem',
-                                color: 'rgb(67, 217, 173)'
+                                fontWeight: 600,
+                                fontSize: '0.75rem',
+                                color: change >= 0 ? 'rgb(67, 217, 173)' : 'rgb(255, 99, 99)',
+                                ml: 0.5
                               }}
-                            />
-                          ) : (
-                            <ArrowDownwardIcon 
-                              fontSize="small" 
-                              sx={{ 
-                                fontSize: '0.875rem',
-                                color: 'rgb(255, 99, 99)'
-                              }}
-                            />
-                          )}
-                          <Typography 
-                            variant="caption" 
-                            sx={{ 
-                              fontWeight: 600,
-                              fontSize: '0.75rem',
-                              color: change >= 0 ? 'rgb(67, 217, 173)' : 'rgb(255, 99, 99)',
-                              ml: 0.5
-                            }}
-                          >
-                            {Math.abs(change).toFixed(1)}%
-                          </Typography>
-                        </Box>
+                            >
+                              {Math.abs(change).toFixed(1)}%
+                            </Typography>
+                          </Box>
+                        </Tooltip>
                       </Box>
                       
                       <Typography 
