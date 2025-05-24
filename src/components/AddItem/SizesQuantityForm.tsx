@@ -21,7 +21,7 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
 import CloseIcon from '@mui/icons-material/Close';
 
-export type CategoryType = 'Sneakers' | 'Streetwear' | 'Handbags' | 'Watches' | 'Accessories' | 'Electronics' | 'Other';
+export type CategoryType = 'Sneakers' | 'Streetwear' | 'Handbags' | 'Watches' | 'Accessories' | 'Electronics' | 'Collectibles' | 'Other';
 
 interface SizeEntry {
   system: string;
@@ -54,6 +54,7 @@ const sizeSystems: Record<CategoryType, string[]> = {
   'Watches': [],
   'Accessories': [],
   'Electronics': [],
+  'Collectibles': [],
   'Other': []
 };
 

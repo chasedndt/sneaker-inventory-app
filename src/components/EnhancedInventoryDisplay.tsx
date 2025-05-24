@@ -62,6 +62,7 @@ const getGradientColors = (category: string): { start: string, end: string } => 
     'Watches': { start: '#e8a53d', end: '#b87e35' }, // Orange
     'Accessories': { start: '#3de8a5', end: '#35b871' }, // Green
     'Electronics': { start: '#3d3de8', end: '#3535b8' }, // Deep Blue
+    'Collectibles': { start: '#e83dc4', end: '#b835a0' }, // Magenta/Pink
     'Other': { start: '#6e6e6e', end: '#4c4c4c' }, // Gray
   };
   

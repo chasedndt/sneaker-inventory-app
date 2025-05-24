@@ -33,6 +33,7 @@ const categories: CategoryType[] = [
   'Watches',
   'Accessories',
   'Electronics',
+  'Collectibles',
   'Other'
 ];
 
