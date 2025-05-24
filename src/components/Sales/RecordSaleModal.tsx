@@ -161,10 +161,12 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       return;
     }
     
-    // Handle custom platform
-    if (!PREDEFINED_PLATFORMS.includes(newValue) && !customPlatforms.includes(newValue)) {
+    // Handle custom platform - ensure the value is a string
+    const platformValue = newValue.toString().trim();
+    
+    if (platformValue && !PREDEFINED_PLATFORMS.includes(platformValue) && !customPlatforms.includes(platformValue)) {
       // Add to custom platforms
-      const updatedCustomPlatforms = [...customPlatforms, newValue];
+      const updatedCustomPlatforms = [...customPlatforms, platformValue];
       setCustomPlatforms(updatedCustomPlatforms);
       setPlatformOptions([...PREDEFINED_PLATFORMS, ...updatedCustomPlatforms]);
       
@@ -173,7 +175,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       localStorage.setItem(userKey, JSON.stringify(updatedCustomPlatforms));
     }
     
-    handleChange('platform', newValue);
+    handleChange('platform', platformValue);
   };
   
   const validateForm = (): boolean => {
@@ -383,28 +385,24 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                 </FormControl>
               </Grid>
               
-              {/* Platform - Using Autocomplete instead of Select */}
+              {/* Platform */}
               <Grid item xs={12} sm={6}>
-                <Autocomplete
-                  value={formData.platform}
-                  onChange={handlePlatformChange}
-                  options={platformOptions}
-                  freeSolo
-                  renderInput={(params) => (
-                    <TextField 
-                      {...params} 
-                      label="Listing Platform"
-                      error={!!errors.platform}
-                      helperText={errors.platform}
-                      fullWidth
-                    />
-                  )}
-                  sx={{ 
-                    '& .MuiOutlinedInput-root': {
-                      color: theme.palette.text.primary
-                    }
-                  }}
-                />
+                <FormControl fullWidth error={!!errors.platform}>
+                  <TextField
+                    fullWidth
+                    label="Platform"
+                    value={formData.platform}
+                    onChange={(e) => handleChange('platform', e.target.value)}
+                    error={!!errors.platform}
+                    helperText={errors.platform}
+                    placeholder="Enter platform name"
+                    sx={{
+                      '& .MuiInputBase-input': {
+                        color: theme.palette.text.primary
+                      }
+                    }}
+                  />
+                </FormControl>
               </Grid>
               
               {/* Sale Date */}
