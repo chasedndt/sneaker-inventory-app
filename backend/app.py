@@ -55,7 +55,10 @@ def create_app():
     # Secure CORS for frontend authentication
     CORS(app,
          origins=["http://localhost:3000"],
-         supports_credentials=True)
+         supports_credentials=True,
+         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+         max_age=3600)
 
     db.init_app(app)
     Migrate(app, db)
@@ -109,10 +112,16 @@ def create_app():
     def allowed_file(filename):
         return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-    @app.route('/api/test', methods=['GET'])
+    @app.route('/api/test-connection', methods=['GET', 'OPTIONS'])
     def test_connection():
-        logger.info("Test endpoint hit")
-        return jsonify({'status': 'connected'}), 200
+        """Test if the API is reachable and CORS is working properly"""
+        logger.info("Test connection endpoint hit with method: %s", request.method)
+        if request.method == 'OPTIONS':
+            # Handle preflight request
+            response = current_app.make_default_options_response()
+            return response
+            
+        return jsonify({"status": "success", "message": "API connection successful"})
 
     # Health check endpoint
     @app.route('/api/ping', methods=['GET'])
@@ -405,6 +414,112 @@ def create_app():
             purchase_details = form_data.get('purchaseDetails', {})
             status = form_data.get('status')  # Get status if provided
             
+            # Log existing images for debugging
+            existing_db_images = Image.query.filter_by(item_id=item.id).all()
+            logger.info(f"📊 Current images in DB for item {item_id}: {[img.filename for img in existing_db_images]}")
+            
+            # ===== IMAGE PROCESSING - COMPLETE REDESIGN =====
+            # Process existingImages array from frontend if provided
+            existing_images = []
+            
+            # Flag to track if image processing was done
+            image_processing_completed = False
+            
+            if 'existingImages' in request.form:
+                try:
+                    # This is a separate transaction for image processing only
+                    existing_images = json.loads(request.form.get('existingImages'))
+                    logger.info(f"📊 [IMAGE_HANDLER] Received existingImages from frontend: {existing_images}")
+                    
+                    # Get existing images for debugging
+                    db_images_before = Image.query.filter_by(item_id=item.id).all()
+                    logger.info(f"📚 [IMAGE_HANDLER] Current images BEFORE: {[img.filename for img in db_images_before]}")
+                    
+                    # Track which images should be physically deleted
+                    images_to_physically_delete = []
+                    
+                    # === STEP 1: DELETE ALL EXISTING IMAGE RECORDS FROM DATABASE ===
+                    # Create a backup dictionary of existing images first
+                    db_image_dict = {}
+                    for img in db_images_before:
+                        db_image_dict[img.filename] = {
+                            'path': img.path,
+                            'filename': img.filename
+                        }
+                    
+                    # Now delete all image records from the database
+                    deletion_count = Image.query.filter_by(item_id=item.id).delete()
+                    db.session.flush()  # Make sure deletion is processed
+                    logger.info(f"🗑️ [IMAGE_HANDLER] Deleted {deletion_count} image records for item {item_id}")
+                    
+                    # === STEP 2: IDENTIFY IMAGES THAT WERE DELETED BY USER ===
+                    all_filenames = set(db_image_dict.keys())
+                    frontend_filenames = set(existing_images)
+                    
+                    # These are images that were in DB but not in the frontend request (user deleted them)
+                    deleted_by_user = all_filenames - frontend_filenames
+                    logger.info(f"🗑️ [IMAGE_HANDLER] User deleted these images: {deleted_by_user}")
+                    
+                    # Collect images to physically delete from filesystem
+                    for filename in deleted_by_user:
+                        images_to_physically_delete.append(db_image_dict[filename]['path'])
+                    
+                    # === STEP 3: INSERT NEW IMAGE RECORDS IN THE EXACT ORDER FROM FRONTEND ===
+                    logger.info(f"🔄 [IMAGE_HANDLER] Inserting images in this order: {existing_images}")
+                    
+                    # Only attempt to add images that exist in our backup
+                    for position, filename in enumerate(existing_images):
+                        if filename in db_image_dict:
+                            # Get the original path
+                            path = db_image_dict[filename]['path']
+                            
+                            # Create a completely new image record
+                            new_img = Image(
+                                item_id=item.id,
+                                filename=filename,
+                                path=path
+                            )
+                            db.session.add(new_img)
+                            logger.info(f"💾 [IMAGE_HANDLER] Added image {filename} at position {position}")
+                        else:
+                            logger.warning(f"⚠️ [IMAGE_HANDLER] Skipping unknown image: {filename}")
+                    
+                    # Flush to ensure all database operations are processed
+                    db.session.flush()
+                    
+                    # === STEP 4: VERIFY THE IMAGE ORDER IS CORRECT ===
+                    # Get the current images after our changes
+                    db_images_after = Image.query.filter_by(item_id=item.id).all()
+                    current_filenames = [img.filename for img in db_images_after]
+                    logger.info(f"📚 [IMAGE_HANDLER] Current images AFTER: {current_filenames}")
+                    
+                    # Validate the order matches what the frontend sent
+                    expected_order = [f for f in existing_images if f in db_image_dict]
+                    if current_filenames != expected_order:
+                        logger.error(f"⛔ [IMAGE_HANDLER] ORDER MISMATCH! Expected: {expected_order}, Got: {current_filenames}")
+                        # Additional safety check
+                        logger.warning(f"⚠️ [IMAGE_HANDLER] Will force correct order in response")
+                    else:
+                        logger.info(f"✅ [IMAGE_HANDLER] Order verification successful")
+                    
+                    # === STEP 5: PHYSICALLY DELETE FILES THAT WERE REMOVED ===
+                    for file_path in images_to_physically_delete:
+                        try:
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                                logger.info(f"🗑️ [IMAGE_HANDLER] Physically deleted: {file_path}")
+                        except Exception as file_err:
+                            logger.error(f"❌ [IMAGE_HANDLER] Failed to delete file {file_path}: {str(file_err)}")
+                    
+                    # Set flag to indicate successful processing
+                    image_processing_completed = True
+                    logger.info(f"✅ [IMAGE_HANDLER] Image processing completed successfully")
+                    
+                except Exception as img_err:
+                    logger.error(f"❌ [IMAGE_HANDLER] Error processing images: {str(img_err)}")
+                    logger.error(traceback.format_exc())
+                    # Don't rollback here, continue with other updates
+            
             # Update item fields
             if product_details:
                 item.category = product_details.get('category', item.category)
@@ -482,6 +597,7 @@ def create_app():
                         )
                         db.session.add(new_image)
                         image_filenames.append(timestamped_filename)
+                        logger.info(f"📸 Added new image: {timestamped_filename}")
             
             # Update the modified timestamp
             item.updated_at = datetime.utcnow()
@@ -489,16 +605,49 @@ def create_app():
             # Commit changes
             db.session.commit()
             
-            logger.info(f"✅ Item {item_id} updated successfully for user {user_id}")
+            # Get the updated item for response
+            updated_item = Item.query.get(item_id)
             
-            # Return the updated item
+            # ===== FINAL IMAGE ORDER CHECK =====
+            # This ensures the response to the frontend has the EXACT order the frontend requested
+            # Get current database order
+            current_db_images = [img.filename for img in updated_item.images]
+            logger.info(f"📊 [FINAL CHECK] Current image order in DB: {current_db_images}")
+            
+            # If we processed images and the order doesn't match frontend's request, fix it in the response
+            if image_processing_completed and 'existingImages' in request.form:
+                # Create a clean response dictionary
+                response_item_dict = updated_item.to_dict()
+                
+                # Get the order frontend requested
+                frontend_order = json.loads(request.form.get('existingImages'))
+                logger.info(f"📊 [FINAL CHECK] Frontend requested order: {frontend_order}")
+                
+                # Only include images that actually exist in both lists
+                valid_images = [img for img in frontend_order if img in current_db_images]
+                
+                if set(valid_images) == set(current_db_images) and valid_images != current_db_images:
+                    # Same images but different order - force the frontend's order in the response
+                    logger.info(f"🔧 [FINAL CHECK] Forcing frontend image order in response")
+                    response_item_dict['images'] = valid_images
+                    
+                    return jsonify({
+                        'message': 'Item updated successfully',
+                        'item': response_item_dict
+                    }), 200
+            
+            logger.info(f"✅ Item {item_id} updated successfully.")
+            
+            # Return the updated item (normal case)
             return jsonify({
                 'message': 'Item updated successfully',
-                'item': item.to_dict()
+                'item': updated_item.to_dict()
             }), 200
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error updating item {item_id} for user {user_id}: {str(e)}")
+            # Include traceback for better debugging
+            logger.error(traceback.format_exc())
             return jsonify({'error': str(e)}), 500
 
     # Update a specific field of an item
