@@ -19,6 +19,14 @@ import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
 import CoplistsPage from './pages/CoplistsPage';
 
+// Settings Pages
+import SettingsLayout from './pages/Settings/SettingsLayout';
+import ProfileSettings from './pages/Settings/ProfileSettings';
+import BillingSettings from './pages/Settings/BillingSettings';
+import NotificationSettings from './pages/Settings/NotificationSettings';
+import SecuritySettings from './pages/Settings/SecuritySettings';
+import InventorySettings from './pages/Settings/InventorySettings';
+
 // Layout Components
 import Layout from './components/Layout';
 
@@ -121,7 +129,17 @@ const AppContent: React.FC = () => {
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/coplists" element={<CoplistsPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          
+          {/* Settings Routes */}
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="/settings/profile" replace />} />
+            <Route path="profile" element={<ProfileSettings />} />
+            <Route path="billing" element={<BillingSettings />} />
+            <Route path="inventory" element={<InventorySettings />} />
+            <Route path="notifications" element={<NotificationSettings />} />
+            <Route path="security" element={<SecuritySettings />} />
+          </Route>
+          
           <Route path="/profile" element={<Profile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>

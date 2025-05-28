@@ -43,7 +43,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   const { money } = useFormat(); 
 
   const formattedValue = useFormatter && typeof rawValue === 'number' 
-    ? money(Number(rawValue)) 
+    ? money(Number(rawValue), 'GBP') 
     : `${rawValue}${suffix}`;
 
   const actualChangeDefined = typeof change === 'number';
@@ -118,7 +118,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
                   }}
                   itemStyle={{ color: theme.palette.text.primary, fontSize: '0.875rem' }}
                   labelStyle={{ display: 'none' }} 
-                  formatter={(val: number) => [useFormatter ? money(val) : val, null]} 
+                  formatter={(val: number) => [useFormatter ? money(val, 'GBP') : val, null]} 
                 />
                 <Line 
                   type="monotone" 

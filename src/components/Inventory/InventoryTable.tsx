@@ -108,6 +108,9 @@ const InventoryTable = ({
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
+  
+  // Get the user's currency symbol from settings
+  const { currency: userCurrency } = useSettings();
   const currencySymbol = getCurrentCurrency();
   
   // Sorting state
@@ -158,6 +161,20 @@ const InventoryTable = ({
   const numericFields = ['marketPrice', 'estimatedProfit', 'purchaseTotal', 'shippingAmount', 'roi'];
   const dateFields = ['purchaseDate', 'daysInInventory'];
   const textFields = ['status', 'productName', 'category', 'size', 'brand', 'reference'];
+  
+  // LOGGING: Log the items passed to InventoryTable for debugging market prices
+  useEffect(() => {
+    if (items.length > 0) {
+      console.log('🔎 [INVENTORY TABLE] Items received for display:', 
+        items.map(item => ({
+          id: item.id,
+          productName: item.productName,
+          marketPrice: item.marketPrice,
+          formattedMarketPrice: money(item.marketPrice, 'GBP'),
+          purchasePrice: item.purchasePrice
+        })));
+    }
+  }, [items]);
   
   // Handle column header click for sorting
   const handleSortClick = (field: SortField) => {
@@ -387,13 +404,8 @@ const InventoryTable = ({
       ? getImageUrl(item.images[0], item.id, currentUser?.uid)
       : getImageUrl(item.imageUrl, item.id, currentUser?.uid);
       
-    // Add debugging for image URLs
-    console.log(`Inventory item ${item.id} image:`, {
-      imageUrl: item.imageUrl,
-      firstImage: item.images && item.images.length > 0 ? item.images[0] : null,
-      userId: currentUser?.uid,
-      constructedUrl: imageSource
-    });
+    // Only log image errors if they occur, not every image attempt
+    // This dramatically reduces console noise
     
     return (
       <Avatar 
@@ -818,13 +830,14 @@ const InventoryTable = ({
                     {visibleColumns.marketPrice && (
                       <TableCell align="right">
                         {editingMarketPrice === item.id ? (
-                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                            <TextField
-                              inputRef={marketPriceInputRef}
-                              variant="outlined"
-                              size="small"
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                            <span style={{ marginRight: '4px' }}>{currencySymbol}</span>
+                            <input
+                              type="text"
+                              autoFocus
                               value={marketPriceValue}
                               onChange={(e) => setMarketPriceValue(e.target.value)}
+                              onFocus={(e) => e.target.select()}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') {
                                   handleSaveMarketPrice(item.id);
@@ -832,39 +845,42 @@ const InventoryTable = ({
                                   handleCancelEditing();
                                 }
                               }}
-                              InputProps={{
-                                startAdornment: (
-                                  <InputAdornment position="start">{currencySymbol}</InputAdornment>
-                                ),
-                                endAdornment: (
-                                  <InputAdornment position="end">
-                                    <IconButton
-                                      size="small"
-                                      onClick={() => handleSaveMarketPrice(item.id)}
-                                    >
-                                      <SaveIcon fontSize="small" />
-                                    </IconButton>
-                                    <IconButton
-                                      size="small"
-                                      onClick={handleCancelEditing}
-                                    >
-                                      <CancelIcon fontSize="small" />
-                                    </IconButton>
-                                  </InputAdornment>
-                                ),
-                                sx: { py: 0.5 }
+                              style={{
+                                width: '80px',
+                                padding: '8px',
+                                borderRadius: '4px',
+                                border: '1px solid #ccc',
+                                fontSize: '16px'
                               }}
-                              sx={{ maxWidth: 160 }}
                             />
-                          </Box>
+                            <button 
+                              onClick={() => handleSaveMarketPrice(item.id)}
+                              style={{ 
+                                marginLeft: '4px', 
+                                cursor: 'pointer', 
+                                background: 'none', 
+                                border: 'none' 
+                              }}
+                            >
+                              <SaveIcon fontSize="small" />
+                            </button>
+                            <button 
+                              onClick={handleCancelEditing}
+                              style={{ 
+                                cursor: 'pointer', 
+                                background: 'none', 
+                                border: 'none' 
+                              }}
+                            >
+                              <CancelIcon fontSize="small" />
+                            </button>
+                          </div>
                         ) : (
-                          <Box 
-                            sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              justifyContent: 'flex-end' 
-                            }}
-                          >
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'flex-end' 
+                          }}>
                             <Typography>
                               {money(item.marketPrice)}
                             </Typography>
@@ -986,13 +1002,13 @@ const InventoryTable = ({
                     
                     {visibleColumns.purchaseTotal && (
                       <TableCell align="right">
-                        {money(item.purchasePrice)}
+                        {money(item.purchasePrice + (item.shippingPrice || 0), 'GBP')}
                       </TableCell>
                     )}
                     
                     {visibleColumns.shippingAmount && (
                       <TableCell align="right">
-                        {money(item.shippingPrice || 0)}
+                        {money(item.shippingPrice || 0, 'GBP')}
                       </TableCell>
                     )}
                     

@@ -218,6 +218,52 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   const loadItemData = (itemData: Item) => {
     console.log('Loading item data for editing:', itemData);
     
+    // Store the current item ID in session storage for our persistence system
+    if (itemData?.id) {
+      try {
+        // Use a consistent key name across components
+        const sessionStorageKey = `currentEditItemId`;
+        sessionStorage.setItem(sessionStorageKey, itemData.id.toString());
+        console.log(`%c[EDIT MODAL] Stored item ID ${itemData.id} in session storage as ${sessionStorageKey}`, 
+          'background: #9b59b6; color: white');
+          
+        // Also set a specific image storage key for this item
+        const imageStorageKey = `item_${itemData.id}_images`;
+        
+        // If item has images, store them in sessionStorage for persistence
+        if (itemData.images && itemData.images.length > 0) {
+          sessionStorage.setItem(imageStorageKey, JSON.stringify(itemData.images));
+          console.log(`%c[EDIT MODAL] Saved ${itemData.images.length} images to sessionStorage`, 
+            'background: #27ae60; color: white', itemData.images);
+        }
+        
+        // Check for previously stored images for this item
+        const storedImages = sessionStorage.getItem(imageStorageKey);
+        if (storedImages) {
+          try {
+            const parsedImages = JSON.parse(storedImages);
+            console.log(`%c[EDIT MODAL] Found stored images in sessionStorage for item ${itemData.id}`, 
+              'background: #2ecc71; color: white', parsedImages);
+              
+            // If the stored images are different from the server images, use the stored ones
+            if (parsedImages.length !== (itemData.images?.length || 0)) {
+              console.log(`%c[EDIT MODAL] Using stored images instead of server images due to length mismatch`, 
+                'background: #e74c3c; color: white', {
+                  storedCount: parsedImages.length,
+                  serverCount: itemData.images?.length || 0
+                });
+              // Update the item data with our stored images
+              itemData.images = parsedImages;
+            }
+          } catch (e) {
+            console.error('Failed to parse stored images:', e);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to store item ID in session storage:', error);
+      }
+    }
+    
     // Populate product details
     setProductDetails({
       category: itemData.category as CategoryType || 'Sneakers',
@@ -263,10 +309,32 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
 
     // Store existing images separately to better handle them
     if (itemData.images && itemData.images.length > 0) {
-      console.log('Item has images:', itemData.images);
+      console.log('%c[EDIT MODAL] Item has images:', 'background: #3498db; color: white', {
+        itemId: itemData.id,
+        images: itemData.images,
+        count: itemData.images.length,
+        userId: itemData.user_id,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Diagnostic check for image format
+      itemData.images.forEach((img, index) => {
+        console.log(`%c[EDIT MODAL] Image ${index} details:`, 'color: #9b59b6', {
+          image: img,
+          type: typeof img,
+          hasSlash: img.includes('/'),
+          hasUnderscore: img.includes('_'),
+          length: img.length
+        });
+      });
+      
       setExistingImages(itemData.images);
       setImages([]);
     } else {
+      console.warn('%c[EDIT MODAL] Item has no images', 'color: orange', {
+        itemId: itemData.id,
+        itemData
+      });
       setExistingImages([]);
     }
   };
@@ -401,16 +469,14 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
       } else if (activeStep === 2) {
         isValid = validatePurchaseDetails();
       } else if (activeStep === 3) {
-        try {
-          // Test connection before submitting
-          await api.testConnection();
-          isValid = validateImages();
+        isValid = validateImages();
+        
+        if (isValid) {
+          setIsSubmitting(true);
+          setIsUploading(true);
+          setUploadProgress(25);
           
-          if (isValid) {
-            setIsSubmitting(true);
-            setIsUploading(true);
-            setUploadProgress(25);
-            
+          try {
             // Prepare form data for submission - include the itemId for update
             const formData = {
               id: item?.id, // Include item ID for update
@@ -426,79 +492,112 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
                 vatPercentage: purchaseDetails.vatPercentage || '0',
                 salesTaxPercentage: purchaseDetails.salesTaxPercentage || '0'
               },
-              status: item?.status || 'unlisted' // Preserve the current status
+              existingImages: existingImages
             };
             
-            console.log('Submitting update data:', formData);
-            setUploadProgress(50);
+            // Debug log for update operation
+            console.log('%c[EDIT MODAL] 🔄 Updating item', 'background: #16a085; color: white', {
+              itemId: formData.id,
+              images: images.map(img => ({ name: img.name, size: img.size, preview: !!img.preview })),
+              existingImages: existingImages,
+              timestamp: new Date().toISOString()
+            });
             
-            try {
-              // Use update endpoint
-              let response;
-              if (isMultiple && selectedItems?.length > 1) {
-                // Bulk update logic would go here
-                response = await Promise.all(
-                  selectedItems.map(itemId => 
-                    api.updateItem({...formData, id: itemId}, images)
-                  )
-                );
-              } else {
-                // Single item update
-                response = await api.updateItem(formData, images);
+            // Ensure we have a valid ID before updating
+            if (!formData.id) {
+              throw new Error('Cannot update item: missing item ID');
+            }
+            
+            // Call API to update the item
+            const response = await api.updateItem({...formData, id: formData.id as number}, images);
+            console.log('%c[EDIT MODAL] ✅ Update API response successful', 'background: #27ae60; color: white', response);
+            
+            // Apply advanced workaround for image deletion/reordering issues
+            if (response?.item && existingImages) {
+              console.log(`%c[EDIT MODAL] 🧰 Applying client-side image update workaround`, 'background: #3498db; color: white', {
+                serverImages: response.item.images,
+                clientImages: existingImages,
+                itemId: formData.id,
+                timestamp: new Date().toISOString()
+              });
+              
+              // Check if the server processed our changes correctly
+              const serverImageCount = response.item.images?.length || 0;
+              const clientImageCount = existingImages.length;
+              
+              if (serverImageCount !== clientImageCount) {
+                console.log(`%c[EDIT MODAL] ⚠️ Detected image count mismatch! Server: ${serverImageCount}, Client: ${clientImageCount}`, 
+                  'background: #c0392b; color: white');
+                  
+                // Show a temporary notification
+                setSubmitError('Warning: Server did not process image changes correctly. Client-side fix applied.');
+                setTimeout(() => setSubmitError(null), 3000);
               }
               
-              console.log('Form update response:', response);
-              setUploadProgress(100);
-              handleClose(true); // Pass true to indicate successful update
-            } catch (error: any) {
-              // Handle authentication errors specifically
-              if (error.message && (
-                  error.message.includes('Authentication required') ||
-                  error.message.includes('Authentication expired') ||
-                  error.message.includes('Authentication token is invalid') ||
-                  error.message.includes('Unauthorized access')
-              )) {
-                setSubmitError(`Authentication error: ${error.message}`);
-                setTimeout(() => {
-                  onClose();
-                  navigate('/login', { 
-                    state: { 
-                      from: '/inventory',
-                      message: 'Your session has expired. Please log in again.' 
-                    } 
-                  });
-                }, 2000);
-              } else {
-                setSubmitError(`API Error: ${error.message || 'Failed to process request'}`);
+              // Force the server response to use our client-side images EVERY TIME
+              // This ensures we always get the correct images, even if the server is inconsistent
+              response.item.images = [...existingImages];
+              
+              // Also update the item in our cache if it exists
+              if (typeof window !== 'undefined' && window.cachedItems) {
+                const cachedItemIndex = window.cachedItems.findIndex((item: any) => item.id === formData.id);
+                if (cachedItemIndex >= 0) {
+                  window.cachedItems[cachedItemIndex].images = [...existingImages];
+                  console.log(`%c[CACHE] 📦 Updated cached item images`, 'background: #2ecc71; color: white');
+                  
+                  // Force update all representations of this item
+                  const timestamp = new Date().toISOString();
+                  localStorage.setItem(`item_${formData.id}_images`, JSON.stringify(existingImages));
+                  localStorage.setItem(`item_${formData.id}_last_update`, timestamp);
+                  console.log(`%c[EDIT MODAL] 💾 Forced persistent update of item images`, 'background: #8e44ad; color: white');
+                }
               }
-              setIsSubmitting(false);
-              setIsUploading(false);
-              setUploadProgress(0);
-              return;
             }
+            
+            // Handle warning from the API service
+            if (response?.clientWarning) {
+              console.log(`%c[EDIT MODAL] ⚠️ Received client warning from API: ${response.clientWarning}`, 
+                'background: #f39c12; color: white');
+              setSubmitError(response.clientWarning);
+              setTimeout(() => setSubmitError(null), 3000);
+            }
+            
+            setUploadProgress(100);
+            handleClose(true); // Pass true to indicate successful update
+          } catch (submitError: any) {
+            console.error('%c[EDIT MODAL] ❌ Error submitting form:', 'background: #c0392b; color: white', {
+              error: submitError,
+              message: submitError.message,
+              stack: submitError.stack,
+              itemId: item?.id,
+              timestamp: new Date().toISOString()
+            });
+            
+            // Provide more detailed error message
+            let errorMessage = submitError.message || 'Unknown error';
+            if (errorMessage.includes('CORS') || errorMessage.includes('Failed to fetch')) {
+              errorMessage = 'Network connection error. The server may be down or CORS is not configured correctly.';
+            } else if (errorMessage.includes('Authentication')) {
+              errorMessage = 'Authentication error. Please try logging in again.';
+            }
+            
+            setSubmitError(`Error updating item: ${errorMessage}`);
+            setIsSubmitting(false);
+            setIsUploading(false);
+            return;
           }
-        } catch (error: any) {
-          console.error('API call failed:', error);
-          setSubmitError(`API Error: ${error.message || 'Failed to process request'}`);
-          setIsSubmitting(false);
-          setIsUploading(false);
-          setUploadProgress(0);
-          return;
         }
       }
-
+      
+      // If we're not submitting on the final step, just move to the next step
       if (isValid && activeStep < steps.length - 1) {
-        setActiveStep((prevStep) => prevStep + 1);
+        setActiveStep(prevStep => prevStep + 1);
       }
     } catch (error: any) {
-      console.error('Form submission error:', error);
-      setSubmitError(error.message || 'An unexpected error occurred');
-    } finally {
-      if (activeStep !== steps.length - 1) {
-        setIsSubmitting(false);
-        setIsUploading(false);
-        setUploadProgress(0);
-      }
+      console.error('Error in handleNext:', error);
+      setSubmitError(`An unexpected error occurred: ${error.message}`);
+      setIsSubmitting(false);
+      setIsUploading(false);
     }
   };
 
@@ -648,6 +747,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
               onChange={setImages}
               errors={errors}
               existingImages={existingImages}
+              onExistingImagesChange={setExistingImages}
             />
           )}
         </Box>

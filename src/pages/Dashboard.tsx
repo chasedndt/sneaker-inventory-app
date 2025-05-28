@@ -241,6 +241,20 @@ const Dashboard: React.FC = () => {
         const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
         console.log(`✅ Received ${activeItems.length} active items from API for user ${currentUser.uid}`);
         
+        // CRITICAL FIX: Process items to match the exact same logic used in InventoryPage.tsx
+        // This ensures consistent market price display across the application
+        const processedItems = activeItems.map((item: Item) => {
+          // Use the EXACT same logic as in InventoryPage.tsx line 231
+          const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
+          
+          console.log(`🔍 [DASHBOARD PROCESSING] Item ${item.id} (${item.productName}): Raw marketPrice=${item.marketPrice}, Calculated marketPrice=${marketPrice}`);
+          
+          return {
+            ...item,
+            marketPrice: parseFloat(marketPrice.toFixed(2))
+          };
+        });
+        
         // Fetch sales data
         const salesData = await salesApi.getSales();
         console.log(`✅ Received ${salesData.length} sales records from API for user ${currentUser.uid}`);
@@ -255,8 +269,17 @@ const Dashboard: React.FC = () => {
         // Debug expenses data
         console.log('💰 Expenses data:', expensesData);
         
+        // Add detailed logging of items to diagnose market price issues
+        console.log('🔎 [MARKET PRICE DEBUG] Items before setting state:', processedItems.map((item: Item) => ({
+          id: item.id,
+          productName: item.productName,
+          marketPrice: item.marketPrice,
+          purchasePrice: item.purchasePrice,
+          hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
+        })));
+        
         // Update state with all datasets
-        setItems(activeItems);
+        setItems(processedItems); // Use the processed items with market prices calculated the same way as inventory page
         setSales(salesData);
         setExpenses(expensesData);
         setError(null);

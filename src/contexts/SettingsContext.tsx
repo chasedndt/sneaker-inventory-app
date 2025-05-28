@@ -31,7 +31,7 @@ interface SettingsContextType {
   dateFormat: string;
   setDateFormat: (format: string) => void;
   formatDate: (date: Date | string) => string;
-  formatCurrency: (amount: number) => string;
+  formatCurrency: (amount: number, fromCurrency?: string) => string;
   getCurrentCurrency: () => string;
   convertCurrency: (amount: number, fromCurrency: string) => number;
   saveSettings: (settings: Settings) => void;
@@ -134,12 +134,27 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     console.log("Dark mode toggled, new value:", !darkMode);
   };
 
-  // Set currency
+  // Set currency with enhanced logging and persistence
   const setCurrency = (newCurrency: string) => {
+    if (newCurrency === settings.currency) {
+      console.log("Currency unchanged, already set to:", newCurrency);
+      return; // No change needed
+    }
+    
     setSettings(prev => ({
       ...prev,
       currency: newCurrency,
     }));
+    
+    // Force refresh exchange rates when currency changes
+    refreshExchangeRates()
+      .then(success => {
+        if (success) {
+          console.log("Exchange rates refreshed after currency change");
+        }
+      })
+      .catch(err => console.error("Failed to refresh rates after currency change:", err));
+    
     console.log("Currency changed to:", newCurrency);
   };
 
@@ -172,56 +187,152 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     return formatDateUtil(date, dateFormat);
   };
 
-  // Get the current currency symbol
+  // Get the current currency symbol with robust error handling
   const getCurrentCurrency = (): string => {
-    switch (currency) {
-      case 'USD':
-        return '$';
-      case 'EUR':
-        return '€';
-      case 'GBP':
-        return '£';
-      case 'JPY':
-        return '¥';
-      default:
-        return '$';
+    // Create a mapping of currency codes to their symbols
+    const currencySymbols: Record<string, string> = {
+      'USD': '$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'CAD': 'C$',
+      'AUD': 'A$',
+      'CNY': '¥',
+      'INR': '₹',
+      'CHF': 'Fr',
+      'SEK': 'kr',
+      'NZD': 'NZ$',
+      'KRW': '₩',
+      'SGD': 'S$',
+      'HKD': 'HK$',
+    };
+    
+    // Check if the currency is in our known list
+    if (currency in currencySymbols) {
+      return currencySymbols[currency];
     }
+    
+    // If we don't recognize the currency, try to get it from Intl API
+    try {
+      // This uses the browser's Intl API to format a currency symbol
+      const formatted = new Intl.NumberFormat('en', { 
+        style: 'currency', 
+        currency: currency,
+        currencyDisplay: 'symbol' 
+      }).format(0);
+      
+      // Extract just the symbol part (remove the zeros/digits)
+      const symbol = formatted.replace(/[0-9.,\s]/g, '');
+      
+      if (symbol) return symbol;
+    } catch (error) {
+      console.error(`Error getting symbol for currency ${currency}:`, error);
+    }
+    
+    // Default fallback to USD if everything else fails
+    console.warn(`Using fallback $ symbol for unknown currency: ${currency}`);
+    return '$';
   };
 
-  // Convert currency using the latest exchange rates
+  // Convert currency using the latest exchange rates with detailed debugging
   const convertCurrency = (amount: number, fromCurrency: string = 'USD'): number => {
-    // If amount is 0 or not a number, return 0
-    if (amount === 0 || isNaN(amount)) return 0;
+    // DETAILED LOGGING: Track all currency conversions for market price debugging
+    console.log(`💱 [CURRENCY CONVERSION] START: Converting ${amount} from ${fromCurrency} to ${currency}`);
+    console.log(`💱 [CURRENCY CONVERSION] Stack trace: ${new Error().stack?.split('\n').slice(1, 4).join('\n')}`);
+    
+    // Don't do any conversion if the amount is invalid
+    if (amount === null || amount === undefined || isNaN(amount)) {
+      console.warn(`⚠️ [CURRENCY CONVERSION] Invalid amount detected: ${amount}, returning 0`);
+      return 0;
+    }
+    
+    // If from and to currencies are the same, just return the original amount
+    if (fromCurrency === currency) {
+      console.log(`💱 [CURRENCY CONVERSION] No conversion needed: ${fromCurrency} to ${currency}, returning ${amount}`);
+      return amount;
+    }
     
     // If we have exchange rates, use them
     if (exchangeRates) {
-      // Quick return if currencies are the same
-      if (fromCurrency === currency) return amount;
+      console.log(`💱 [CURRENCY CONVERSION] Using exchange rates:`, exchangeRates);
       
-      // If both currencies exist in our rates
+      // Make sure both currencies exist in our rates
       if (exchangeRates[fromCurrency] && exchangeRates[currency]) {
-        // Convert to USD first if not already USD
+        // Convert to USD first (our base currency)
         const amountInUSD = fromCurrency === 'USD' 
           ? amount 
           : amount / exchangeRates[fromCurrency];
         
+        console.log(`💱 [CURRENCY CONVERSION] Step 1: ${amount} ${fromCurrency} = ${amountInUSD} USD`);
+        
         // Then convert from USD to target currency
-        return amountInUSD * exchangeRates[currency];
+        const result = amountInUSD * exchangeRates[currency];
+        console.log(`💱 [CURRENCY CONVERSION] Step 2: ${amountInUSD} USD = ${result} ${currency}`);
+        console.log(`💱 [CURRENCY CONVERSION] FINAL: ${amount} ${fromCurrency} = ${result} ${currency}`);
+        
+        return result;
+      } else {
+        console.warn(`⚠️ [CURRENCY CONVERSION] Missing exchange rate for ${fromCurrency} or ${currency}, falling back to direct conversion`);
       }
+    } else {
+      console.warn(`⚠️ [CURRENCY CONVERSION] No exchange rates available, falling back to direct conversion`);
     }
     
-    // Fall back to static conversion if no rates available
-    return currencyConverter(amount, fromCurrency, currency);
+    // Fall back to direct conversion with built-in rates
+    const result = currencyConverter(amount, fromCurrency, currency);
+    console.log(`💱 [CURRENCY CONVERSION] Fallback conversion: ${amount} ${fromCurrency} = ${result} ${currency}`);
+    return result;
   };
 
-  // Format currency according to selected currency
-  const formatCurrency = (amount: number): string => {
+  // Format currency according to selected currency with improved error handling and locale support
+  const formatCurrency = (amount: number, fromCurrency?: string): string => {
     if (isNaN(amount)) {
-      console.warn('Invalid amount provided to formatCurrency:', amount);
+      console.warn('Invalid amount provided to formatCurrency');
       amount = 0;
     }
-    const convertedAmount = convertCurrency(amount, 'USD');
-    return formatCurrencyWithSymbol(convertedAmount, currency);
+    
+    try {
+      // Calculate the final amount based on whether conversion is needed
+      let finalAmount = amount;
+      
+      // Only convert if fromCurrency is explicitly specified and different from the target currency
+      if (fromCurrency && fromCurrency !== currency) {
+        finalAmount = convertCurrency(amount, fromCurrency);
+      }
+      
+      // Map of currency codes to appropriate locales for better formatting
+      const localeMap: Record<string, string> = {
+        'USD': 'en-US',
+        'EUR': 'de-DE', // German locale for Euro
+        'GBP': 'en-GB', // British locale for Pound Sterling
+        'JPY': 'ja-JP', // Japanese locale for Yen
+        'CAD': 'en-CA', // Canadian locale for Canadian Dollar
+        'AUD': 'en-AU', // Australian locale for Australian Dollar
+        'INR': 'en-IN', // Indian locale for Rupee
+        'CNY': 'zh-CN', // Chinese locale for Yuan
+        'CHF': 'de-CH', // Swiss locale for Swiss Franc
+        'SEK': 'sv-SE', // Swedish locale for Swedish Krona
+        'NZD': 'en-NZ', // New Zealand locale
+        'KRW': 'ko-KR', // Korean locale
+        'SGD': 'en-SG', // Singapore locale
+        'HKD': 'zh-HK'  // Hong Kong locale
+      };
+      
+      // Get the appropriate locale for the currency, or default to English
+      const locale = localeMap[currency] || 'en';
+      
+      // Use Intl.NumberFormat for proper locale-aware formatting
+      return new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(finalAmount);
+    } catch (error) {
+      console.error('Error in formatCurrency:', error);
+      // Fallback to a basic formatting with the current currency symbol
+      return `${getCurrentCurrency()}${amount.toFixed(2)}`;
+    }
   };
 
   // Save all settings at once (for use in settings page)

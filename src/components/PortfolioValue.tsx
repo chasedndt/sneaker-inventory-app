@@ -55,7 +55,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
           variant="body1"
           sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}
         >
-          {money(payload[0].value || 0)}
+          {money(payload[0].value || 0, 'GBP')}
         </Typography>
       </Paper>
     );
@@ -105,7 +105,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
           <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-            {money(props.currentValue)}
+            {money(props.currentValue, 'GBP')}
           </Typography>
           <Box
             sx={{
@@ -125,7 +125,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
             )}
             <Typography variant="body2">
               {props.percentageChange >= 0 ? '+' : ''}
-              {props.percentageChange}% ({money(props.valueChange)})
+              {props.percentageChange}% ({money(props.valueChange, 'GBP')})
             </Typography>
           </Box>
         </Box>

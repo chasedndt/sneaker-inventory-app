@@ -3,54 +3,65 @@
 // Exchange rates relative to USD (1 USD = X units of currency)
 // In a production app, these would be fetched from an API
 interface ExchangeRates {
-    [key: string]: number;
+  [key: string]: number;
+}
+
+const EXCHANGE_RATES: ExchangeRates = {
+  USD: 1.0,
+  EUR: 0.92,
+  GBP: 0.78,
+  JPY: 151.67,
+  CAD: 1.36,
+  AUD: 1.51,
+  CNY: 7.24,
+};
+
+/**
+ * Convert amount from one currency to another with enhanced debugging
+ * @param amount - Amount to convert
+ * @param fromCurrency - Currency to convert from
+ * @param toCurrency - Currency to convert to
+ * @returns Converted amount
+ */
+export const currencyConverter = (amount: number, fromCurrency: string, toCurrency: string): number => {
+  // Minimal logging - only important information
+  console.log(`Converting ${amount} from ${fromCurrency} to ${toCurrency}`);
+  
+  // Handle invalid inputs
+  if (isNaN(amount)) {
+    console.error('Invalid amount provided to currencyConverter');
+    return 0;
   }
   
-  const EXCHANGE_RATES: ExchangeRates = {
-    USD: 1.0,
-    EUR: 0.92,
-    GBP: 0.78,
-    JPY: 151.67,
-    CAD: 1.36,
-    AUD: 1.51,
-    CNY: 7.24,
-  };
+  // If same currency, return amount as is - NO CONVERSION NEEDED
+  if (fromCurrency === toCurrency) {
+    console.log('Same currency - no conversion needed');
+    return amount;
+  }
   
-  /**
-   * Convert amount from one currency to another
-   * @param amount - Amount to convert
-   * @param fromCurrency - Currency to convert from
-   * @param toCurrency - Currency to convert to
-   * @returns Converted amount
-   */
-  export const currencyConverter = (
-    amount: number,
-    fromCurrency: string,
-    toCurrency: string
-  ): number => {
-    // If currencies are the same, no conversion needed
-    if (fromCurrency === toCurrency) {
-      return amount;
-    }
+  // Check if currencies are supported
+  if (!EXCHANGE_RATES[fromCurrency] || !EXCHANGE_RATES[toCurrency]) {
+    console.error(`Unsupported currency: ${fromCurrency} or ${toCurrency}`);
+    return amount; // Return original amount as fallback
+  }
   
-    // Check if currencies are supported
-    if (!EXCHANGE_RATES[fromCurrency] || !EXCHANGE_RATES[toCurrency]) {
-      console.error(`Unsupported currency: ${fromCurrency} or ${toCurrency}`);
-      return amount;
-    }
+  // Convert using exchange rates
+  // Convert to USD first (as base currency)
+  const amountInUSD = amount / EXCHANGE_RATES[fromCurrency];
   
-    // Convert to USD first (as base currency)
-    const amountInUSD = amount / EXCHANGE_RATES[fromCurrency];
-    
-    // Then convert from USD to target currency
-    return amountInUSD * EXCHANGE_RATES[toCurrency];
-  };
+  // Then convert from USD to target currency
+  const result = amountInUSD * EXCHANGE_RATES[toCurrency];
   
-  /**
-   * Format amount with currency symbol based on currency code
-   * @param amount - Amount to format
-   * @param currency - Currency code
-   * @returns Formatted currency string
+  console.log(`Converted ${amount} ${fromCurrency} to ${result.toFixed(2)} ${toCurrency}`);
+  
+  return result;
+};
+
+/**
+ * Format amount with currency symbol based on currency code
+ * @param amount - Amount to format
+ * @param currency - Currency code
+ * @returns Formatted currency string
    */
   export const formatCurrencyWithSymbol = (amount: number, currency: string): string => {
     switch (currency) {

@@ -68,6 +68,7 @@ import { api, Item, useApi } from '../services/api';
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { tagService } from '../services/tagService';
 import { useAuth } from '../contexts/AuthContext';
+import { useApiConnection } from '../hooks/useApiConnection';
 
 export interface InventoryItem extends Item {
   marketPrice: number;
@@ -80,6 +81,10 @@ export interface InventoryItem extends Item {
   reference?: string;
   shippingPrice?: number;
   tags?: string[];
+  purchaseDetails?: {
+    purchaseCurrency?: string;
+    [key: string]: any;
+  };
   listings?: Array<{
     platform: string;
     price: number;
@@ -106,11 +111,20 @@ const InventoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, loading: authLoading } = useAuth();
   const { isAuthenticated, loading: apiLoading } = useApi();
+  const { 
+    isConnected, 
+    connectionError, 
+    checkConnection, 
+    resetConnectionState,
+    stopRetrying,
+    isCheckingConnection 
+  } = useApiConnection();
   
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [connectionRetryCount, setConnectionRetryCount] = useState<number>(0);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(0);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
@@ -189,89 +203,174 @@ const InventoryPage: React.FC = () => {
     }
   }, [authLoading, currentUser, navigate]);
 
-  // Fetch items from API only when authenticated
-  useEffect(() => {
-    if (!isAuthenticated || authLoading) {
-      return; // Don't fetch if not authenticated or still loading auth
-    }
-    
-    const fetchItems = async () => {
-      try {
-        setLoading(true);
-        
-        // First check if we can connect to the API
-        try {
-          await api.testConnection();
-        } catch (connectionError) {
-          console.error('API connection test failed:', connectionError);
-          setError('Cannot connect to server. Please check your internet connection.');
-          setLoading(false);
-          return;
-        }
-        
-        const data = await api.getItems();
-        
-        // Filter out sold items for inventory page
-        const filteredItems = data.filter((item: Item) => item.status !== 'sold');
-        
-        // Enhance items with additional calculated fields
-        const enhancedItems = filteredItems.map((item: Item) => {
-          // For market price, use the stored value if available or calculate a default
-          const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
-          const estimatedProfit = marketPrice - item.purchasePrice;
-          const roi = (estimatedProfit / item.purchasePrice) * 100;
-          const daysInInventory = calculateDaysInInventory(item.purchaseDate);
-          
-          // Use 'unlisted' as the default status if none is provided
-          const status = item.status || 'unlisted';
-          
-          return {
-            ...item,
-            marketPrice: parseFloat(marketPrice.toFixed(2)),
-            estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
-            roi: parseFloat(roi.toFixed(2)),
-            daysInInventory,
-            status: status as 'unlisted' | 'listed' | 'sold',
-            // Make sure to include size and sizeSystem - may be undefined
-            size: item.size,
-            sizeSystem: item.sizeSystem,
-            tags: item.tags || []
-          };
-        });
-        
-        setItems(enhancedItems);
-        setError(null);
-      } catch (err: any) {
-        console.error('Error fetching inventory items:', err);
-        // Provide more specific error messages based on error type
-        if (err.message.includes('Authentication')) {
-          setError('Authentication error: Please log in again.');
-        } else {
-          setError(`Failed to load inventory data: ${err.message}`);
-        }
-      } finally {
+  // Define fetchItems function outside of useEffect for better code organization
+  const fetchItems = async () => {
+    try {
+      setLoading(true);
+      setRefreshing(true);
+      
+      // Don't show the error snackbar while actively checking for connection
+      setError(null);
+      
+      // Check API connection using our hook - only proceed if connected
+      const connected = await checkConnection();
+      if (!connected) {
+        // Connection error is managed by the hook
         setLoading(false);
         setRefreshing(false);
+        return;
       }
-    };
-
-    fetchItems();
-
-    // Also fetch tags when authenticated
-    const fetchTags = async () => {
-      if (!isAuthenticated) return;
       
-      try {
-        const tags = await tagService.getTags();
-        setTags(tags);
-      } catch (err: any) {
-        console.error('Error fetching tags:', err);
-        // Don't set the main error state for tags - we can proceed without them
+      console.log('🔍 [INVENTORY DEBUG] Beginning inventory data fetch');
+      const data = await api.getItems();
+      
+      // Add deep logging of the raw data received from API
+      console.log('🔍 [INVENTORY DEBUG] RAW API DATA:', data);
+      
+      // Log individual item details to see their raw values
+      data.forEach((item: Item) => {
+        // Create a safe list of all properties including debug fields
+        const allProps: Record<string, any> = {};
+        Object.keys(item).forEach(key => {
+          allProps[key] = (item as any)[key];
+        });
+        
+        console.log(`🔍 [INVENTORY RAW ITEM] ID ${item.id} (${item.productName}):`, {
+          marketPrice: item.marketPrice,
+          marketPriceType: typeof item.marketPrice,
+          propertyNames: Object.keys(item), // Log all property names
+          allProps: allProps  // All properties including debug fields
+        });
+      });
+      
+      // Filter out sold items for inventory page
+      const filteredItems = data.filter((item: Item) => item.status !== 'sold');
+      
+      // Enhance items with additional calculated fields
+      const enhancedItems = filteredItems.map((item: Item) => {
+        // Log detailed item properties before processing
+        console.log(`🔍 [INVENTORY PROCESS] Item ${item.id} (${item.productName}) BEFORE calculation:`, {
+          rawItem: item,
+          productName: item.productName,
+          marketPrice: item.marketPrice,
+          purchasePrice: item.purchasePrice,
+          status: item.status,
+          marketPriceSource: item.marketPrice ? 'database' : 'calculated'
+        });
+        
+        // Look for any hidden or alternative market price fields that might be in the data
+        Object.keys(item).forEach(key => {
+          const value = (item as any)[key];
+          if (typeof value === 'number' && (key.includes('market') || key.includes('price')) && key !== 'marketPrice' && key !== 'purchasePrice') {
+            console.log(`🔍 [POTENTIAL MARKET PRICE FIELD] Found in item ${item.id}: ${key} = ${value}`);
+          }
+        });
+        
+        // Log BEFORE the default calculation is applied
+        console.log(`🔍 [MARKET PRICE LOGIC CHECK] For item ${item.id}: marketPrice=${item.marketPrice}, using default calculation=${!item.marketPrice}, calculation=${item.purchasePrice * 1.2}`);
+        
+        // For market price, use the stored value if available or calculate a default
+        const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
+        const estimatedProfit = marketPrice - item.purchasePrice;
+        const roi = (estimatedProfit / item.purchasePrice) * 100;
+        const daysInInventory = calculateDaysInInventory(item.purchaseDate);
+        
+        // Use 'unlisted' as the default status if none is provided
+        const status = item.status || 'unlisted';
+        
+        return {
+          ...item,
+          marketPrice: parseFloat(marketPrice.toFixed(2)),
+          estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
+          roi: parseFloat(roi.toFixed(2)),
+          daysInInventory,
+          status: status as 'unlisted' | 'listed' | 'sold',
+          // Make sure to include size and sizeSystem - may be undefined
+          size: item.size,
+          sizeSystem: item.sizeSystem,
+          tags: item.tags || []
+        };
+      });
+      
+      setItems(enhancedItems);
+      setError(null);
+    } catch (err: any) {
+      console.error('Error fetching inventory items:', err);
+      // Provide more specific error messages based on error type
+      if (err.message.includes('Authentication')) {
+        setError('Authentication error: Please log in again.');
+      } else {
+        setError(`Failed to load inventory data: ${err.message}`);
       }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+  
+  // Define fetchTags function
+  const fetchTags = async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      const tagsData = await tagService.getTags();
+      setTags(tagsData);
+    } catch (err: any) {
+      console.error('Error fetching tags:', err);
+      // Don't set the main error state for tags - we can proceed without them
+    }
+  };
+  
+  // Fetch items when the component mounts and the user is authenticated
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      fetchItems();
+      fetchTags();
+    }
+    
+    // Reset connection state when component is unmounted
+    return () => {
+      resetConnectionState();
+      stopRetrying();
     };
+  }, [isAuthenticated, authLoading, resetConnectionState, stopRetrying]);
 
-    fetchTags();
-  }, [isAuthenticated, authLoading]);
+  useEffect(() => {
+    // If connection was restored, try fetching items again
+    if (isConnected && !isCheckingConnection) {
+      // If we previously had connection errors but now we're connected
+      if (error || connectionError) {
+        // Short delay to ensure the connection is stable
+        const timer = setTimeout(() => {
+          fetchItems();
+        }, 1000);
+        
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isConnected, error, connectionError, fetchItems, isCheckingConnection]);
+
+  useEffect(() => {
+    // Only show error if we're not actively checking connection
+    if (!isCheckingConnection) {
+      // Use connection error from the hook if available
+      const currentError = connectionError || error;
+      if (currentError) {
+        setSnackbar({
+          open: true,
+          message: currentError,
+          severity: 'error'
+        });
+      } else if (snackbar.open && snackbar.severity === 'error') {
+        // Clear any existing error messages if there's no error
+        setSnackbar({
+          open: false,
+          message: '',
+          severity: 'success'
+        });
+      }
+    }
+  }, [error, connectionError, isCheckingConnection, snackbar]);
 
   const handleRefresh = async () => {
     if (!isAuthenticated) {

@@ -17,30 +17,58 @@ const useFormat = () => {
    * @returns Formatted currency string
    */
   const money = (amount: number, originalCurrency?: string): string => {
+    // Reduce excessive logging - only log market price formatting from components we care about
+    const caller = new Error().stack?.split('\n')[2] || 'unknown';
+    if (!caller.includes('CustomTooltip') && 
+        (caller.includes('Dashboard') || 
+         caller.includes('Inventory') || 
+         caller.includes('MetricsCard'))) {
+      console.log(`💲 [MONEY FORMAT] amount: ${amount}, currency: ${originalCurrency || 'none'}, from: ${caller.trim()}`);
+    }
+    
+    // Handle invalid input
     if (isNaN(amount)) {
-      console.warn('Invalid amount provided to money formatter:', amount);
+      console.warn(`⚠️ [MONEY FORMAT WARNING] Invalid amount detected: ${amount}, using 0 instead`);
       amount = 0;
     }
     
     try {
       // If we have a settings context, use its formatting
       if (settings) {
-        // Convert currency if needed
-        if (originalCurrency && originalCurrency !== settings.currency) {
-          amount = settings.convertCurrency(amount, originalCurrency);
-        }
-        
-        return settings.formatCurrency(amount);
+        // Let the settings context handle all the formatting and conversion logic
+        // Only pass originalCurrency if it's explicitly provided
+        // This avoids unwanted conversions when the amount is already in the user's currency
+        return settings.formatCurrency(amount, originalCurrency);
       }
       
       // Fallback formatting if settings context is not available
+      // If we know the original currency, use its specific formatter
+      if (originalCurrency) {
+        const localeMap: Record<string, string> = {
+          'USD': 'en-US',
+          'EUR': 'de-DE',
+          'GBP': 'en-GB',
+          'JPY': 'ja-JP'
+        };
+        
+        const locale = localeMap[originalCurrency] || 'en-US';
+        
+        return new Intl.NumberFormat(locale, {
+          style: 'currency',
+          currency: originalCurrency
+        }).format(amount);
+      }
+      
+      // Default to USD if settings context is not available and no original currency specified
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD'
       }).format(amount);
     } catch (error) {
       console.error('Error formatting currency:', error);
-      return `$${amount.toFixed(2)}`;
+      // Use the user's currency symbol for the fallback if available
+      const currencySymbol = settings?.getCurrentCurrency() || '$';
+      return `${currencySymbol}${amount.toFixed(2)}`;
     }
   };
 

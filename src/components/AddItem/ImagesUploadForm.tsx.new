@@ -1,0 +1,494 @@
+// src/components/AddItem/ImagesUploadForm.tsx
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import {
+  Box,
+  Button,
+  Typography,
+  Grid,
+  Paper,
+  IconButton,
+  FormHelperText,
+  useTheme,
+  Tooltip,
+  Badge,
+  Divider,
+} from '@mui/material';
+import { useDropzone } from 'react-dropzone';
+import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import DeleteIcon from '@mui/icons-material/Delete';
+import { ImageFile } from '../../services/api';
+import { getImageUrl, safeImageUrl } from '../../utils/imageUtils';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface ImagesUploadFormProps {
+  images: ImageFile[];
+  onChange: (images: ImageFile[]) => void;
+  errors: { [key: string]: string };
+  existingImages?: string[];
+  onExistingImagesChange?: (images: string[]) => void;
+}
+
+const ImagesUploadForm: React.FC<ImagesUploadFormProps> = ({
+  images,
+  onChange,
+  errors,
+  existingImages = [],
+  onExistingImagesChange
+}) => {
+  const theme = useTheme();
+  const { currentUser } = useAuth();
+  const userId = currentUser?.uid || '';
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState('');
+  
+  // Debug logging
+  useEffect(() => {
+    console.log('%c[IMAGES FORM] Component mounted/updated', 'background: #8e44ad; color: white', {
+      existingImages,
+      newImages: images,
+      hasChangeCallback: !!onExistingImagesChange,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Store the current editing item ID for persistence
+    const itemId = sessionStorage.getItem('currentEditingItemId');
+    if (itemId && existingImages.length > 0) {
+      console.log(`%c[IMAGES FORM] Storing images for item ${itemId}`, 'background: #2ecc71; color: white');
+      try {
+        localStorage.setItem(`item_${itemId}_images`, JSON.stringify(existingImages));
+      } catch (error) {
+        console.error('Failed to store images in localStorage:', error);
+      }
+    }
+  }, [existingImages, images, onExistingImagesChange]);
+
+  const onDrop = useCallback(
+    (acceptedFiles: File[]) => {
+      const newImages = acceptedFiles.map(file =>
+        Object.assign(file, {
+          preview: URL.createObjectURL(file),
+          id: `image-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
+        })
+      ) as ImageFile[];
+
+      onChange([...images, ...newImages]);
+      
+      console.log('%c[IMAGES FORM] Added new images', 'background: #2980b9; color: white', {
+        newCount: newImages.length,
+        totalCount: images.length + newImages.length
+      });
+    },
+    [images, onChange]
+  );
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/*': ['.jpeg', '.jpg', '.png', '.webp']
+    },
+    maxSize: 5 * 1024 * 1024, // 5MB
+    multiple: true
+  });
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    const newImages = images.filter((_, index) => index !== indexToRemove);
+    
+    if (images[indexToRemove]?.preview) {
+      URL.revokeObjectURL(images[indexToRemove].preview!);
+    }
+    
+    console.log('%c[IMAGES FORM] Removed new image', 'background: #c0392b; color: white', {
+      index: indexToRemove,
+      remainingCount: newImages.length
+    });
+    
+    onChange(newImages);
+  };
+
+  // Handle reordering of existing images with robust logging
+  const handleMoveExistingImage = (indexToMove: number, direction: 'up' | 'down') => {
+    if ((direction === 'up' && indexToMove === 0) || 
+        (direction === 'down' && indexToMove === existingImages.length - 1)) {
+      return; // Can't move first item up or last item down
+    }
+
+    const newIndex = direction === 'up' ? indexToMove - 1 : indexToMove + 1;
+    const timestamp = new Date().toISOString();
+    
+    // Get the images we're swapping for clear logging
+    const movingImage = existingImages[indexToMove];
+    const targetImage = existingImages[newIndex];
+    
+    // Create a new array with the swap applied
+    const newExistingImages = [...existingImages];
+    
+    // Swap positions
+    [newExistingImages[indexToMove], newExistingImages[newIndex]] = 
+    [newExistingImages[newIndex], newExistingImages[indexToMove]];
+    
+    console.log(`%c[IMAGES FORM] Reordering images:`, 'background: #3498db; color: white', {
+      direction,
+      originalIndex: indexToMove,
+      newIndex,
+      movingImage,
+      targetImage,
+      originalOrder: [...existingImages],
+      newOrder: newExistingImages,
+      timestamp
+    });
+    
+    // CRITICAL: Store the reordering operation in session storage
+    try {
+      const reorderLog = {
+        operation: 'reorder',
+        timestamp,
+        images: newExistingImages,
+        originalImages: existingImages
+      };
+      sessionStorage.setItem('lastImageOperation', JSON.stringify(reorderLog));
+      console.log(`%c[IMAGES FORM] Saved reorder operation to session storage`, 'background: #27ae60; color: white');
+      
+      // Also update localStorage for the item
+      const itemId = sessionStorage.getItem('currentEditingItemId');
+      if (itemId) {
+        localStorage.setItem(`item_${itemId}_images`, JSON.stringify(newExistingImages));
+      }
+    } catch (error) {
+      console.error(`Failed to store reorder operation in session storage:`, error);
+    }
+    
+    // Notify parent about reordering
+    if (onExistingImagesChange) {
+      onExistingImagesChange(newExistingImages);
+      
+      // Force an update with a delay to ensure the UI reflects the change
+      setTimeout(() => {
+        console.log(`%c[IMAGES FORM] Forcing second update to ensure reorder persists`, 'background: #8e44ad; color: white');
+        onExistingImagesChange([...newExistingImages]);
+      }, 100);
+    } else {
+      console.error(`%c[IMAGES FORM] No onExistingImagesChange handler provided!`, 'background: #c0392b; color: white');
+    }
+  };
+
+  // Handle removal of existing images with enhanced logging and storage
+  const handleRemoveExistingImage = (indexToRemove: number, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
+    const removedImage = existingImages[indexToRemove];
+    const timestamp = new Date().toISOString();
+    
+    console.log(`%c[IMAGES FORM] Removing existing image:`, 'background: #e74c3c; color: white', {
+      index: indexToRemove,
+      image: removedImage,
+      existingImagesBeforeRemoval: [...existingImages],
+      callbackExists: !!onExistingImagesChange,
+      timestamp
+    });
+    
+    const newExistingImages = existingImages.filter((_, index) => index !== indexToRemove);
+    
+    // Store the deletion operation in session storage for persistence
+    try {
+      const deleteLog = {
+        operation: 'delete',
+        timestamp,
+        removedImage,
+        removedIndex: indexToRemove,
+        originalImages: [...existingImages],
+        newImages: [...newExistingImages]
+      };
+      sessionStorage.setItem('lastImageOperation', JSON.stringify(deleteLog));
+      console.log(`%c[IMAGES FORM] Saved deletion to session storage`, 'background: #27ae60; color: white');
+      
+      // Also store in localStorage for longer persistence
+      const itemId = sessionStorage.getItem('currentEditingItemId');
+      if (itemId) {
+        localStorage.setItem(`item_${itemId}_images`, JSON.stringify(newExistingImages));
+        console.log(`%c[IMAGES FORM] Saved new images list to localStorage for item ${itemId}`, 'background: #16a085; color: white');
+      }
+    } catch (error) {
+      console.error(`Failed to store deletion in storage:`, error);
+    }
+    
+    // Notify the parent component
+    if (onExistingImagesChange) {
+      console.log(`%c[IMAGES FORM] Notifying parent about removed image:`, 'background: #27ae60; color: white', {
+        removedImage,
+        newCount: newExistingImages.length,
+        newImages: [...newExistingImages],
+        timestamp
+      });
+      
+      if (existingImages.length === newExistingImages.length) {
+        console.error(`%c[IMAGES FORM] Failed to remove image from array!`, 'background: #c0392b; color: white');
+      }
+      
+      onExistingImagesChange([...newExistingImages]);
+      
+      // Force a second update to ensure changes persist
+      setTimeout(() => {
+        if (onExistingImagesChange) {
+          console.log(`%c[IMAGES FORM] Forcing second update for image deletion`, 'background: #8e44ad; color: white');
+          onExistingImagesChange([...newExistingImages]);
+        }
+      }, 100);
+    } else {
+      console.error(`%c[IMAGES FORM] No onExistingImagesChange handler provided!`, 'background: #c0392b; color: white');
+    }
+  };
+
+  const handlePreviewExistingImage = (image: string) => {
+    setPreviewImage(safeImageUrl(image));
+    setPreviewOpen(true);
+  };
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="h6" gutterBottom>
+        Images
+      </Typography>
+      
+      {/* Existing Images Section */}
+      {existingImages.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            Existing Images
+            <Typography component="span" variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
+              (First image is the thumbnail. Use arrows to reorder)
+            </Typography>
+          </Typography>
+          
+          <Grid container spacing={2}>
+            {existingImages.map((image, index) => (
+              <Grid item xs={6} sm={4} md={3} key={`existing-${index}`}>
+                <Paper
+                  elevation={3}
+                  sx={{
+                    position: 'relative',
+                    height: 150,
+                    width: '100%',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    border: index === 0 ? '3px solid #2196f3' : '1px solid #e0e0e0',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      transform: 'scale(1.03)',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                    }
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={getImageUrl(image, userId)}
+                    alt={`Existing image ${index + 1}`}
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                    onClick={() => handlePreviewExistingImage(image)}
+                  />
+                  
+                  {/* Position indicator */}
+                  <Badge
+                    badgeContent={index + 1}
+                    color={index === 0 ? "primary" : "default"}
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      left: 8,
+                      '& .MuiBadge-badge': {
+                        fontSize: '0.7rem',
+                        height: 22,
+                        minWidth: 22,
+                      }
+                    }}
+                  />
+                  
+                  {/* Image controls */}
+                  <Box 
+                    sx={{ 
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      backgroundColor: 'rgba(0,0,0,0.6)',
+                      padding: '4px 8px',
+                    }}
+                  >
+                    {/* Delete button */}
+                    <Tooltip title="Remove image">
+                      <IconButton 
+                        size="small" 
+                        onClick={(e) => handleRemoveExistingImage(index, e)}
+                        sx={{ color: 'white' }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {/* Move up button */}
+                      {index > 0 && (
+                        <Tooltip title="Move up (make primary)">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleMoveExistingImage(index, 'up')}
+                            sx={{ color: 'white' }}
+                          >
+                            <ArrowUpwardIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      
+                      {/* Move down button */}
+                      {index < existingImages.length - 1 && (
+                        <Tooltip title="Move down">
+                          <IconButton 
+                            size="small" 
+                            onClick={() => handleMoveExistingImage(index, 'down')}
+                            sx={{ color: 'white' }}
+                          >
+                            <ArrowDownwardIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </Box>
+                  
+                  {/* First image indicator */}
+                  {index === 0 && (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        right: 0,
+                        backgroundColor: 'primary.main',
+                        color: 'white',
+                        fontSize: '0.7rem',
+                        padding: '2px 6px',
+                        borderBottomLeftRadius: 4
+                      }}
+                    >
+                      Thumbnail
+                    </Box>
+                  )}
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {/* Dropzone for New Images */}
+      <Box
+        {...getRootProps()}
+        sx={{
+          border: `2px dashed ${errors.images ? theme.palette.error.main : theme.palette.divider}`,
+          borderRadius: 1,
+          p: 3,
+          textAlign: 'center',
+          bgcolor: isDragActive ? 'rgba(0, 0, 0, 0.02)' : 'transparent',
+          cursor: 'pointer',
+          '&:hover': {
+            bgcolor: 'rgba(0, 0, 0, 0.04)',
+          },
+        }}
+      >
+        <input {...getInputProps()} />
+        <CloudUploadIcon
+          sx={{ fontSize: 40, color: isDragActive ? 'primary.main' : 'text.secondary', mb: 1 }}
+        />
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          {isDragActive ? 'Drop the images here' : 'Drag & drop images here, or click to select files'}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Supported formats: JPEG, PNG, WebP. Max 5MB per file.
+        </Typography>
+      </Box>
+
+      {errors.images && (
+        <FormHelperText error>{errors.images}</FormHelperText>
+      )}
+      
+      {/* Preview of New Images */}
+      {images.length > 0 && (
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" gutterBottom>
+            New Images to Upload
+          </Typography>
+          <Grid container spacing={2}>
+            {images.map((image, index) => (
+              <Grid item xs={6} sm={4} md={3} key={`new-${index}`}>
+                <Paper
+                  elevation={2}
+                  sx={{
+                    position: 'relative',
+                    height: 140,
+                    width: '100%',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    '&:hover .delete-btn': {
+                      opacity: 1,
+                    },
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={image.preview || '/placeholder-image.svg'}
+                    alt={`New image ${index + 1}`}
+                    sx={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                  />
+                  <Tooltip title="Remove image">
+                    <IconButton
+                      className="delete-btn"
+                      size="small"
+                      onClick={() => handleRemoveImage(index)}
+                      sx={{
+                        position: 'absolute',
+                        top: 5,
+                        right: 5,
+                        bgcolor: 'rgba(0, 0, 0, 0.5)',
+                        color: 'white',
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        '&:hover': {
+                          bgcolor: 'rgba(0, 0, 0, 0.7)',
+                        },
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+        </Box>
+      )}
+
+      {/* No Images Message */}
+      {images.length === 0 && existingImages.length === 0 && (
+        <Box sx={{ mt: 2, textAlign: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            No images uploaded yet. Add some images to showcase your item.
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+};
+
+export default ImagesUploadForm;

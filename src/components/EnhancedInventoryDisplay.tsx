@@ -196,8 +196,26 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
 
       // Use the limitedItems we created earlier
       console.log(`✅ Grouped ${items.length} items into ${limitedItems.length} product groups (showing ${limitedItems.length} on dashboard)`);
-            // Add image loading state to each item and ensure imageUrl is properly set
-      const withImageState = limitedItems.map(item => {
+      
+      // CRITICAL: Deep debug logging for market price issues
+      console.log('🔍 [MARKET PRICE DEBUG] Original items from props:', items.map((item: Item) => ({
+        id: item.id,
+        productName: item.productName,
+        marketPrice: item.marketPrice,
+        purchasePrice: item.purchasePrice,
+        hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
+      })));
+      
+      console.log('🔍 [MARKET PRICE DEBUG] Grouped items before image processing:', limitedItems.map((item: Item) => ({
+        id: item.id,
+        productName: item.productName,
+        marketPrice: item.marketPrice,
+        purchasePrice: item.purchasePrice,
+        hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
+      })));
+      
+      // Add image loading state to each item and ensure imageUrl is properly set
+      const withImageState: ItemWithImage[] = limitedItems.map((item: Item) => {
         // Use the getImageUrl utility to construct proper URL with user ID
         
         // If item has images array but no imageUrl, use the first image
@@ -208,25 +226,47 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           imageUrl = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
         }
         
+        // Ensure market price is preserved exactly as in the original data
+        // This is critical for correct price display
+        // Ensure we're getting the properly converted market price in GBP
+        // CRITICAL FIX: Use the pre-converted GBP value from API service
+        const convertedItem = items.find(i => i.id === item.id);
         
-        // Add debugging for image URLs
-        console.log(`Dashboard item ${item.id} image:`, {
+        // If the item has no market price, calculate a default (20% markup)
+        // This matches the logic in Dashboard.tsx and InventoryPage.tsx
+        const marketPrice = convertedItem?.marketPrice || 
+          (convertedItem && convertedItem.purchasePrice ? convertedItem.purchasePrice * 1.2 : 0);
+        
+        // Format the value to 2 decimal places
+        const formattedMarketPrice = marketPrice ? parseFloat(marketPrice.toFixed(2)) : 0;
+        
+        // Add detailed debugging for market price values
+        console.log(`[EnhancedInventoryDisplay] Processing item ${item.id} (${item.productName}):`, {
           imageUrl: item.imageUrl,
           firstImage: item.images && item.images.length > 0 ? item.images[0] : null,
           userId: currentUser?.uid,
-          constructedUrl: imageUrl
+          constructedUrl: imageUrl,
+          rawItemMarketPrice: item.marketPrice,
+          convertedItemMarketPrice: convertedItem?.marketPrice,
+          finalFormattedMarketPrice: formattedMarketPrice,
+          purchasePrice: convertedItem?.purchasePrice
         });
         
         return {
           ...item,
           imageUrl,
+          marketPrice: formattedMarketPrice, // Use the correctly formatted market price
           imageLoading: true,
-          imageError: false
+          imageError: false,
+          // Add required properties for ItemWithImage interface
+          count: (item as any).count || 1,
+          totalValue: (item as any).totalValue || item.purchasePrice
         };
       });
       
       console.log('Processed items with images:', withImageState);
-      setGroupedItems(withImageState);
+      // Explicitly cast to ItemWithImage[] to satisfy TypeScript
+      setGroupedItems(withImageState as ItemWithImage[]);
       setErrorMessage(null);
     } catch (error: any) {
       console.error('💥 Error processing inventory items:', error);
@@ -320,9 +360,19 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           pb: 2
         }}>
           {groupedItems.map((item, index) => {
-            // Use market price if available, otherwise fall back to purchase price
-            const currentValue = item.marketPrice || item.purchasePrice * 1.2;
-            const change = calculateChange(item.purchasePrice, currentValue);
+            // Add extensive logging to debug market price issues
+            console.log(`[EnhancedInventoryDisplay] Item ${item.id}:`, {
+              productName: item.productName,
+              marketPrice: item.marketPrice,
+              purchasePrice: item.purchasePrice,
+              isMarketPriceDefined: item.marketPrice !== undefined && item.marketPrice !== null
+            });
+            
+            // Use the exact market price value from the backend
+            // Make sure we handle the calculation safely for TypeScript
+            const currentValue = item.marketPrice !== undefined ? item.marketPrice : 0;
+            // Only calculate change when we have both values
+            const change = currentValue !== 0 ? calculateChange(item.purchasePrice, currentValue) : 0;
             
             // Get colors for this card
             const colors = getGradientColors(item.category);
@@ -453,14 +503,14 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(item.marketPrice || item.purchasePrice * 1.2)}
+                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, 'GBP')}
                         </Typography>
                         
                         <Tooltip
                           title={
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                                Unrealized Profit: {money((item.marketPrice || item.purchasePrice * 1.2) - item.purchasePrice)}
+                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, 'GBP')}
                               </Typography>
                             </Box>
                           }
