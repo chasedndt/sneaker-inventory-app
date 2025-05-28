@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -17,16 +17,17 @@ import {
   FormControlLabel,
   Alert
 } from '@mui/material';
+import { useSettings } from '../../contexts/SettingsContext';
 import SaveIcon from '@mui/icons-material/Save';
 
 const InventorySettings: React.FC = () => {
   const theme = useTheme();
+  const { currency, setCurrency } = useSettings();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   
   // Inventory settings state
-  const [settings, setSettings] = useState({
-    defaultCurrency: 'GBP',
+  const [inventorySettings, setInventorySettings] = useState({
     dateFormat: 'DD/MM/YYYY',
     lowStockThreshold: 5,
     enableLowStockAlerts: true,
@@ -34,23 +35,33 @@ const InventorySettings: React.FC = () => {
     enableAutomaticPricing: false,
     enableBarcodeScan: true
   });
+  
+  // Initialize currency from global settings
+  useEffect(() => {
+    console.log('Using global currency setting in Inventory Settings:', currency);
+  }, [currency]);
 
   // Handle text field change
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setSettings(prev => ({ ...prev, [name]: value }));
+    setInventorySettings(prev => ({ ...prev, [name]: value }));
   };
 
   // Handle select change
   const handleSelectChange = (e: SelectChangeEvent<string>) => {
     const { name, value } = e.target;
-    setSettings(prev => ({ ...prev, [name]: value }));
+    // Currency is handled separately through the global settings
+    if (name === 'currency') {
+      setCurrency(value);
+    } else {
+      setInventorySettings(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   // Handle switch change
   const handleSwitchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    setSettings(prev => ({ ...prev, [name]: checked }));
+    setInventorySettings(prev => ({ ...prev, [name]: checked }));
   };
 
   // Handle form submission
@@ -60,7 +71,13 @@ const InventorySettings: React.FC = () => {
     
     try {
       // Here you would normally save the data to your server
-      // For now, we'll just simulate a delay
+      // For now, we'll just simulate a delay and log the changes
+      console.log('Saving inventory settings:', {
+        ...inventorySettings,
+        currency // Using the global currency setting
+      });
+      
+      // Simulate API delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -96,9 +113,9 @@ const InventorySettings: React.FC = () => {
               <InputLabel id="default-currency-label">Default currency</InputLabel>
               <Select
                 labelId="default-currency-label"
-                id="defaultCurrency"
-                name="defaultCurrency"
-                value={settings.defaultCurrency}
+                id="currency"
+                name="currency"
+                value={currency}
                 label="Default currency"
                 onChange={handleSelectChange}
               >
@@ -117,7 +134,7 @@ const InventorySettings: React.FC = () => {
                 labelId="date-format-label"
                 id="dateFormat"
                 name="dateFormat"
-                value={settings.dateFormat}
+                value={inventorySettings.dateFormat}
                 label="Date format"
                 onChange={handleSelectChange}
               >
@@ -133,7 +150,7 @@ const InventorySettings: React.FC = () => {
               label="Low stock threshold"
               name="lowStockThreshold"
               type="number"
-              value={settings.lowStockThreshold}
+              value={inventorySettings.lowStockThreshold}
               onChange={handleTextChange}
               variant="outlined"
               size="small"
@@ -147,7 +164,7 @@ const InventorySettings: React.FC = () => {
                 labelId="default-view-label"
                 id="defaultView"
                 name="defaultView"
-                value={settings.defaultView}
+                value={inventorySettings.defaultView}
                 label="Default view"
                 onChange={handleSelectChange}
               >
@@ -182,7 +199,7 @@ const InventorySettings: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={settings.enableLowStockAlerts}
+                  checked={inventorySettings.enableLowStockAlerts}
                   onChange={handleSwitchChange}
                   name="enableLowStockAlerts"
                   color="primary"
@@ -199,7 +216,7 @@ const InventorySettings: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={settings.enableAutomaticPricing}
+                  checked={inventorySettings.enableAutomaticPricing}
                   onChange={handleSwitchChange}
                   name="enableAutomaticPricing"
                   color="primary"
@@ -216,7 +233,7 @@ const InventorySettings: React.FC = () => {
             <FormControlLabel
               control={
                 <Switch
-                  checked={settings.enableBarcodeScan}
+                  checked={inventorySettings.enableBarcodeScan}
                   onChange={handleSwitchChange}
                   name="enableBarcodeScan"
                   color="primary"

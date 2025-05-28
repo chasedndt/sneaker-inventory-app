@@ -7732,3 +7732,11 @@
 2025-05-27 19:48:45,046 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_75_1748100088_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
 2025-05-27 19:52:55,504 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
 2025-05-27 19:52:55,504 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-05-28 23:14:45,652 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-05-28 23:14:45,658 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-28 23:14:45,661 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-28 23:14:45,663 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-28 23:14:45,663 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-05-28 23:14:45,663 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-28 23:14:45,992 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-05-28 23:14:45,993 - INFO - Serving image: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
