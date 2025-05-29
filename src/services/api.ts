@@ -484,10 +484,10 @@ export const api = {
     }
   },
 
-  // Simplified approach using only the main updateItem endpoint (which we know works)
-  updateMarketPrice: async (itemId: number, newPrice: number) => {
+  // Improved approach using only the main updateItem endpoint with currency tracking
+  updateMarketPrice: async (itemId: number, newPrice: number, currentCurrency: string) => {
     try {
-      console.log(`🔄 [SIMPLIFIED] Updating market price for item ${itemId} to ${newPrice}`);
+      console.log(`🔄 [MARKET PRICE] Updating market price for item ${itemId} to ${newPrice} ${currentCurrency}`);
       
       // Get the full item first so we have all its data
       const item = await api.getItem(itemId);
@@ -522,6 +522,7 @@ export const api = {
           shippingPrice: String(item.shippingPrice || 0),
           shippingCurrency: item.shippingCurrency || item.originalCurrency || '£',
           marketPrice: String(newPrice), // This is the new market price
+          // We'll track the currency in the item object instead of the purchase details
           purchaseDate: item.purchaseDate || new Date().toISOString().split('T')[0],
           purchaseLocation: item.purchaseLocation || '',
           condition: item.condition || 'New with tags',
@@ -550,16 +551,22 @@ export const api = {
   // updateItemField now uses updateMarketPrice for market price updates
   // and updateItem for all other field updates
   
-  updateItemField: async (itemId: number, field: string, value: any) => {
+updateItemField: async (itemId: number, field: string, value: any) => {
     try {
       console.log(`🔄 Updating ${field} for item ${itemId} with user authentication:`, value);
       
       // If updating market price, use the specialized method
       if (field === 'marketPrice') {
-        return await api.updateMarketPrice(itemId, value);
+        // Check if value is an object with currency info or just a number
+        if (typeof value === 'object' && value.value !== undefined && value.currency) {
+          // If it's an object with currency info, use that
+          return await api.updateMarketPrice(itemId, value.value, value.currency);
+        } else {
+          // Otherwise, use the default currency from settings
+        // Use a default currency if settings aren't available
+        return await api.updateMarketPrice(itemId, value, '£');
+        }
       }
-      
-      // For other fields, try the normal method
       
       // Get authentication token
       const getToken = window.getAuthToken;

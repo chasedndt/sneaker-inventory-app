@@ -291,13 +291,18 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       amount = 0;
     }
     
+    // Enhanced logging for debugging
+    console.log(`🔄 [FORMAT CURRENCY] amount: ${amount}, fromCurrency: ${fromCurrency || 'none'}, targetCurrency: ${currency}`);
+    
     try {
       // Calculate the final amount based on whether conversion is needed
       let finalAmount = amount;
       
       // Only convert if fromCurrency is explicitly specified and different from the target currency
       if (fromCurrency && fromCurrency !== currency) {
+        console.log(`🔄 [FORMAT CURRENCY] Converting from ${fromCurrency} to ${currency}`);
         finalAmount = convertCurrency(amount, fromCurrency);
+        console.log(`🔄 [FORMAT CURRENCY] Converted amount: ${finalAmount}`);
       }
       
       // Map of currency codes to appropriate locales for better formatting

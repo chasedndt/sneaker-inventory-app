@@ -17,14 +17,9 @@ const useFormat = () => {
    * @returns Formatted currency string
    */
   const money = (amount: number, originalCurrency?: string): string => {
-    // Reduce excessive logging - only log market price formatting from components we care about
+    // Add more detailed logging for debugging currency issues
     const caller = new Error().stack?.split('\n')[2] || 'unknown';
-    if (!caller.includes('CustomTooltip') && 
-        (caller.includes('Dashboard') || 
-         caller.includes('Inventory') || 
-         caller.includes('MetricsCard'))) {
-      console.log(`💲 [MONEY FORMAT] amount: ${amount}, currency: ${originalCurrency || 'none'}, from: ${caller.trim()}`);
-    }
+    console.log(`💲 [MONEY FORMAT] amount: ${amount}, from currency: ${originalCurrency || 'none'}, to currency: ${settings?.currency || 'none'}, caller: ${caller.trim()}`);
     
     // Handle invalid input
     if (isNaN(amount)) {
@@ -33,12 +28,18 @@ const useFormat = () => {
     }
     
     try {
+      // Map currency symbols to currency codes if needed
+      let sourceCurrency = originalCurrency;
+      
+      // Convert any currency symbols to proper currency codes
+      if (sourceCurrency === '£') sourceCurrency = 'GBP';
+      if (sourceCurrency === '$') sourceCurrency = 'USD';
+      if (sourceCurrency === '€') sourceCurrency = 'EUR';
+      
       // If we have a settings context, use its formatting
       if (settings) {
-        // Let the settings context handle all the formatting and conversion logic
-        // Only pass originalCurrency if it's explicitly provided
-        // This avoids unwanted conversions when the amount is already in the user's currency
-        return settings.formatCurrency(amount, originalCurrency);
+        // Pass the normalized currency code to the settings formatter
+        return settings.formatCurrency(amount, sourceCurrency);
       }
       
       // Fallback formatting if settings context is not available

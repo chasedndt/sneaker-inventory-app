@@ -6,6 +6,7 @@ interface ExchangeRates {
   [key: string]: number;
 }
 
+// Exchange rates as of May 2025 (relative to USD: 1 USD = X units of currency)
 const EXCHANGE_RATES: ExchangeRates = {
   USD: 1.0,
   EUR: 0.92,
@@ -16,6 +17,27 @@ const EXCHANGE_RATES: ExchangeRates = {
   CNY: 7.24,
 };
 
+// Currency symbol mappings
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  CAD: 'C$',
+  AUD: 'A$',
+  CNY: '¥',
+};
+
+// Currency code from symbol
+export const CURRENCY_CODE_FROM_SYMBOL: Record<string, string> = {
+  '$': 'USD',
+  '€': 'EUR',
+  '£': 'GBP',
+  '¥': 'JPY',
+  'C$': 'CAD',
+  'A$': 'AUD',
+};
+
 /**
  * Convert amount from one currency to another with enhanced debugging
  * @param amount - Amount to convert
@@ -24,8 +46,28 @@ const EXCHANGE_RATES: ExchangeRates = {
  * @returns Converted amount
  */
 export const currencyConverter = (amount: number, fromCurrency: string, toCurrency: string): number => {
-  // Minimal logging - only important information
-  console.log(`Converting ${amount} from ${fromCurrency} to ${toCurrency}`);
+  // Normalize currency inputs to handle both symbols and codes
+  const normalizeToCode = (currency: string): string => {
+    // If it's a currency symbol, convert to code
+    if (CURRENCY_CODE_FROM_SYMBOL[currency]) {
+      console.log(`Normalized currency symbol ${currency} to code ${CURRENCY_CODE_FROM_SYMBOL[currency]}`);
+      return CURRENCY_CODE_FROM_SYMBOL[currency];
+    }
+    // If it matches one of our known codes, return as is
+    if (Object.keys(EXCHANGE_RATES).includes(currency)) {
+      return currency;
+    }
+    // Default to USD if unknown
+    console.warn(`Unknown currency format: ${currency}, defaulting to USD`);
+    return 'USD';
+  };
+
+  // Normalize both currencies
+  const normalizedFromCurrency = normalizeToCode(fromCurrency);
+  const normalizedToCurrency = normalizeToCode(toCurrency);
+  
+  // Detailed logging to track conversions
+  console.log(`Converting ${amount} from ${fromCurrency} (${normalizedFromCurrency}) to ${toCurrency} (${normalizedToCurrency})`);
   
   // Handle invalid inputs
   if (isNaN(amount)) {
@@ -33,26 +75,27 @@ export const currencyConverter = (amount: number, fromCurrency: string, toCurren
     return 0;
   }
   
-  // If same currency, return amount as is - NO CONVERSION NEEDED
-  if (fromCurrency === toCurrency) {
-    console.log('Same currency - no conversion needed');
+  // If same currency after normalization, return amount as is
+  if (normalizedFromCurrency === normalizedToCurrency) {
+    console.log('Same currency after normalization - no conversion needed');
     return amount;
   }
   
   // Check if currencies are supported
-  if (!EXCHANGE_RATES[fromCurrency] || !EXCHANGE_RATES[toCurrency]) {
-    console.error(`Unsupported currency: ${fromCurrency} or ${toCurrency}`);
+  if (!EXCHANGE_RATES[normalizedFromCurrency] || !EXCHANGE_RATES[normalizedToCurrency]) {
+    console.error(`Unsupported currency after normalization: ${normalizedFromCurrency} or ${normalizedToCurrency}`);
     return amount; // Return original amount as fallback
   }
   
-  // Convert using exchange rates
+  // Convert using exchange rates with normalized currency codes
   // Convert to USD first (as base currency)
-  const amountInUSD = amount / EXCHANGE_RATES[fromCurrency];
+  const amountInUSD = amount / EXCHANGE_RATES[normalizedFromCurrency];
   
   // Then convert from USD to target currency
-  const result = amountInUSD * EXCHANGE_RATES[toCurrency];
+  const result = amountInUSD * EXCHANGE_RATES[normalizedToCurrency];
   
   console.log(`Converted ${amount} ${fromCurrency} to ${result.toFixed(2)} ${toCurrency}`);
+  console.log(`Using rates: 1 USD = ${EXCHANGE_RATES[normalizedFromCurrency]} ${normalizedFromCurrency} and 1 USD = ${EXCHANGE_RATES[normalizedToCurrency]} ${normalizedToCurrency}`);
   
   return result;
 };

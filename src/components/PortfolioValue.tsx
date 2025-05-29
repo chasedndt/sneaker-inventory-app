@@ -105,7 +105,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
           <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-            {money(props.currentValue, 'GBP')}
+            {money(props.currentValue)}
           </Typography>
           <Box
             sx={{
@@ -125,7 +125,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
             )}
             <Typography variant="body2">
               {props.percentageChange >= 0 ? '+' : ''}
-              {props.percentageChange}% ({money(props.valueChange, 'GBP')})
+              {props.percentageChange}% ({money(props.valueChange)})
             </Typography>
           </Box>
         </Box>

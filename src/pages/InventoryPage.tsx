@@ -69,9 +69,12 @@ import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { tagService } from '../services/tagService';
 import { useAuth } from '../contexts/AuthContext';
 import { useApiConnection } from '../hooks/useApiConnection';
+import { useSettings } from '../contexts/SettingsContext';
+import { currencyConverter } from '../utils/currencyUtils';
 
 export interface InventoryItem extends Item {
   marketPrice: number;
+  marketPriceCurrency?: string; // Added to support currency tracking for market prices
   estimatedProfit: number;
   roi: number;
   daysInInventory: number;
@@ -111,6 +114,7 @@ const InventoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, loading: authLoading } = useAuth();
   const { isAuthenticated, loading: apiLoading } = useApi();
+  const { currency: defaultCurrency } = useSettings();
   const { 
     isConnected, 
     connectionError, 
@@ -437,7 +441,16 @@ const InventoryPage: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  const handleUpdateMarketPrice = async (itemId: number, newPrice: number) => {
+  // Handle market price updates with currency specification
+  const handleUpdateMarketPrice = async (itemId: number, newPrice: number, currency?: string) => {
+    // Use the settings currency if none provided
+    // Make sure we're using currency codes (USD, GBP, EUR) not symbols (£, $, €)
+    let priceCurrency = currency || defaultCurrency || 'GBP';
+    
+    // Convert currency symbols to currency codes if needed
+    if (priceCurrency === '£') priceCurrency = 'GBP';
+    if (priceCurrency === '$') priceCurrency = 'USD';
+    if (priceCurrency === '€') priceCurrency = 'EUR';
     if (!isAuthenticated) {
       setSnackbar({
         open: true,
@@ -466,8 +479,9 @@ const InventoryPage: React.FC = () => {
         })
       );
       
-      // Then persist to backend
-      await api.updateItemField(itemId, 'marketPrice', newPrice);
+      // Then persist to backend with currency information
+      console.log(`🔄 [MARKET PRICE API CALL] Updating market price for item ${itemId} to ${newPrice} ${priceCurrency}`);
+      await api.updateMarketPrice(itemId, newPrice, priceCurrency);
       
       setSnackbar({
         open: true,
@@ -1125,8 +1139,36 @@ const InventoryPage: React.FC = () => {
     
     const totalPurchaseValue = filteredItems.reduce((sum, item) => sum + item.purchasePrice, 0);
     const totalShippingValue = filteredItems.reduce((sum, item) => sum + (item.shippingPrice || 0), 0);
-    const totalMarketValue = filteredItems.reduce((sum, item) => sum + item.marketPrice, 0);
-    const totalEstimatedProfit = filteredItems.reduce((sum, item) => sum + item.estimatedProfit, 0);
+    // Convert all market prices to the current currency before summing
+    const totalMarketValue = filteredItems.reduce((sum, item) => {
+      // If item has marketPriceCurrency, convert to current currency
+      if (item.marketPriceCurrency) {
+        const convertedPrice = currencyConverter(item.marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
+        return sum + convertedPrice;
+      }
+      // Otherwise just add the price (assuming it's already in the correct currency)
+      return sum + item.marketPrice;
+    }, 0);
+    // Recalculate estimated profit with proper currency conversion
+    const totalEstimatedProfit = filteredItems.reduce((sum, item) => {
+      let marketPrice = item.marketPrice;
+      
+      // Convert market price to current currency if needed
+      if (item.marketPriceCurrency && item.marketPriceCurrency !== defaultCurrency) {
+        marketPrice = currencyConverter(item.marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
+      }
+      
+      // Convert purchase price if it has a different currency
+      let purchasePrice = item.purchasePrice;
+      const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
+      if (purchaseCurrency !== defaultCurrency) {
+        purchasePrice = currencyConverter(item.purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
+      }
+      
+      // Calculate profit in the current currency
+      const profit = marketPrice - purchasePrice;
+      return sum + profit;
+    }, 0);
     
     return {
       totalItems,

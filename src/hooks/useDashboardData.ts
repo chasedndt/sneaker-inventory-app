@@ -6,6 +6,9 @@ import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
 import { dashboardService } from '../services/dashboardService';
+import { useSettings } from '../contexts/SettingsContext';
+import { currencyConverter } from '../utils/currencyUtils';
+import { InventoryItem } from '../pages/InventoryPage';
 
 interface DashboardData {
   items: Item[];
@@ -32,6 +35,7 @@ interface DashboardDataHook extends DashboardData {
  */
 const useDashboardData = (): DashboardDataHook => {
   const { isAuthenticated, loading: authLoading } = useApi();
+  const settings = useSettings();
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -116,9 +120,21 @@ const useDashboardData = (): DashboardDataHook => {
   const calculatePortfolioData = (startDate: Dayjs | null, endDate: Dayjs | null) => {
     const { filteredItems, filteredSales, filteredExpenses } = getFilteredData(startDate, endDate);
     
-    // Calculate current portfolio value
+    // Calculate current portfolio value with proper currency conversion
     const currentValue = filteredItems.reduce((sum, item) => {
-      const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup if no market price
+      // Get the base market price
+      let marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup if no market price
+      
+      // Treat item as InventoryItem to access marketPriceCurrency
+      const inventoryItem = item as InventoryItem;
+      
+      // Convert the market price to the current currency if needed
+      if (inventoryItem.marketPriceCurrency && settings.currency && inventoryItem.marketPriceCurrency !== settings.currency) {
+        console.log(`Converting portfolio item from ${inventoryItem.marketPriceCurrency} to ${settings.currency}`);
+        marketPrice = currencyConverter(marketPrice, inventoryItem.marketPriceCurrency, settings.currency);
+        console.log(`Converted value: ${marketPrice}`);
+      }
+      
       return sum + marketPrice;
     }, 0);
     

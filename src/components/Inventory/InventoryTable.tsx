@@ -49,6 +49,7 @@ import ImageViewer from '../common/ImageViewer';
 import { useAuth } from '../../contexts/AuthContext';
 import { api } from '../../services/api';
 import { useSettings } from '../../contexts/SettingsContext';
+import { convertAndFormatCurrency } from '../../utils/currencyUtils';
 import { getImageUrl } from '../../utils/imageUtils';
 
 // Sort order type
@@ -75,7 +76,7 @@ interface InventoryTableProps {
   visibleColumns: { [key: string]: boolean };
   selectedItems: number[];
   onSelectItem: (itemId: number, checked: boolean) => void;
-  onUpdateMarketPrice: (itemId: number, newPrice: number) => void;
+  onUpdateMarketPrice: (itemId: number, newPrice: number, currency?: string) => void;
   onDuplicateItem: (item: InventoryItem) => void;
   page: number;
   rowsPerPage: number;
@@ -107,6 +108,7 @@ const InventoryTable = ({
   
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
+  const [marketPriceCurrency, setMarketPriceCurrency] = useState<string>('');
   const marketPriceInputRef = useRef<HTMLInputElement>(null);
   
   // Get the user's currency symbol from settings
@@ -267,6 +269,8 @@ const InventoryTable = ({
     
     setEditingMarketPrice(item.id);
     setMarketPriceValue(item.marketPrice.toString());
+    // Set the currency based on item's marketPriceCurrency or use the current settings currency
+    setMarketPriceCurrency(item.marketPriceCurrency || getCurrentCurrency());
     // Focus input on next render cycle
     setTimeout(() => {
       if (marketPriceInputRef.current) {
@@ -286,7 +290,8 @@ const InventoryTable = ({
     const newPrice = parseFloat(marketPriceValue);
     if (!isNaN(newPrice) && newPrice >= 0) {
       try {
-        await onUpdateMarketPrice(itemId, newPrice);
+        // Pass the selected currency along with the new price
+        await onUpdateMarketPrice(itemId, newPrice, marketPriceCurrency);
         setAuthError(null);
       } catch (error: any) {
         // Handle authentication errors
@@ -831,9 +836,25 @@ const InventoryTable = ({
                       <TableCell align="right">
                         {editingMarketPrice === item.id ? (
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                            <span style={{ marginRight: '4px' }}>{currencySymbol}</span>
+                            <select
+                              value={marketPriceCurrency}
+                              onChange={(e) => setMarketPriceCurrency(e.target.value)}
+                              style={{
+                                marginRight: '4px',
+                                padding: '8px',
+                                borderRadius: '4px',
+                                border: '1px solid #ccc',
+                                fontSize: '16px',
+                                width: '60px'
+                              }}
+                            >
+                              <option value="GBP">£</option>
+                              <option value="USD">$</option>
+                              <option value="EUR">€</option>
+                            </select>
                             <input
                               type="text"
+                              ref={marketPriceInputRef}
                               autoFocus
                               value={marketPriceValue}
                               onChange={(e) => setMarketPriceValue(e.target.value)}
@@ -882,7 +903,8 @@ const InventoryTable = ({
                             justifyContent: 'flex-end' 
                           }}>
                             <Typography>
-                              {money(item.marketPrice)}
+                              {/* Always specify currency - either the stored one or default to GBP */}
+                              {money(item.marketPrice, item.marketPriceCurrency || 'GBP')}
                             </Typography>
                             <IconButton
                               size="small"
@@ -933,7 +955,8 @@ const InventoryTable = ({
                           <Typography
                             onClick={(e) => handleProfitInfoClick(e, item)}
                           >
-                            {money(Math.abs(item.estimatedProfit))}
+                            {/* Always specify currency - either the stored one or default to GBP */}
+                            {money(Math.abs(item.estimatedProfit), item.marketPriceCurrency || 'GBP')}
                           </Typography>
                           <IconButton
                             size="small"
@@ -1078,26 +1101,27 @@ const InventoryTable = ({
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">Market Price</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                    {money(selectedProfitItem.marketPrice)}
+                    {/* Always specify currency - either the stored one or default to GBP */}
+                    {money(selectedProfitItem.marketPrice, selectedProfitItem.marketPriceCurrency || 'GBP')}
                   </Typography>
                 </Box>
                 <Divider sx={{ my: 0.5 }} />
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">Purchase Price</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    - {money(selectedProfitItem.purchasePrice)}
+                    - {money(selectedProfitItem.purchasePrice, 'GBP')}
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">Shipping Cost</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    - {money(selectedProfitItem.shippingPrice || 0)}
+                    - {money(selectedProfitItem.shippingPrice || 0, 'GBP')}
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                   <Typography variant="body2">Est. Platform Fees (10%)</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    - {money(selectedProfitItem.marketPrice * 0.1)}
+                    - {money(selectedProfitItem.marketPrice * 0.1, selectedProfitItem.marketPriceCurrency || 'GBP')}
                   </Typography>
                 </Box>
                 <Divider sx={{ my: 0.5 }} />
@@ -1112,7 +1136,7 @@ const InventoryTable = ({
                         : theme.palette.error.main
                     }}
                   >
-                    {money(selectedProfitItem.estimatedProfit)}
+                    {money(selectedProfitItem.estimatedProfit, selectedProfitItem.marketPriceCurrency || 'GBP')}
                   </Typography>
                 </Box>
                 <Box sx={{ 

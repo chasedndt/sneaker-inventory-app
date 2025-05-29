@@ -76,6 +76,7 @@ interface ItemWithImage extends Item {
   imageLoading: boolean;
   imageError: boolean;
   placeholderMessage?: string;
+  marketPriceCurrency?: string;
 }
 
 const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({ 
@@ -503,14 +504,14 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, 'GBP')}
+                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, item.marketPriceCurrency || 'GBP')}
                         </Typography>
                         
                         <Tooltip
                           title={
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, 'GBP')}
+                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, item.marketPriceCurrency || 'GBP')}
                               </Typography>
                             </Box>
                           }
