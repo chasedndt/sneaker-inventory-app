@@ -21,6 +21,8 @@ import { Item } from '../services/api';
 import { getCategoryPlaceholderImage, safeImageUrl, getImageUrl } from '../utils/imageUtils';
 import { useAuth } from '../contexts/AuthContext';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
+import { useSettings } from '../contexts/SettingsContext'; // Import settings context
+import { currencyConverter } from '../utils/currencyUtils'; // Import currency converter
 import { User } from 'firebase/auth';
 
 interface EnhancedInventoryDisplayProps {
@@ -227,16 +229,25 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           imageUrl = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
         }
         
-        // Ensure market price is preserved exactly as in the original data
-        // This is critical for correct price display
-        // Ensure we're getting the properly converted market price in GBP
-        // CRITICAL FIX: Use the pre-converted GBP value from API service
-        const convertedItem = items.find(i => i.id === item.id);
+        // Find the original item with all its data
+        const originalItem = items.find(i => i.id === item.id);
         
-        // If the item has no market price, calculate a default (20% markup)
-        // This matches the logic in Dashboard.tsx and InventoryPage.tsx
-        const marketPrice = convertedItem?.marketPrice || 
-          (convertedItem && convertedItem.purchasePrice ? convertedItem.purchasePrice * 1.2 : 0);
+        // Use the market price if available, otherwise calculate default 20% markup
+        let marketPrice = originalItem?.marketPrice || 
+          (originalItem && originalItem.purchasePrice ? originalItem.purchasePrice * 1.2 : 0);
+        
+        // Store the original currency for this item if available
+        const marketPriceCurrency = originalItem?.marketPriceCurrency || 'GBP';
+        
+        // Import needed functions and context
+        const { currency } = useSettings(); // Get current display currency
+        
+        // Convert to the current display currency if needed
+        if (marketPriceCurrency !== currency && currency) {
+          console.log(`Converting market price from ${marketPriceCurrency} to ${currency}`);
+          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, currency);
+          console.log(`Converted price: ${marketPrice}`);
+        }
         
         // Format the value to 2 decimal places
         const formattedMarketPrice = marketPrice ? parseFloat(marketPrice.toFixed(2)) : 0;

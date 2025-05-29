@@ -1150,23 +1150,36 @@ const InventoryPage: React.FC = () => {
       return sum + item.marketPrice;
     }, 0);
     // Recalculate estimated profit with proper currency conversion
-    const totalEstimatedProfit = filteredItems.reduce((sum, item) => {
-      let marketPrice = item.marketPrice;
+    // Only include items that aren't sold for the estimated profit calculation
+    const activeItems = filteredItems.filter(item => item.status !== 'sold');
+    
+    const totalEstimatedProfit = activeItems.reduce((sum, item) => {
+      // Get the base market price (use default markup if not available)
+      let marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup
       
       // Convert market price to current currency if needed
       if (item.marketPriceCurrency && item.marketPriceCurrency !== defaultCurrency) {
-        marketPrice = currencyConverter(item.marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
+        marketPrice = currencyConverter(marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
       }
       
-      // Convert purchase price if it has a different currency
+      // Convert purchase price and shipping if they have different currencies
       let purchasePrice = item.purchasePrice;
       const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
       if (purchaseCurrency !== defaultCurrency) {
-        purchasePrice = currencyConverter(item.purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
+        purchasePrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
       }
       
-      // Calculate profit in the current currency
-      const profit = marketPrice - purchasePrice;
+      // Include shipping costs in the purchase price
+      const shippingCost = item.shippingPrice || 0;
+      let totalCost = purchasePrice + shippingCost;
+      
+      // Platform fees (estimated at 10%)
+      const platformFees = marketPrice * 0.1;
+      
+      // Calculate profit in the current currency (market price - total cost - platform fees)
+      const profit = marketPrice - totalCost - platformFees;
+      console.log(`Item ${item.productName}: Market price ${marketPrice}, Cost ${totalCost}, Fees ${platformFees}, Profit ${profit}`);
+      
       return sum + profit;
     }, 0);
     
