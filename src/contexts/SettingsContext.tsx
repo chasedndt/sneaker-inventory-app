@@ -234,41 +234,47 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     return '$';
   };
 
-  // Convert currency using the latest exchange rates with detailed debugging
+  // Convert currency using the latest exchange rates with minimal logging
   const convertCurrency = (amount: number, fromCurrency: string = 'USD'): number => {
-    // DETAILED LOGGING: Track all currency conversions for market price debugging
-    console.log(`💱 [CURRENCY CONVERSION] START: Converting ${amount} from ${fromCurrency} to ${currency}`);
-    console.log(`💱 [CURRENCY CONVERSION] Stack trace: ${new Error().stack?.split('\n').slice(1, 4).join('\n')}`);
+    // Only log important conversions to reduce noise
+    const isSignificantAmount = amount > 100 || Math.abs(amount) > 100;
+    const isDebugMode = false; // Set to true only when actively debugging currency issues
     
-    // Don't do any conversion if the amount is invalid
-    if (amount === null || amount === undefined || isNaN(amount)) {
-      console.warn(`⚠️ [CURRENCY CONVERSION] Invalid amount detected: ${amount}, returning 0`);
+    // Handle edge cases better
+    if (isNaN(amount)) {
+      console.warn('Invalid amount provided to convertCurrency');
       return 0;
     }
     
-    // If from and to currencies are the same, just return the original amount
+    // If the currencies are the same, no conversion needed
     if (fromCurrency === currency) {
-      console.log(`💱 [CURRENCY CONVERSION] No conversion needed: ${fromCurrency} to ${currency}, returning ${amount}`);
       return amount;
     }
     
-    // If we have exchange rates, use them
     if (exchangeRates) {
-      console.log(`💱 [CURRENCY CONVERSION] Using exchange rates:`, exchangeRates);
+      // Only log exchange rates in debug mode
+      if (isDebugMode) {
+        console.log(`💱 [CURRENCY CONVERSION] Using exchange rates:`, exchangeRates);
+      }
       
-      // Make sure both currencies exist in our rates
-      if (exchangeRates[fromCurrency] && exchangeRates[currency]) {
-        // Convert to USD first (our base currency)
-        const amountInUSD = fromCurrency === 'USD' 
+      // Normalize currency codes to upper case
+      const normalizedFromCurrency = fromCurrency.toUpperCase();
+      const normalizedTargetCurrency = currency.toUpperCase();
+      
+      // Check if we have the necessary rates
+      if (exchangeRates[normalizedFromCurrency] && exchangeRates[normalizedTargetCurrency]) {
+        // First convert to USD (our base currency in the rates)
+        const amountInUSD = normalizedFromCurrency === 'USD' 
           ? amount 
-          : amount / exchangeRates[fromCurrency];
-        
-        console.log(`💱 [CURRENCY CONVERSION] Step 1: ${amount} ${fromCurrency} = ${amountInUSD} USD`);
+          : amount / exchangeRates[normalizedFromCurrency];
         
         // Then convert from USD to target currency
-        const result = amountInUSD * exchangeRates[currency];
-        console.log(`💱 [CURRENCY CONVERSION] Step 2: ${amountInUSD} USD = ${result} ${currency}`);
-        console.log(`💱 [CURRENCY CONVERSION] FINAL: ${amount} ${fromCurrency} = ${result} ${currency}`);
+        const result = amountInUSD * exchangeRates[normalizedTargetCurrency];
+        
+        // Only log significant conversions to reduce console noise
+        if (isSignificantAmount && isDebugMode) {
+          console.log(`💱 [CURRENCY CONVERSION] ${amount} ${fromCurrency} = ${result} ${currency}`);
+        }
         
         return result;
       } else {
@@ -279,8 +285,11 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     }
     
     // Fall back to direct conversion with built-in rates
-    const result = currencyConverter(amount, fromCurrency, currency);
-    console.log(`💱 [CURRENCY CONVERSION] Fallback conversion: ${amount} ${fromCurrency} = ${result} ${currency}`);
+    const result = currencyConverter(amount, fromCurrency, currency, isDebugMode);
+    
+    if (isDebugMode) {
+      console.log(`💱 [CURRENCY CONVERSION] Fallback conversion: ${amount} ${fromCurrency} = ${result} ${currency}`);
+    }
     return result;
   };
 
@@ -291,8 +300,8 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       amount = 0;
     }
     
-    // Enhanced logging for debugging
-    console.log(`🔄 [FORMAT CURRENCY] amount: ${amount}, fromCurrency: ${fromCurrency || 'none'}, targetCurrency: ${currency}`);
+    // Only log in debug mode to reduce console noise
+    const isDebugMode = false; // Set to true only when actively debugging
     
     try {
       // Calculate the final amount based on whether conversion is needed
@@ -300,9 +309,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       
       // Only convert if fromCurrency is explicitly specified and different from the target currency
       if (fromCurrency && fromCurrency !== currency) {
-        console.log(`🔄 [FORMAT CURRENCY] Converting from ${fromCurrency} to ${currency}`);
         finalAmount = convertCurrency(amount, fromCurrency);
-        console.log(`🔄 [FORMAT CURRENCY] Converted amount: ${finalAmount}`);
       }
       
       // Map of currency codes to appropriate locales for better formatting

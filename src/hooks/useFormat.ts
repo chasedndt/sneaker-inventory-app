@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import dayjs from 'dayjs';
 
+// Global debug flag - set to false by default to minimize logging
+const enableDebugLogging = false;
+
 /**
  * Custom hook for formatting values consistently throughout the app
  * Leverages the SettingsContext for currency, date formatting, etc.
@@ -17,13 +20,15 @@ const useFormat = () => {
    * @returns Formatted currency string
    */
   const money = (amount: number, originalCurrency?: string): string => {
-    // Add more detailed logging for debugging currency issues
-    const caller = new Error().stack?.split('\n')[2] || 'unknown';
-    console.log(`💲 [MONEY FORMAT] amount: ${amount}, from currency: ${originalCurrency || 'none'}, to currency: ${settings?.currency || 'none'}, caller: ${caller.trim()}`);
+    // LOGGING DISABLED - Too much console noise
+    // NO DEBUG LOGGING - Uncomment below for debugging only
+    // const caller = new Error().stack?.split('\n')[2] || 'unknown';
+    // console.log(`💲 [MONEY FORMAT] amount: ${amount}, from currency: ${originalCurrency || 'none'}, to currency: ${settings?.currency || 'none'}`);
     
     // Handle invalid input
     if (isNaN(amount)) {
-      console.warn(`⚠️ [MONEY FORMAT WARNING] Invalid amount detected: ${amount}, using 0 instead`);
+      // Use limited warnings for invalid input only
+      console.warn(`Invalid amount in formatter: ${amount}, using 0`);
       amount = 0;
     }
     
@@ -38,7 +43,8 @@ const useFormat = () => {
       
       // If we have a settings context, use its formatting
       if (settings) {
-        // Pass the normalized currency code to the settings formatter
+        // Pass the normalized currency code to the settings formatter along with debug flag
+        // The settings.formatCurrency method will handle the correct conversion with proper logging control
         return settings.formatCurrency(amount, sourceCurrency);
       }
       

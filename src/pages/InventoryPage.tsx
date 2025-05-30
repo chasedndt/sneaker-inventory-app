@@ -1149,39 +1149,43 @@ const InventoryPage: React.FC = () => {
       // Otherwise just add the price (assuming it's already in the correct currency)
       return sum + item.marketPrice;
     }, 0);
-    // Recalculate estimated profit with proper currency conversion
-    // Only include items that aren't sold for the estimated profit calculation
+
+    // Calculate estimated profit for active items only (not sold) with comprehensive currency conversion
     const activeItems = filteredItems.filter(item => item.status !== 'sold');
+    let totalEstimatedProfit = 0;
     
-    const totalEstimatedProfit = activeItems.reduce((sum, item) => {
-      // Get the base market price (use default markup if not available)
-      let marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup
-      
-      // Convert market price to current currency if needed
-      if (item.marketPriceCurrency && item.marketPriceCurrency !== defaultCurrency) {
-        marketPrice = currencyConverter(marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
+    // Log key information for debugging but keep it minimal
+    console.log(`📊 [INVENTORY PROFIT] Calculating profit for ${activeItems.length} active items in ${defaultCurrency}`);
+    
+    for (const item of activeItems) {
+      try {
+        // 1. Get market price (with fallback) and its currency
+        let marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
+        const marketPriceCurrency = item.marketPriceCurrency || 'GBP';
+        
+        // 2. Get purchase price and its currency
+        let purchasePrice = item.purchasePrice;
+        const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
+        
+        // 3. Convert both to the display currency using the enhanced utility
+        const convertedMarketPrice = currencyConverter(marketPrice, marketPriceCurrency, defaultCurrency || 'GBP');
+        const convertedPurchasePrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
+        
+        // 4. Calculate profit in the display currency
+        const itemProfit = convertedMarketPrice - convertedPurchasePrice;
+        
+        // Add to running total
+        totalEstimatedProfit += itemProfit;
+        
+        // Log item information
+        console.log(`💰 Item: ${item.productName} | Profit: ${defaultCurrency} ${itemProfit.toFixed(2)}`);
+      } catch (error) {
+        console.error(`Error calculating profit for item ${item.id}:`, error);
       }
-      
-      // Convert purchase price and shipping if they have different currencies
-      let purchasePrice = item.purchasePrice;
-      const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
-      if (purchaseCurrency !== defaultCurrency) {
-        purchasePrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
-      }
-      
-      // Include shipping costs in the purchase price
-      const shippingCost = item.shippingPrice || 0;
-      let totalCost = purchasePrice + shippingCost;
-      
-      // Platform fees (estimated at 10%)
-      const platformFees = marketPrice * 0.1;
-      
-      // Calculate profit in the current currency (market price - total cost - platform fees)
-      const profit = marketPrice - totalCost - platformFees;
-      console.log(`Item ${item.productName}: Market price ${marketPrice}, Cost ${totalCost}, Fees ${platformFees}, Profit ${profit}`);
-      
-      return sum + profit;
-    }, 0);
+    }
+    
+    console.log(`💵 TOTAL ESTIMATED PROFIT: ${defaultCurrency} ${totalEstimatedProfit.toFixed(2)}`);
+
     
     return {
       totalItems,

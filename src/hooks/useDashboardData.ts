@@ -10,6 +10,9 @@ import { useSettings } from '../contexts/SettingsContext';
 import { currencyConverter } from '../utils/currencyUtils';
 import { InventoryItem } from '../pages/InventoryPage';
 
+// Control debug logging globally
+const enableDebugLogging = false;
+
 interface DashboardData {
   items: Item[];
   sales: Sale[];
@@ -52,7 +55,9 @@ const useDashboardData = (): DashboardDataHook => {
         setLoading(true);
       }
       
-      console.log('🔄 Fetching inventory items, sales, and expenses data...');
+      if (enableDebugLogging) {
+        console.log('🔄 Fetching inventory items, sales, and expenses data...');
+      }
       
       // Fetch all necessary data in one call after authentication
       const data = await dashboardService.getDashboardData();
@@ -64,6 +69,7 @@ const useDashboardData = (): DashboardDataHook => {
       setError(null);
       
     } catch (err: any) {
+      // Always log errors
       console.error('💥 Error fetching data:', err);
       setError(`Failed to load dashboard data: ${err.message}`);
     } finally {
@@ -120,23 +126,43 @@ const useDashboardData = (): DashboardDataHook => {
   const calculatePortfolioData = (startDate: Dayjs | null, endDate: Dayjs | null) => {
     const { filteredItems, filteredSales, filteredExpenses } = getFilteredData(startDate, endDate);
     
+    // Log only once at the start of the calculation and only if debug logging is enabled
+    if (enableDebugLogging) {
+      console.log(`📊 [DASHBOARD] Calculating portfolio value for ${filteredItems.length} items in ${settings?.currency || 'default currency'}`);
+    }
+    
     // Calculate current portfolio value with proper currency conversion
-    const currentValue = filteredItems.reduce((sum, item) => {
-      // Get the base market price
+    const currentValue = filteredItems.reduce((sum, item, index) => {
+      // Get the base market price and currency info
       let marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup if no market price
       
-      // Treat item as InventoryItem to access marketPriceCurrency
+      // Treat item as InventoryItem to access all needed properties
       const inventoryItem = item as InventoryItem;
+      const marketPriceCurrency = inventoryItem.marketPriceCurrency || 'GBP'; // Default to GBP if not specified
       
-      // Convert the market price to the current currency if needed
-      if (inventoryItem.marketPriceCurrency && settings.currency && inventoryItem.marketPriceCurrency !== settings.currency) {
-        console.log(`Converting portfolio item from ${inventoryItem.marketPriceCurrency} to ${settings.currency}`);
-        marketPrice = currencyConverter(marketPrice, inventoryItem.marketPriceCurrency, settings.currency);
-        console.log(`Converted value: ${marketPrice}`);
+      // Original values before conversion
+      const originalMarketPrice = marketPrice;
+      
+      // Convert the market price to the display currency if needed
+      if (marketPriceCurrency !== settings.currency) {
+        try {
+          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, settings.currency, enableDebugLogging);
+          // Only log significant conversions or first/last items for reference when debug logging is enabled
+          if (enableDebugLogging && (index === 0 || index === filteredItems.length-1 || Math.abs(marketPrice - originalMarketPrice) > 5)) {
+            console.log(`💱 Item ${item.productName}: ${marketPriceCurrency} ${originalMarketPrice.toFixed(2)} → ${settings.currency} ${marketPrice.toFixed(2)}`);
+          }
+        } catch (error) {
+          console.error(`❌ Currency conversion error for ${item.productName}:`, error);
+        }
       }
       
       return sum + marketPrice;
     }, 0);
+    
+    if (enableDebugLogging) {
+      console.log(`📊 [DASHBOARD] Final portfolio value: ${currentValue.toFixed(2)} ${settings.currency}`);
+    }
+
     
     // Calculate expenses total
     const expensesTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);

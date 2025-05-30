@@ -42,8 +42,9 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   const theme = useTheme();
   const { money } = useFormat(); 
 
+  // Fix: Don't hardcode currency as GBP - if we're using the formatter, let it use the current currency
   const formattedValue = useFormatter && typeof rawValue === 'number' 
-    ? money(Number(rawValue), 'GBP') 
+    ? money(Number(rawValue)) 
     : `${rawValue}${suffix}`;
 
   const actualChangeDefined = typeof change === 'number';
@@ -118,7 +119,7 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
                   }}
                   itemStyle={{ color: theme.palette.text.primary, fontSize: '0.875rem' }}
                   labelStyle={{ display: 'none' }} 
-                  formatter={(val: number) => [useFormatter ? money(val, 'GBP') : val, null]} 
+                  formatter={(val: number) => [useFormatter ? money(val) : val, null]} 
                 />
                 <Line 
                   type="monotone" 

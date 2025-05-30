@@ -26,16 +26,19 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useAuth } from '../contexts/AuthContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { useApi, Item } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
+import { currencyConverter } from '../utils/currencyUtils';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
 import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 import dayjs, { Dayjs } from 'dayjs';
 import { debugNetProfitFromSoldItems } from '../utils/profitCalculator';
+import { InventoryItem } from './InventoryPage';
 
 // Custom styled ToggleButton
 const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
@@ -104,6 +107,7 @@ const Dashboard: React.FC = () => {
   const authLoading = auth.loading;
   const getAuthToken = auth.getAuthToken;
   const api = useApi();
+  const settings = useSettings(); // Get the user's currency settings
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]); 
@@ -121,6 +125,19 @@ const Dashboard: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
   const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
+
+  // Memoized portfolio stats to prevent recalculation on every render
+  const [portfolioStats, setPortfolioStats] = useState<{
+    currentValue: number,
+    valueChange: number,
+    percentageChange: number,
+    historicalData: Array<{ date: string, value: number }>
+  }>({
+    currentValue: 0,
+    valueChange: 0,
+    percentageChange: 0,
+    historicalData: []
+  });
 
   // --- DEBUG: Log all main state before render ---
   console.log('[Dashboard][DEBUG] Render:', {
@@ -197,9 +214,7 @@ const Dashboard: React.FC = () => {
     }
   }, []);
 
-
-  // Fetch items, sales, and expenses from API with authentication
-  // Memoized fetchData, only depends on stable references
+  // Fetch data from the API - now using the enhanced API that correctly handles currency conversion
   const fetchData = useCallback(async (showRefreshing = false) => {
     console.log('[Dashboard] fetchData called. showRefreshing:', showRefreshing, '| currentUser:', currentUser);
     if (authLoading) {
@@ -224,89 +239,112 @@ const Dashboard: React.FC = () => {
       } else {
         setLoading(true);
       }
+      
       console.log('🔄 Fetching inventory items, sales, and expenses data for authenticated user...');
-      const token = await getAuthToken();
-      if (!token) {
-        console.error('[Dashboard] No auth token found.');
-        setError('Authentication token could not be retrieved. Please log out and log in again.');
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      try {
-        // Fetch items data
-        const itemsData = await api.getItems();
+      
+      // IMPORTANT FIX: Use the api directly, NOT inside the callback (React Hooks rule violation)
+      // This is EXACTLY what the inventory page uses
+      const response = await api.getItems();
+      
+      // ✅ CRITICAL: Do NOT manually convert currencies - the enhanced API already did that!
+      // This fixes the difference between dashboard and inventory page values
+      const processedItems = response.map((item: Item) => {
+        // Get raw values from item (with type safety)
+        const marketPrice = item.marketPrice;
+        const purchasePrice = item.purchasePrice;
+        const status = item.status;
+        // Use type assertion for properties that might not be in the interface
+        const marketPriceCurrency = (item as any).marketPriceCurrency;
+        const purchaseCurrency = (item as any).purchaseCurrency;
         
-        // Filter out sold items for active inventory
-        const activeItems = itemsData.filter((item: Item) => item.status !== 'sold');
-        console.log(`✅ Received ${activeItems.length} active items from API for user ${currentUser.uid}`);
-        
-        // CRITICAL FIX: Process items to match the exact same logic used in InventoryPage.tsx
-        // This ensures consistent market price display across the application
-        const processedItems = activeItems.map((item: Item) => {
-          // Use the EXACT same logic as in InventoryPage.tsx line 231
-          const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
-          
-          console.log(`🔍 [DASHBOARD PROCESSING] Item ${item.id} (${item.productName}): Raw marketPrice=${item.marketPrice}, Calculated marketPrice=${marketPrice}`);
-          
-          return {
-            ...item,
-            marketPrice: parseFloat(marketPrice.toFixed(2))
-          };
+        // For debugging, log each item's raw data
+        console.log(`🔍 [DASHBOARD] Raw item data for ${item.productName}:`, {
+          id: item.id,
+          marketPrice,
+          marketPriceCurrency,
+          purchasePrice,
+          purchaseCurrency,
+          status
         });
         
-        // Fetch sales data
-        const salesData = await salesApi.getSales();
+        return {
+          ...item,
+          // Keep the market price exactly as provided by the enhanced API
+          // This ensures the dashboard and inventory page use the same values
+          marketPrice: marketPrice,
+          purchasePrice: purchasePrice,
+          // Calculate profit using the already-converted values
+          estimatedProfit: marketPrice && purchasePrice ? 
+            (marketPrice - purchasePrice) : 0
+        };
+      });
+      
+      // Log detailed comparison for a "sanity check"
+      console.log('🧪 [DASHBOARD] Item values from enhanced API:');
+      processedItems.forEach((item: Item) => {
+        console.log(`${item.productName}: ${settings.currency} ${item.marketPrice?.toFixed(2)} ` +
+          `(Purchase: ${settings.currency} ${item.purchasePrice?.toFixed(2)})`);
+      });
+      
+      // Fetch sales data
+      const salesData = await salesApi.getSales();
+      if (currentUser) {
         console.log(`✅ Received ${salesData.length} sales records from API for user ${currentUser.uid}`);
-        
-        // Debug sales data
-        console.log('📊 Sales data:', salesData);
-        
-        // Fetch expenses data
-        const expensesData = await expensesApi.getExpenses();
-        console.log(`✅ Received ${expensesData.length} expense records from API for user ${currentUser.uid}`);
-        
-        // Debug expenses data
-        console.log('💰 Expenses data:', expensesData);
-        
-        // Add detailed logging of items to diagnose market price issues
-        console.log('🔎 [MARKET PRICE DEBUG] Items before setting state:', processedItems.map((item: Item) => ({
-          id: item.id,
-          productName: item.productName,
-          marketPrice: item.marketPrice,
-          purchasePrice: item.purchasePrice,
-          hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
-        })));
-        
-        // Update state with all datasets
-        setItems(processedItems); // Use the processed items with market prices calculated the same way as inventory page
-        setSales(salesData);
-        setExpenses(expensesData);
-        setError(null);
-        setLoading(false);
-        setRefreshing(false);
-        
-        // Show success message if refreshing
-        if (showRefreshing) {
-          setSnackbar({
-            open: true,
-            message: 'Dashboard data refreshed successfully',
-            severity: 'success'
-          });
-        }
-      } catch (error: any) {
-        console.error('[Dashboard] Error fetching dashboard data:', error);
-        setError('Error fetching dashboard data: ' + (error.message || error.toString()));
-        setLoading(false);
-        setRefreshing(false);
       }
-    } catch (error: any) {
-      console.error('[Dashboard] Error during fetchData:', error);
-      setError('Error during fetchData: ' + (error.message || error.toString()));
+      
+      // Debug sales data
+      console.log('📊 Sales data:', salesData);
+      
+      // Fetch expenses data
+      const expensesData = await expensesApi.getExpenses();
+      if (currentUser) {
+        console.log(`✅ Received ${expensesData.length} expense records from API for user ${currentUser.uid}`);
+      }
+      
+      // Debug expenses data
+      console.log('💰 Expenses data:', expensesData);
+      
+      // Filter active items (not sold)
+      const activeItems = processedItems.filter((item: Item) => item.status !== 'sold');
+      console.log(`💼 Active inventory items: ${activeItems.length}`);
+      
+      // Update state with all datasets
+      setItems(activeItems);
+      setSales(salesData);
+      setExpenses(expensesData);
+      setError(null);
       setLoading(false);
       setRefreshing(false);
+      
+      // Show success message if refreshing
+      if (showRefreshing) {
+        setSnackbar({
+          open: true,
+          message: 'Data refreshed successfully!',
+          severity: 'success'
+        });
+      }
+      
+      setBackendStatus('ok');
+      
+    } catch (error: any) {
+      console.error('Error fetching data:', error);
+      setError('Failed to load data. Please try again.');
+      setLoading(false);
+      setRefreshing(false);
+      // Fix error type - use a valid value for setBackendStatus
+      setBackendStatus('down');
+      setBackendError(error.message || 'Unknown error');
+      
+      if (showRefreshing) {
+        setSnackbar({
+          open: true,
+          message: `Error refreshing data: ${error.message || 'Unknown error'}`,
+          severity: 'error'
+        });
+      }
     }
-  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus]);
+  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus, authLoading, settings.currency]);
 
   // Backend health check on mount and when user logs in/out
   useEffect(() => {
@@ -395,17 +433,111 @@ const Dashboard: React.FC = () => {
   };
 
   // Calculate portfolio stats including historical data
-  const calculatePortfolioStats = () => {
+  const calculatePortfolioStats = useCallback(() => {
     // Active items are always calculated on the entire inventory,
     // regardless of date filters - this is the entire portfolio value
     const activeItems = items.filter(item => item.status !== 'sold');
     
-    // Calculate current portfolio value (sum of market prices for all active inventory)
-    const currentValue = activeItems.reduce((sum, item) => {
-      // Use market price if available, otherwise estimate as 20% more than purchase price
-      const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
-      return sum + marketPrice;
+    // ENHANCED DEBUGGING - Set to true for detailed logging
+    const enableLogging = true;
+    
+    if (enableLogging) {
+      console.log(`%c🔎 DASHBOARD CURRENCY DEBUG MODE 🔎`, 'background: #0a84ff; color: white; padding: 4px; font-weight: bold;');
+      console.log(`Total active items: ${activeItems.length} | User currency: ${settings.currency}`);
+      
+      // Log the raw data for analysis
+      console.log("------ RAW ITEM DATA SAMPLE ------");
+      if (activeItems.length > 0) {
+        const firstItem = activeItems[0];
+        console.log(`First item (${firstItem.productName})`, firstItem);
+        console.table({
+          "ID": firstItem.id,
+          "Product Name": firstItem.productName,
+          "Market Price": firstItem.marketPrice,
+          "Market Price Currency": (firstItem as any).marketPriceCurrency || 'unknown',
+          "Purchase Price": firstItem.purchasePrice,
+          "Purchase Currency": (firstItem as any).purchaseCurrency || 'unknown'
+        });
+      }
+    }
+    
+    // Compare with Inventory Display values - DEBUG ANALYSIS
+    // Create a detailed log of each item's values to compare with Inventory page
+    const debugItemValues: Array<{
+      name: string;
+      rawMarketPrice: number;
+      rawCurrency: string;
+      displayedCurrency: string;
+      needsConversion: boolean;
+    }> = [];
+    
+    // Calculate current portfolio value using the market prices directly from the API
+    const currentValue = activeItems.reduce((sum, item, index) => {
+      // Get the full item data with all currency information
+      const inventoryItem = item as InventoryItem;
+      
+      // Get the market price and currency directly
+      const marketPrice = item.marketPrice || 0;
+      const marketPriceCurrency = inventoryItem.marketPriceCurrency || settings.currency;
+      
+      // Store the raw values for detailed logging
+      if (enableLogging) {
+        debugItemValues.push({
+          name: item.productName,
+          rawMarketPrice: marketPrice,
+          rawCurrency: marketPriceCurrency,
+          displayedCurrency: settings.currency,
+          needsConversion: marketPriceCurrency !== settings.currency
+        });
+      }
+      
+      // DIAGNOSIS: Check if we're using the correct value that the inventory page uses
+      let finalValue = marketPrice;
+      
+      // Only convert if the currency differs from settings currency
+      // This is critical - the inventory page isn't doing conversions if already in correct currency
+      if (marketPriceCurrency !== settings.currency) {
+        if (enableLogging) {
+          console.log(`⚠️ [${item.productName}] CURRENCY MISMATCH: Item is in ${marketPriceCurrency}, user prefers ${settings.currency}`);
+        }
+        
+        try {
+          const originalValue = finalValue;
+          finalValue = currencyConverter(finalValue, marketPriceCurrency, settings.currency, true);
+          
+          if (enableLogging) {
+            console.log(`💱 Converted ${originalValue} ${marketPriceCurrency} → ${finalValue} ${settings.currency}`);
+          }
+        } catch (error) {
+          console.error(`Error converting currency for ${item.productName}:`, error);
+        }
+      } else if (enableLogging) {
+        console.log(`✅ [${item.productName}] NO CONVERSION NEEDED: Already in ${settings.currency}`);
+      }
+      
+      // If there's no market price at all, use purchase price with markup
+      if (!item.marketPrice && item.purchasePrice) {
+        finalValue = item.purchasePrice * 1.2; // 20% markup as default
+        if (enableLogging) {
+          console.log(`ℹ️ [${item.productName}] Using purchase price with markup: ${item.purchasePrice} * 1.2 = ${finalValue}`);
+        }
+      }
+      
+      return sum + finalValue;
     }, 0);
+    
+    // After processing all items, show the aggregate debug information
+    if (enableLogging && debugItemValues.length > 0) {
+      console.log("------ CURRENCY CONVERSION SUMMARY ------");
+      console.table(debugItemValues);
+      console.log(`💰 FINAL TOTAL VALUE: ${currentValue.toFixed(2)} ${settings.currency}`);
+    }
+    
+    // Only log the final value if debugging is enabled
+    if (enableLogging) {
+      console.log(`💰 [DASHBOARD] Final portfolio value: ${settings.currency} ${currentValue.toFixed(2)}`);
+    }
+
     
     // For historical comparison, determine a reasonable previous value based on time period
     let previousValue = currentValue;
@@ -609,9 +741,9 @@ const Dashboard: React.FC = () => {
       currentValue,
       valueChange,
       percentageChange: Number(percentageChange.toFixed(1)),
-      historicalData
+      historicalData,
     };
-  };
+  }, [items, timeRange, settings.currency]);
 
   // Show auth loading state
   if (authLoading) {
@@ -837,10 +969,10 @@ const Dashboard: React.FC = () => {
             <Box sx={{ height: 'calc(100% - 64px)', width: '100%' }}>
               <PortfolioValue 
                 currentUser={currentUser} // Pass currentUser from Dashboard's state
-                currentValue={calculatePortfolioStats().currentValue}
-                valueChange={calculatePortfolioStats().valueChange}
-                percentageChange={calculatePortfolioStats().percentageChange}
-                data={calculatePortfolioStats().historicalData}
+                currentValue={portfolioStats.currentValue}
+                valueChange={portfolioStats.valueChange}
+                percentageChange={portfolioStats.percentageChange}
+                data={portfolioStats.historicalData}
                 theme={theme}
               />
             </Box>

@@ -38,67 +38,108 @@ export const CURRENCY_CODE_FROM_SYMBOL: Record<string, string> = {
   'A$': 'AUD',
 };
 
+// Simplified display for the calculated exchange rates (for cleaner logging)
+const formatRate = (rate: number): string => rate.toFixed(4);
+
 /**
- * Convert amount from one currency to another with enhanced debugging
+ * Normalize currency inputs to handle both symbols and codes
+ * @param currency - Currency symbol or code to normalize
+ * @returns Normalized currency code
+ */
+export const normalizeCurrencyCode = (currency: string): string => {
+  if (!currency) return 'USD'; // Default if undefined
+  
+  // Trim whitespace and handle uppercase/lowercase
+  const normalizedInput = currency.trim().toUpperCase();
+  
+  // If it's a currency symbol, convert to code
+  if (CURRENCY_CODE_FROM_SYMBOL[normalizedInput]) {
+    return CURRENCY_CODE_FROM_SYMBOL[normalizedInput];
+  }
+  
+  // If it matches one of our known codes, return as is
+  if (Object.keys(EXCHANGE_RATES).includes(normalizedInput)) {
+    return normalizedInput;
+  }
+  
+  // Special handling for common abbreviations/typos
+  const mappings: Record<string, string> = {
+    'DOLLAR': 'USD',
+    'US': 'USD',
+    'EURO': 'EUR',
+    'POUND': 'GBP',
+    'UK': 'GBP',
+    'YEN': 'JPY',
+  };
+  
+  if (mappings[normalizedInput]) {
+    return mappings[normalizedInput];
+  }
+  
+  // Default to USD if unknown
+  return 'USD';
+};
+
+/**
+ * Convert amount from one currency to another with enhanced reliability
  * @param amount - Amount to convert
  * @param fromCurrency - Currency to convert from
  * @param toCurrency - Currency to convert to
+ * @param enableDebugLogging - Whether to log conversion details (default: false)
  * @returns Converted amount
  */
-export const currencyConverter = (amount: number, fromCurrency: string, toCurrency: string): number => {
-  // Normalize currency inputs to handle both symbols and codes
-  const normalizeToCode = (currency: string): string => {
-    // If it's a currency symbol, convert to code
-    if (CURRENCY_CODE_FROM_SYMBOL[currency]) {
-      console.log(`Normalized currency symbol ${currency} to code ${CURRENCY_CODE_FROM_SYMBOL[currency]}`);
-      return CURRENCY_CODE_FROM_SYMBOL[currency];
-    }
-    // If it matches one of our known codes, return as is
-    if (Object.keys(EXCHANGE_RATES).includes(currency)) {
-      return currency;
-    }
-    // Default to USD if unknown
-    console.warn(`Unknown currency format: ${currency}, defaulting to USD`);
-    return 'USD';
-  };
-
-  // Normalize both currencies
-  const normalizedFromCurrency = normalizeToCode(fromCurrency);
-  const normalizedToCurrency = normalizeToCode(toCurrency);
-  
-  // Detailed logging to track conversions
-  console.log(`Converting ${amount} from ${fromCurrency} (${normalizedFromCurrency}) to ${toCurrency} (${normalizedToCurrency})`);
-  
+export const currencyConverter = (amount: number, fromCurrency: string, toCurrency: string, enableDebugLogging: boolean = false): number => {
   // Handle invalid inputs
   if (isNaN(amount)) {
-    console.error('Invalid amount provided to currencyConverter');
     return 0;
   }
   
+  // Normalize both currencies
+  const normalizedFromCurrency = normalizeCurrencyCode(fromCurrency);
+  const normalizedToCurrency = normalizeCurrencyCode(toCurrency);
+  
   // If same currency after normalization, return amount as is
   if (normalizedFromCurrency === normalizedToCurrency) {
-    console.log('Same currency after normalization - no conversion needed');
     return amount;
   }
   
   // Check if currencies are supported
   if (!EXCHANGE_RATES[normalizedFromCurrency] || !EXCHANGE_RATES[normalizedToCurrency]) {
-    console.error(`Unsupported currency after normalization: ${normalizedFromCurrency} or ${normalizedToCurrency}`);
-    return amount; // Return original amount as fallback
+    // Log once but don't spam
+    console.warn(`Unsupported currency: ${normalizedFromCurrency} or ${normalizedToCurrency}, using original amount`);
+    return amount;
   }
   
-  // Convert using exchange rates with normalized currency codes
-  // Convert to USD first (as base currency)
-  const amountInUSD = amount / EXCHANGE_RATES[normalizedFromCurrency];
-  
-  // Then convert from USD to target currency
-  const result = amountInUSD * EXCHANGE_RATES[normalizedToCurrency];
-  
-  console.log(`Converted ${amount} ${fromCurrency} to ${result.toFixed(2)} ${toCurrency}`);
-  console.log(`Using rates: 1 USD = ${EXCHANGE_RATES[normalizedFromCurrency]} ${normalizedFromCurrency} and 1 USD = ${EXCHANGE_RATES[normalizedToCurrency]} ${normalizedToCurrency}`);
-  
-  return result;
+  try {
+    // Convert to USD first (as base currency)
+    const amountInUSD = amount / EXCHANGE_RATES[normalizedFromCurrency];
+    
+    // Then convert from USD to target currency
+    const result = amountInUSD * EXCHANGE_RATES[normalizedToCurrency];
+    
+    if (enableDebugLogging) {
+      console.log(`💱 [CURRENCY CONVERSION] ${amount} ${normalizedFromCurrency} = ${result.toFixed(2)} ${normalizedToCurrency} (Rate: ${formatRate(EXCHANGE_RATES[normalizedToCurrency]/EXCHANGE_RATES[normalizedFromCurrency])})`);    
+    }
+    return result;
+  } catch (error) {
+    console.error('Currency conversion error:', error);
+    return amount; // Return original amount as fallback
+  }
 };
+
+/**
+ * Format currency for display
+ * @param amount - Amount to format
+ * @param currencyCode - Currency code
+ * @returns Formatted currency string
+ */
+export const formatCurrency = (amount: number, currencyCode: string = 'USD'): string => {
+  const normalizedCode = normalizeCurrencyCode(currencyCode);
+  const symbol = CURRENCY_SYMBOLS[normalizedCode] || '$';
+  
+  return `${symbol}${amount.toFixed(2)}`;
+};
+
 
 /**
  * Format amount with currency symbol based on currency code
@@ -157,14 +198,16 @@ export const currencyConverter = (amount: number, fromCurrency: string, toCurren
    * @param amount - Amount to convert and format
    * @param fromCurrency - Currency to convert from
    * @param toCurrency - Currency to convert to
+   * @param enableDebugLogging - Whether to log conversion details (default: false)
    * @returns Formatted currency string with symbol
    */
   export const convertAndFormatCurrency = (
     amount: number,
     fromCurrency: string,
-    toCurrency: string
+    toCurrency: string,
+    enableDebugLogging: boolean = false
   ): string => {
-    const convertedAmount = currencyConverter(amount, fromCurrency, toCurrency);
+    const convertedAmount = currencyConverter(amount, fromCurrency, toCurrency, enableDebugLogging);
     return formatCurrencyWithSymbol(convertedAmount, toCurrency);
   };
   

@@ -24,6 +24,7 @@ import useFormat from '../hooks/useFormat'; // Import formatting hook
 import { useSettings } from '../contexts/SettingsContext'; // Import settings context
 import { currencyConverter } from '../utils/currencyUtils'; // Import currency converter
 import { User } from 'firebase/auth';
+import { InventoryItem } from '../pages/InventoryPage'; // Import InventoryItem type
 
 interface EnhancedInventoryDisplayProps {
   items: Item[];
@@ -77,7 +78,7 @@ interface ItemWithImage extends Item {
   imageUrl?: string; 
   imageLoading: boolean;
   imageError: boolean;
-  placeholderMessage?: string;
+  placeholderMessage: string | null;
   marketPriceCurrency?: string;
 }
 
@@ -85,14 +86,25 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   items,
   currentUser
 }) => {
+  // Global debugging flag - TURN OFF for production
+  const enableDebugLogging = false;
+  
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
+  const settings = useSettings(); // Get currency settings at component level
   const [groupedItems, setGroupedItems] = useState<ItemWithImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
   const { getAuthToken } = useAuth();
+  
+  // Debugging logger function
+  const log = (message: string, ...args: any[]) => {
+    if (enableDebugLogging) {
+      console.log(message, ...args);
+    }
+  };
 
   // Check authentication status
   useEffect(() => {
@@ -109,18 +121,36 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     if (!currentUser) return; // Don't process items if not authenticated
     
     try {
-      console.log('🔄 Processing inventory items for display...');
+      log('🔄 Processing inventory items for display...');
       setIsLoading(true);
       
       if (items.length === 0) {
-        console.log('⚠️ No items to display in inventory');
+        log('⚠️ No items to display in inventory');
         setGroupedItems([]);
         setIsLoading(false);
         return;
       }
       
+      // CRITICAL FIX: Properly process the market prices with the correct currency conversion
+      // This ensures the card displays match the inventory page
+      const itemsWithCorrectCurrency = items.map(item => {
+        // Get the original market price and currency
+        const marketPrice = item.marketPrice;
+        const purchasePrice = item.purchasePrice;
+        
+        // Log the original values for debugging - use type assertion for properties not in the interface
+        console.log(`🔎 [EnhancedDisplay] Processing ${item.productName}: Market Price = ${marketPrice} ${(item as any).marketPriceCurrency || 'unknown currency'}`);
+        
+        return {
+          ...item,
+          // Use the marketPrice directly as it should already be converted by the enhanced API
+          marketPrice: marketPrice,
+          purchasePrice: purchasePrice
+        };
+      });
+      
       // Get all items, group them, then take only the first 4 (most recent)
-      const grouped = groupItemsByProduct(items);
+      const grouped = groupItemsByProduct(itemsWithCorrectCurrency);
       
       // Sort by purchase date (newest first)
       grouped.sort((a, b) => {
@@ -132,263 +162,93 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       // Limit to 4 items for the dashboard display
       const limitedItems = grouped.slice(0, 4);
       
-      // COMPREHENSIVE IMAGE PATH DEBUGGING
-      console.log('%c📸 DETAILED IMAGE PATH DEBUGGING', 'background: #222; color: #bada55; font-size: 16px; padding: 4px;');
-      console.log('API Base URL:', apiBaseUrl);
-      
-      // Log all items to see their structure
-      items.forEach((item, index) => {
-        console.log(`%c🔎 ITEM ${index + 1}: ${item.productName}`, 'background: #444; color: #fff; font-size: 14px; padding: 2px;');
-        console.log('Full item data:', item); // Log the entire item object
-        
-        // Image property debugging
-        console.log(`ID: ${item.id}`);
-        console.log(`Category: ${item.category}`);
-        console.log(`imageUrl property: ${item.imageUrl || 'undefined'}`);
-        console.log(`images array: ${JSON.stringify(item.images || [])}`);
-        
-        // Detailed path analysis
-        if (item.imageUrl) {
-          console.log('%c📝 IMAGE URL ANALYSIS:', 'color: #ff9800; font-weight: bold;');
-          console.log(`Raw imageUrl: ${item.imageUrl}`);
-          
-          // Check if it's a full URL or just a filename
-          const isFullUrl = item.imageUrl.includes('http');
-          console.log(`Is full URL: ${isFullUrl}`);
-          
-          if (isFullUrl) {
-            // Parse the URL to extract components
-            try {
-              const url = new URL(item.imageUrl);
-              console.log(`Protocol: ${url.protocol}`);
-              console.log(`Host: ${url.hostname}`);
-              console.log(`Path: ${url.pathname}`);
-              console.log(`Filename: ${url.pathname.split('/').pop()}`);
-            } catch (e) {
-              console.log(`Invalid URL: ${item.imageUrl}`);
-            }
-          }
-          
-          // Log possible URL constructions
-          console.log(`Possible URL 1: ${apiBaseUrl}/uploads/${item.imageUrl}`);
-          console.log(`Possible URL 2: http://localhost:5000/api/uploads/${item.imageUrl}`);
-          console.log(`Possible URL 3: http://127.0.0.1:5000/api/uploads/${item.imageUrl}`);
-        }
-        
-        if (item.images && item.images.length > 0) {
-          console.log('%c📝 IMAGES ARRAY ANALYSIS:', 'color: #4caf50; font-weight: bold;');
-          console.log(`Images array length: ${item.images.length}`);
-          
-          item.images.forEach((img, imgIndex) => {
-            console.log(`Image ${imgIndex + 1}: ${img}`);
-            console.log(`Possible URL: ${apiBaseUrl}/uploads/${img}`);
-          });
-        }
-        
-        // Log creation and update timestamps
-        // Use optional chaining to safely access properties that might not exist in the Item type
-        if ((item as any).created_at) {
-          console.log(`Created at: ${(item as any).created_at}`);
-        }
-        if ((item as any).updated_at) {
-          console.log(`Updated at: ${(item as any).updated_at}`);
-        }
-        
-        console.log('-----------------------------------');
+      // Debug each item's market price for transparency
+      limitedItems.forEach(item => {
+        console.log(`✅ [Dashboard Card] ${item.productName}: ${settings.currency} ${item.marketPrice}`);
       });
-
-      // Use the limitedItems we created earlier
-      console.log(`✅ Grouped ${items.length} items into ${limitedItems.length} product groups (showing ${limitedItems.length} on dashboard)`);
       
-      // CRITICAL: Deep debug logging for market price issues
-      console.log('🔍 [MARKET PRICE DEBUG] Original items from props:', items.map((item: Item) => ({
-        id: item.id,
-        productName: item.productName,
-        marketPrice: item.marketPrice,
-        purchasePrice: item.purchasePrice,
-        hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
-      })));
+      if (enableDebugLogging) {
+        log(`✅ Grouped ${items.length} items into ${limitedItems.length} product groups (showing ${limitedItems.length} on dashboard)`);
+      }
       
-      console.log('🔍 [MARKET PRICE DEBUG] Grouped items before image processing:', limitedItems.map((item: Item) => ({
-        id: item.id,
-        productName: item.productName,
-        marketPrice: item.marketPrice,
-        purchasePrice: item.purchasePrice,
-        hasMarketPrice: item.marketPrice !== undefined && item.marketPrice !== null
-      })));
-      
-      // Add image loading state to each item and ensure imageUrl is properly set
-      const withImageState: ItemWithImage[] = limitedItems.map((item: Item) => {
-        // Use the getImageUrl utility to construct proper URL with user ID
+      // Add image loading and error state for each item
+      const itemsWithImageState = limitedItems.map((item) => {
+        // Default to first image in the array or use the main imageUrl property
+        const firstImage = item.images && item.images.length > 0 ? item.images[0] : null;
+        const imageSource = item.imageUrl || firstImage;
         
-        // If item has images array but no imageUrl, use the first image
         let imageUrl;
-        if (item.images && item.images.length > 0) {
-          imageUrl = getImageUrl(item.images[0], item.id, currentUser?.uid);
-        } else if (item.imageUrl) {
-          imageUrl = getImageUrl(item.imageUrl, item.id, currentUser?.uid);
+        let placeholderMessage = null;
+        
+        // Attempt to get the image URL if we have an image source
+        if (imageSource) {
+          imageUrl = `${apiBaseUrl}/uploads/${imageSource}`;
+          if (enableDebugLogging) {
+            log(`Assigned image URL for ${item.productName}: ${imageUrl}`);
+          }
+        } else {
+          // No image available, use a placeholder
+          const placeholder = getCategoryPlaceholderImage(item.category);
+          imageUrl = placeholder;
+          placeholderMessage = `No image for ${item.category}`;
+          if (enableDebugLogging) {
+            log(`Using placeholder image for ${item.productName}: ${imageUrl}`);
+          }
         }
-        
-        // Find the original item with all its data
-        const originalItem = items.find(i => i.id === item.id);
-        
-        // Use the market price if available, otherwise calculate default 20% markup
-        let marketPrice = originalItem?.marketPrice || 
-          (originalItem && originalItem.purchasePrice ? originalItem.purchasePrice * 1.2 : 0);
-        
-        // Store the original currency for this item if available
-        const marketPriceCurrency = originalItem?.marketPriceCurrency || 'GBP';
-        
-        // Import needed functions and context
-        const { currency } = useSettings(); // Get current display currency
-        
-        // Convert to the current display currency if needed
-        if (marketPriceCurrency !== currency && currency) {
-          console.log(`Converting market price from ${marketPriceCurrency} to ${currency}`);
-          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, currency);
-          console.log(`Converted price: ${marketPrice}`);
-        }
-        
-        // Format the value to 2 decimal places
-        const formattedMarketPrice = marketPrice ? parseFloat(marketPrice.toFixed(2)) : 0;
-        
-        // Add detailed debugging for market price values
-        console.log(`[EnhancedInventoryDisplay] Processing item ${item.id} (${item.productName}):`, {
-          imageUrl: item.imageUrl,
-          firstImage: item.images && item.images.length > 0 ? item.images[0] : null,
-          userId: currentUser?.uid,
-          constructedUrl: imageUrl,
-          rawItemMarketPrice: item.marketPrice,
-          convertedItemMarketPrice: convertedItem?.marketPrice,
-          finalFormattedMarketPrice: formattedMarketPrice,
-          purchasePrice: convertedItem?.purchasePrice
-        });
         
         return {
           ...item,
           imageUrl,
-          marketPrice: formattedMarketPrice, // Use the correctly formatted market price
-          imageLoading: true,
+          imageLoading: false,
           imageError: false,
-          // Add required properties for ItemWithImage interface
-          count: (item as any).count || 1,
-          totalValue: (item as any).totalValue || item.purchasePrice
+          placeholderMessage,
         };
       });
       
-      console.log('Processed items with images:', withImageState);
-      // Explicitly cast to ItemWithImage[] to satisfy TypeScript
-      setGroupedItems(withImageState as ItemWithImage[]);
-      setErrorMessage(null);
-    } catch (error: any) {
-      console.error('💥 Error processing inventory items:', error);
-      setErrorMessage(`Failed to process inventory: ${error.message}`);
-    } finally {
+      setGroupedItems(itemsWithImageState);
+      setIsLoading(false);
+    } catch (error) {
+      setErrorMessage('Error processing inventory items');
       setIsLoading(false);
     }
-  }, [items, currentUser]);
-
-  // Show authentication error if not logged in
-  if (authError) {
-    return (
-      <Box sx={{ p: 3, borderRadius: 2 }}>
-        <Alert severity="warning">
-          {authError}
-        </Alert>
-      </Box>
-    );
-  }
-
-  // Show loading state
-  if (isLoading) {
-    return (
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        justifyContent: 'center',
-        p: 3 
-      }}>
-        <CircularProgress size={40} sx={{ mb: 2 }} />
-        <Typography variant="body2" color="text.secondary">
-          Loading inventory...
-        </Typography>
-      </Box>
-    );
-  }
-
-  // Show error message if any
-  if (errorMessage) {
-    return (
-      <Box sx={{ 
-        p: 2, 
-        bgcolor: '#fff1f0', 
-        borderRadius: 2,
-        border: '1px solid #ffccc7'
-      }}>
-        <Typography variant="body2" color="#cf1322">
-          {errorMessage}
-        </Typography>
-      </Box>
-    );
-  }
+  }, [items, currentUser, getAuthToken, apiBaseUrl, settings]);
 
   return (
-    <Box sx={{ width: '100%' }}>
-
-      {groupedItems.length === 0 ? (
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          p: 4, 
-          bgcolor: '#f9f9f9', 
-          borderRadius: 2,
-          mt: 2
-        }}>
-          <ShoeIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="body1" color="text.secondary">
-            No items in your inventory yet
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Add your first item using the + button
-          </Typography>
+    <Box sx={{ width: '100%', p: 2 }}>
+      {errorMessage && (
+        <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>
+      )}
+      
+      {authError && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {authError}
           <Button 
             variant="outlined" 
-            startIcon={<AddIcon />} 
-            size="small"
-            sx={{ mt: 2 }}
+            size="small" 
+            sx={{ ml: 2 }}
+            onClick={() => window.location.reload()}
           >
-            Add Item
+            Retry
           </Button>
+        </Alert>
+      )}
+      
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+          <CircularProgress />
         </Box>
       ) : (
         <Box sx={{ 
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 3,
-          width: '100%',
-          pb: 2
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: 2,
+          width: '100%'
         }}>
           {groupedItems.map((item, index) => {
-            // Add extensive logging to debug market price issues
-            console.log(`[EnhancedInventoryDisplay] Item ${item.id}:`, {
-              productName: item.productName,
-              marketPrice: item.marketPrice,
-              purchasePrice: item.purchasePrice,
-              isMarketPriceDefined: item.marketPrice !== undefined && item.marketPrice !== null
-            });
-            
-            // Use the exact market price value from the backend
-            // Make sure we handle the calculation safely for TypeScript
-            const currentValue = item.marketPrice !== undefined ? item.marketPrice : 0;
-            // Only calculate change when we have both values
-            const change = currentValue !== 0 ? calculateChange(item.purchasePrice, currentValue) : 0;
-            
-            // Get colors for this card
             const colors = getGradientColors(item.category);
-            
+            const change = calculateChange(item.purchasePrice, 
+              typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice);
+              
             return (
               <Paper 
                 key={`${item.id}-${index}`}
@@ -515,14 +375,15 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, item.marketPriceCurrency || 'GBP')}
+                          {/* FIXED: Use settings.currency consistently to match inventory page */}
+                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, settings.currency)}
                         </Typography>
                         
                         <Tooltip
                           title={
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, item.marketPriceCurrency || 'GBP')}
+                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, settings.currency)}
                               </Typography>
                             </Box>
                           }

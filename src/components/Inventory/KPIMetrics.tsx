@@ -17,7 +17,8 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
-import useFormat from '../../hooks/useFormat'; // Import the formatting hook
+import useFormat from '../../hooks/useFormat'; // Import as default export
+import { useSettings } from '../../contexts/SettingsContext';
 
 interface KPIMetricsProps {
   metrics: {
@@ -35,10 +36,15 @@ interface KPIMetricsProps {
 const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
+  const settings = useSettings(); // Get settings context
   
-  // Calculate average ROI
+  // Use the totalEstimatedProfit directly from the metrics object
+  // This should already be converted to the correct currency by the parent component
+  const calculatedProfit = metrics.totalEstimatedProfit;
+  
+  // Calculate average ROI based on the profit
   const averageROI = metrics.totalItems > 0
-    ? (metrics.totalEstimatedProfit / metrics.totalPurchaseValue) * 100
+    ? (calculatedProfit / metrics.totalPurchaseValue) * 100
     : 0;
   
   return (
@@ -183,7 +189,7 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 Estimated Profit (ROI)
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                {money(metrics.totalEstimatedProfit)}
+                {money(calculatedProfit)}
               </Typography>
               <Typography 
                 variant="caption" 

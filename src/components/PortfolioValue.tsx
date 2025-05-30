@@ -25,6 +25,9 @@ import useFormat from '../hooks/useFormat';
 import { useAuth } from '../contexts/AuthContext';
 import { User } from 'firebase/auth';
 
+// Control debug logging globally
+const enableDebugLogging = false;
+
 interface PortfolioValueProps {
   currentValue: number;
   valueChange: number;
@@ -35,12 +38,35 @@ interface PortfolioValueProps {
   currentUser?: User | null;
 }
 
+// Define an interface for the custom payload value format
+interface CustomPayloadValue {
+  value?: number;
+  currency?: string;
+}
+
 // Custom tooltip component for the chart
 const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
   const { money } = useFormat();
   const theme = useTheme();
   
   if (active && payload && payload.length) {
+    // Get the value from the payload
+    const payloadValue = payload[0].value || 0;
+    
+    // Cast to the custom type if it's an object
+    const value = typeof payloadValue === 'object' ? payloadValue as unknown as CustomPayloadValue : payloadValue;
+    
+    // Check if the value already has currency info
+    // This prevents repeated conversions of the same value
+    // Ensure we always have a number to pass to money function
+    const valueToFormat = typeof value === 'object' && 'value' in value 
+      ? (value.value ?? 0) // Use nullish coalescing to provide a default of 0
+      : (value ?? 0);     // Also handle the case where value itself might be undefined
+    
+    // If the value has currency info, use it, otherwise don't specify
+    const currency = typeof value === 'object' && 'currency' in value ? 
+      value.currency : undefined;
+      
     return (
       <Paper
         elevation={3}
@@ -55,7 +81,7 @@ const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>)
           variant="body1"
           sx={{ fontWeight: 'bold', color: theme.palette.primary.main }}
         >
-          {money(payload[0].value || 0, 'GBP')}
+          {money(valueToFormat as number, currency)}
         </Typography>
       </Paper>
     );
@@ -70,15 +96,17 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
 
   const user: User | null | undefined = props.currentUser ?? ctxUser;
 
-  // Debug log for all props
-  console.log('[PortfolioValue][DEBUG] Rendered with:', {
-    currentUser: user,
-    currentValue: props.currentValue,
-    valueChange: props.valueChange,
-    percentageChange: props.percentageChange,
-    data: props.data,
-    loading: props.loading
-  });
+  // Debug log for all props - only shown when debug logging is enabled
+  if (enableDebugLogging) {
+    console.log('[PortfolioValue][DEBUG] Rendered with:', {
+      currentUser: user,
+      currentValue: props.currentValue,
+      valueChange: props.valueChange,
+      percentageChange: props.percentageChange,
+      data: props.data,
+      loading: props.loading
+    });
+  }
 
   // Early-return only when absolutely no user is present
   if (!user) {
