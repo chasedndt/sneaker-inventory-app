@@ -29,7 +29,7 @@ import ClearIcon from '@mui/icons-material/Clear';
 import dayjs from 'dayjs';
 
 import { expensesApi } from '../../services/expensesApi';
-import { ExpenseFilters as ExpenseFiltersType } from '../../models/expenses';
+import { ExpenseFilters as ExpenseFiltersType, ExpenseType } from '../../models/expenses';
 import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
 interface ExpenseFiltersProps {
@@ -47,7 +47,7 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
   const { currentUser } = useAuth(); // Get current user
   
   // State for expense types dropdown options
-  const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
   
   // State for showing/hiding the advanced filters
   const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(false);
@@ -98,7 +98,7 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
       
       try {
         const types = await expensesApi.getExpenseTypes();
-        setExpenseTypes(['', ...types]); // Add empty option for "All"
+        setExpenseTypes([{ id: '', name: 'All Types' }, ...types]); // Add 'All Types' option
         setAuthError(null);
       } catch (error: any) {
         console.error('Error fetching expense types:', error);
@@ -109,21 +109,22 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
         }
         
         // Set default types as fallback
+        console.warn('Falling back to default expense types in ExpenseFilters.');
         setExpenseTypes([
-          '',
-          'Shipping',
-          'Packaging', 
-          'Platform Fees',
-          'Storage',
-          'Supplies',
-          'Software',
-          'Marketing',
-          'Travel',
-          'Utilities',
-          'Rent',
-          'Insurance',
-          'Taxes',
-          'Other'
+          { id: '', name: 'All Types' },
+          { id: 'shipping', name: 'Shipping' },
+          { id: 'packaging', name: 'Packaging' },
+          { id: 'platform_fees', name: 'Platform Fees' },
+          { id: 'storage', name: 'Storage' },
+          { id: 'supplies', name: 'Supplies' },
+          { id: 'software', name: 'Software' },
+          { id: 'marketing', name: 'Marketing' },
+          { id: 'travel', name: 'Travel' },
+          { id: 'utilities', name: 'Utilities' },
+          { id: 'rent', name: 'Rent' },
+          { id: 'insurance', name: 'Insurance' },
+          { id: 'taxes', name: 'Taxes' },
+          { id: 'other', name: 'Other' },
         ]);
       }
     };
@@ -289,10 +290,10 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
                   label="Expense Type"
                   onChange={(e: SelectChangeEvent) => handleFilterChange('expenseType', e.target.value)}
                 >
-                  <MenuItem value="">All Types</MenuItem>
-                  {expenseTypes.filter(type => type !== '').map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
+                  {/* The first item in expenseTypes is { id: '', name: 'All Types' } if correctly set */}
+                  {expenseTypes.map((type) => (
+                    <MenuItem key={type.id} value={type.id}>
+                      {type.name}
                     </MenuItem>
                   ))}
                 </Select>

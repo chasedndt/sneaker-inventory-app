@@ -139,28 +139,33 @@ const Dashboard: React.FC = () => {
     historicalData: []
   });
 
-  // --- DEBUG: Log all main state before render ---
-  console.log('[Dashboard][DEBUG] Render:', {
-    loading,
-    authLoading,
-    backendStatus,
-    backendError,
-    currentUser,
-    items,
-    sales,
-    expenses,
-    error
-  });
+  // Only log state in development mode
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Dashboard][DEBUG] Render:', {
+      loading,
+      authLoading,
+      backendStatus,
+      backendError,
+      currentUser: currentUser ? { uid: currentUser.uid } : null, // Don't log entire user object
+      itemCount: items.length,
+      salesCount: sales.length,
+      expensesCount: expenses.length,
+      error
+    });
+  }
 
   // --- DEBUG LOGGING ---
   useEffect(() => {
-    console.log('[Dashboard] useEffect for authLoading/currentUser ran');
-    console.log('[Dashboard] Auth loading:', authLoading, '| Current user:', currentUser);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Dashboard] Auth loading:', authLoading, '| Current user:', currentUser ? 'authenticated' : 'not authenticated');
+    }
   }, [authLoading, currentUser]);
 
-  // Debug backendStatus changes
+  // Debug backendStatus changes only in development
   useEffect(() => {
-    console.log('[Dashboard] useEffect for backendStatus:', backendStatus);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Dashboard] Backend status:', backendStatus);
+    }
   }, [backendStatus]);
 
   // Debug: Warn if loading is stuck
@@ -257,25 +262,53 @@ const Dashboard: React.FC = () => {
         const marketPriceCurrency = (item as any).marketPriceCurrency;
         const purchaseCurrency = (item as any).purchaseCurrency;
         
-        // For debugging, log each item's raw data
-        console.log(`🔍 [DASHBOARD] Raw item data for ${item.productName}:`, {
-          id: item.id,
-          marketPrice,
-          marketPriceCurrency,
-          purchasePrice,
-          purchaseCurrency,
-          status
-        });
+        // Specifically log Coach bag item details to debug the $0 issue
+        if (item.productName && item.productName.includes('Coach') && item.productName.includes('Tabby')) {
+          console.log('🛍️ [COACH BAG DEBUG]', {
+            name: item.productName,
+            rawMarketPrice: item.marketPrice,
+            marketPriceType: typeof item.marketPrice,
+            convertedMarketPrice: marketPrice,
+            marketPriceCurrency,
+            purchasePrice,
+            purchaseCurrency,
+            status
+          });
+        }
+        
+        // Only log detailed data in development mode
+        if (process.env.NODE_ENV !== 'production') {
+          console.log(`🔍 [DASHBOARD] Processing ${item.productName}`);
+        }
+        
+        // Fix for Coach bag and similar items that might have string or undefined market prices
+        let fixedMarketPrice = marketPrice;
+        let useMarketPrice = true;
+        
+        // If market price is undefined, null, or not a number, try to parse it or use fallbacks
+        if (typeof fixedMarketPrice !== 'number' || isNaN(fixedMarketPrice)) {
+          // Try to parse it if it's a string (sometimes API returns price as string)
+          if (typeof fixedMarketPrice === 'string') {
+            const parsed = parseFloat(fixedMarketPrice);
+            if (!isNaN(parsed)) {
+              fixedMarketPrice = parsed;
+            } else {
+              useMarketPrice = false;
+            }
+          } else {
+            // If not a string or parsing failed, flag to use purchasePrice as fallback
+            useMarketPrice = false;
+          }
+        }
         
         return {
           ...item,
-          // Keep the market price exactly as provided by the enhanced API
-          // This ensures the dashboard and inventory page use the same values
-          marketPrice: marketPrice,
+          // Use the fixed market price value or fallback to purchase price
+          marketPrice: useMarketPrice && typeof fixedMarketPrice === 'number' ? fixedMarketPrice : purchasePrice,
           purchasePrice: purchasePrice,
           // Calculate profit using the already-converted values
-          estimatedProfit: marketPrice && purchasePrice ? 
-            (marketPrice - purchasePrice) : 0
+          estimatedProfit: useMarketPrice && typeof fixedMarketPrice === 'number' && typeof purchasePrice === 'number' ? 
+            (fixedMarketPrice - purchasePrice) : 0
         };
       });
       
@@ -388,6 +421,8 @@ const Dashboard: React.FC = () => {
     updateDateRangeFromTimeFilter();
   }, [timeRange]);
 
+
+
   // Handle refreshing data
   const handleRefresh = () => {
     fetchData(true);
@@ -438,108 +473,36 @@ const Dashboard: React.FC = () => {
     // regardless of date filters - this is the entire portfolio value
     const activeItems = items.filter(item => item.status !== 'sold');
     
-    // ENHANCED DEBUGGING - Set to true for detailed logging
-    const enableLogging = true;
+    // Disable detailed logging in production
+    const enableLogging = process.env.NODE_ENV !== 'production' ? false : false;
     
-    if (enableLogging) {
-      console.log(`%c🔎 DASHBOARD CURRENCY DEBUG MODE 🔎`, 'background: #0a84ff; color: white; padding: 4px; font-weight: bold;');
-      console.log(`Total active items: ${activeItems.length} | User currency: ${settings.currency}`);
-      
-      // Log the raw data for analysis
-      console.log("------ RAW ITEM DATA SAMPLE ------");
-      if (activeItems.length > 0) {
-        const firstItem = activeItems[0];
-        console.log(`First item (${firstItem.productName})`, firstItem);
-        console.table({
-          "ID": firstItem.id,
-          "Product Name": firstItem.productName,
-          "Market Price": firstItem.marketPrice,
-          "Market Price Currency": (firstItem as any).marketPriceCurrency || 'unknown',
-          "Purchase Price": firstItem.purchasePrice,
-          "Purchase Currency": (firstItem as any).purchaseCurrency || 'unknown'
-        });
-      }
+    // Fix: Handle empty portfolio gracefully
+    if (activeItems.length === 0) {
+      return {
+        currentValue: 0,
+        valueChange: 0,
+        percentageChange: 0,
+        historicalData: [
+          { date: dayjs().subtract(1, 'day').format('M/D'), value: 0 },
+          { date: dayjs().format('M/D'), value: 0 }
+        ]
+      };
     }
     
-    // Compare with Inventory Display values - DEBUG ANALYSIS
-    // Create a detailed log of each item's values to compare with Inventory page
-    const debugItemValues: Array<{
-      name: string;
-      rawMarketPrice: number;
-      rawCurrency: string;
-      displayedCurrency: string;
-      needsConversion: boolean;
-    }> = [];
-    
-    // Calculate current portfolio value using the market prices directly from the API
-    const currentValue = activeItems.reduce((sum, item, index) => {
-      // Get the full item data with all currency information
-      const inventoryItem = item as InventoryItem;
+    // Calculate current portfolio value
+    let currentValue = activeItems.reduce((sum, item) => {
+      // Get the market price, defaulting to purchase price if unavailable
+      // Use the enhanced API's already converted values (don't convert again)
+      const itemValue = item.marketPrice || item.purchasePrice || 0;
       
-      // Get the market price and currency directly
-      const marketPrice = item.marketPrice || 0;
-      const marketPriceCurrency = inventoryItem.marketPriceCurrency || settings.currency;
-      
-      // Store the raw values for detailed logging
-      if (enableLogging) {
-        debugItemValues.push({
-          name: item.productName,
-          rawMarketPrice: marketPrice,
-          rawCurrency: marketPriceCurrency,
-          displayedCurrency: settings.currency,
-          needsConversion: marketPriceCurrency !== settings.currency
-        });
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`Portfolio item ${item.productName}: value = ${itemValue} ${settings.currency}`);
       }
       
-      // DIAGNOSIS: Check if we're using the correct value that the inventory page uses
-      let finalValue = marketPrice;
-      
-      // Only convert if the currency differs from settings currency
-      // This is critical - the inventory page isn't doing conversions if already in correct currency
-      if (marketPriceCurrency !== settings.currency) {
-        if (enableLogging) {
-          console.log(`⚠️ [${item.productName}] CURRENCY MISMATCH: Item is in ${marketPriceCurrency}, user prefers ${settings.currency}`);
-        }
-        
-        try {
-          const originalValue = finalValue;
-          finalValue = currencyConverter(finalValue, marketPriceCurrency, settings.currency, true);
-          
-          if (enableLogging) {
-            console.log(`💱 Converted ${originalValue} ${marketPriceCurrency} → ${finalValue} ${settings.currency}`);
-          }
-        } catch (error) {
-          console.error(`Error converting currency for ${item.productName}:`, error);
-        }
-      } else if (enableLogging) {
-        console.log(`✅ [${item.productName}] NO CONVERSION NEEDED: Already in ${settings.currency}`);
-      }
-      
-      // If there's no market price at all, use purchase price with markup
-      if (!item.marketPrice && item.purchasePrice) {
-        finalValue = item.purchasePrice * 1.2; // 20% markup as default
-        if (enableLogging) {
-          console.log(`ℹ️ [${item.productName}] Using purchase price with markup: ${item.purchasePrice} * 1.2 = ${finalValue}`);
-        }
-      }
-      
-      return sum + finalValue;
+      return sum + itemValue;
     }, 0);
     
-    // After processing all items, show the aggregate debug information
-    if (enableLogging && debugItemValues.length > 0) {
-      console.log("------ CURRENCY CONVERSION SUMMARY ------");
-      console.table(debugItemValues);
-      console.log(`💰 FINAL TOTAL VALUE: ${currentValue.toFixed(2)} ${settings.currency}`);
-    }
-    
-    // Only log the final value if debugging is enabled
-    if (enableLogging) {
-      console.log(`💰 [DASHBOARD] Final portfolio value: ${settings.currency} ${currentValue.toFixed(2)}`);
-    }
-
-    
-    // For historical comparison, determine a reasonable previous value based on time period
+    // For historical comparison, determine reasonable previous value based on time period
     let previousValue = currentValue;
     let percentageChange = 0;
     let valueChange = 0;
@@ -581,148 +544,66 @@ const Dashboard: React.FC = () => {
       for (let i = 6; i >= 0; i--) {
         const pointDate = dayjs().subtract(i, 'day');
         const dateValue = pointDate.format('M/D');
-        
-        // Create a dip in the middle of the week for visual interest
-        let progress;
-        if (i > 3) {
-          progress = (6 - i) / 3; // First half of week
-        } else if (i === 3) {
-          progress = 0.8; // Midweek dip
-        } else {
-          progress = 0.8 + (3 - i) / 3 * 0.2; // Recovery
-        }
-        
+        const progress = (6 - i) / 6;
         const baseValue = previousValue + progress * valueChange;
         const pointValue = addFluctuation(baseValue, 0.01);
         
         historicalData.push({ date: dateValue, value: pointValue });
       }
     } else if (timeRange === '1M') {
-      // 1 month view - larger changes
+      // 1 month view
       previousValue = currentValue * 0.92;
       valueChange = currentValue - previousValue;
       
       // Generate weekly data points for the month
-      const numPoints = 5; // ~4-5 weeks in a month
-      for (let i = 0; i < numPoints; i++) {
-        const pointDate = dayjs().subtract(numPoints - i - 1, 'week');
+      for (let i = 0; i < 5; i++) {
+        const pointDate = dayjs().subtract(4 - i, 'week');
         const dateValue = pointDate.format('M/D');
-        
-        // Create a more interesting curve with a plateau and then growth
-        let progress;
-        if (i < numPoints / 2) {
-          progress = i / (numPoints / 2) * 0.4; // Slow start
-        } else {
-          progress = 0.4 + (i - numPoints / 2) / (numPoints / 2) * 0.6; // Faster finish
-        }
-        
+        const progress = i / 4;
         const baseValue = previousValue + progress * valueChange;
         const pointValue = addFluctuation(baseValue, 0.02);
         
         historicalData.push({ date: dateValue, value: pointValue });
       }
-    } else if (timeRange === '3M') {
-      // 3 month view - significant changes
-      previousValue = currentValue * 0.85;
+    } else {
+      // Default for other time ranges (3M, 6M, 1Y, ALL)
+      // Show reasonable growth over time
+      previousValue = currentValue * 0.8; 
       valueChange = currentValue - previousValue;
       
-      // Generate bi-weekly data points
-      const numPoints = 7; // ~6-7 bi-weekly periods in 3 months
-      for (let i = 0; i < numPoints; i++) {
-        const pointDate = dayjs().subtract((numPoints - i - 1) * 2, 'week');
-        const dateValue = pointDate.format('M/D');
-        
-        // Create a curve with a dip and recovery
-        let progress;
-        if (i < numPoints / 3) {
-          progress = i / (numPoints / 3) * 0.3; // Initial growth
-        } else if (i < 2 * numPoints / 3) {
-          const dip = (i - numPoints / 3) / (numPoints / 3);
-          progress = 0.3 - dip * 0.1; // Dip
-        } else {
-          const recovery = (i - 2 * numPoints / 3) / (numPoints / 3);
-          progress = 0.2 + recovery * 0.8; // Strong recovery
-        }
-        
+      const pointCount = timeRange === '3M' ? 6 : 
+                       timeRange === '6M' ? 6 : 
+                       timeRange === '1Y' ? 6 : 4;
+                       
+      const unitType = timeRange === '3M' ? 'week' : 
+                      timeRange === '6M' ? 'month' : 'month';
+                      
+      const unitMultiplier = timeRange === '3M' ? 2 : 
+                           timeRange === '6M' ? 1 : 
+                           timeRange === '1Y' ? 2 : 3;
+      
+      const dateFormat = unitType === 'week' ? 'M/D' : 'MMM';
+      
+      for (let i = 0; i < pointCount; i++) {
+        const pointDate = dayjs().subtract((pointCount - i - 1) * unitMultiplier, unitType);
+        const dateValue = pointDate.format(dateFormat);
+        const progress = i / (pointCount - 1);
         const baseValue = previousValue + progress * valueChange;
         const pointValue = addFluctuation(baseValue, 0.03);
         
         historicalData.push({ date: dateValue, value: pointValue });
       }
-    } else if (timeRange === '6M') {
-      // 6 month view - major changes
-      previousValue = currentValue * 0.75;
-      valueChange = currentValue - previousValue;
+    }
+    
+    // Fix: Ensure we have at least two data points for the graph
+    if (historicalData.length < 2) {
+      const today = dayjs().format('M/D');
+      const yesterday = dayjs().subtract(1, 'day').format('M/D');
       
-      // Generate monthly data points
-      for (let i = 5; i >= 0; i--) {
-        const pointDate = dayjs().subtract(i, 'month');
-        const dateValue = pointDate.format('MMM');
-        
-        // Create a realistic growth curve with a plateau in the middle
-        let progress;
-        if (i > 3) {
-          progress = (5 - i) / 2 * 0.2; // Slow start
-        } else if (i > 1) {
-          progress = 0.2 + (3 - i) / 2 * 0.3; // Middle plateau
-        } else {
-          progress = 0.5 + (1 - i) / 1 * 0.5; // Strong finish
-        }
-        
-        const baseValue = previousValue + progress * valueChange;
-        const pointValue = addFluctuation(baseValue, 0.04);
-        
-        historicalData.push({ date: dateValue, value: pointValue });
-      }
-    } else if (timeRange === '1Y') {
-      // 1 year view - largest changes
-      previousValue = currentValue * 0.65;
-      valueChange = currentValue - previousValue;
-      
-      // Generate bi-monthly data points
-      for (let i = 5; i >= 0; i--) {
-        const pointDate = dayjs().subtract(i * 2, 'month');
-        const dateValue = pointDate.format('MMM');
-        
-        // Create a realistic yearly pattern with seasonal variations
-        let progress;
-        if (i === 5) { // Start
-          progress = 0;
-        } else if (i === 4) { // Q1
-          progress = 0.15;
-        } else if (i === 3) { // Q2
-          progress = 0.35;
-        } else if (i === 2) { // Q3
-          progress = 0.45; // Summer slowdown
-        } else if (i === 1) { // Q4
-          progress = 0.7; // Holiday season boost
-        } else { // End (current)
-          progress = 1.0;
-        }
-        
-        const baseValue = previousValue + progress * valueChange;
-        const pointValue = addFluctuation(baseValue, 0.05);
-        
-        historicalData.push({ date: dateValue, value: pointValue });
-      }
-    } else { // ALL time or default
-      // All time view - show major growth
-      previousValue = currentValue * 0.5;
-      valueChange = currentValue - previousValue;
-      
-      // Generate yearly data points
-      const numYears = 4;
-      for (let i = 0; i < numYears; i++) {
-        const pointDate = dayjs().subtract(numYears - i - 1, 'year');
-        const dateValue = pointDate.format('YYYY');
-        
-        // Create an exponential growth curve
-        const progress = Math.pow(i / (numYears - 1), 1.5); // Exponential growth
-        const baseValue = previousValue + progress * valueChange;
-        const pointValue = addFluctuation(baseValue, 0.07);
-        
-        historicalData.push({ date: dateValue, value: pointValue });
-      }
+      historicalData = [
+        { date: yesterday, value: currentValue * 0.98 },
+        { date: today, value: currentValue }
+      ];
     }
     
     // Ensure the last point is exactly the current value
@@ -733,17 +614,33 @@ const Dashboard: React.FC = () => {
     // Calculate percentage change based on first and last data points
     if (historicalData.length >= 2) {
       const firstValue = historicalData[0].value;
-      percentageChange = ((currentValue - firstValue) / firstValue) * 100;
+      if (firstValue > 0) {
+        percentageChange = ((currentValue - firstValue) / firstValue) * 100;
+      }
       valueChange = currentValue - firstValue;
     }
     
+    // Ensure we return valid numbers for all values
     return {
-      currentValue,
-      valueChange,
-      percentageChange: Number(percentageChange.toFixed(1)),
-      historicalData,
+      currentValue: Number.isFinite(currentValue) ? currentValue : 0,
+      valueChange: Number.isFinite(valueChange) ? valueChange : 0,
+      percentageChange: Number.isFinite(percentageChange) ? Number(percentageChange.toFixed(2)) : 0,
+      historicalData: historicalData.map((point: {date: string, value: number}) => ({
+        date: point.date,
+        value: Number.isFinite(point.value) ? point.value : 0
+      }))
     };
   }, [items, timeRange, settings.currency]);
+
+  // Calculate and update portfolio statistics whenever items change
+  useEffect(() => {
+    if (!loading && items.length > 0) {
+      console.log('Calculating portfolio stats for', items.length, 'items');
+      const stats = calculatePortfolioStats();
+      setPortfolioStats(stats);
+      console.log('Updated portfolio stats:', stats);
+    }
+  }, [items, timeRange, calculatePortfolioStats, loading]);
 
   // Show auth loading state
   if (authLoading) {

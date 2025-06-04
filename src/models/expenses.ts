@@ -45,3 +45,8 @@ export interface Expense {
   }
   
   export type RecurrencePeriod = 'weekly' | 'monthly' | 'quarterly' | 'annually' | 'none';
+
+export interface ExpenseType {
+  id: string;
+  name: string;
+}

@@ -1,5 +1,5 @@
 // src/services/expensesApi.ts
-import { Expense, ExpenseSummary, ExpenseFormData } from '../models/expenses';
+import { Expense, ExpenseSummary, ExpenseFormData, ExpenseType } from '../models/expenses';
 import { generateRecurringExpenseEntries } from '../utils/recurringExpensesUtils';
 
 export const API_BASE_URL = 'http://127.0.0.1:5000/api';
@@ -7,6 +7,9 @@ export const API_BASE_URL = 'http://127.0.0.1:5000/api';
 /**
  * Service for interacting with the expenses API
  */
+
+// Track the last API response for receipts to aid debugging
+let lastReceiptResponse: Response | null = null;
 // --- AUTHENTICATION HELPERS ---
 async function getAuthToken(): Promise<string> {
   // Try to get the token from the window or context
@@ -128,10 +131,185 @@ export const expensesApi = {
       console.error(`💥 Error fetching expense ${id}:`, error);
       throw error;
     }
-  },
+  }, // End of getExpense
+
+  /**
+   * Get all expense types
+   * @returns Promise<ExpenseType[]> List of expense types
+   */
+  getExpenseTypes: async (): Promise<ExpenseType[]> => {
+    try {
+      console.log('🔄 Fetching expense types from API...');
+      const headers = await getAuthHeaders();
+      const response = await fetch(`${API_BASE_URL}/expenses/types`, {
+        method: 'GET',
+        credentials: 'include',
+        headers,
+      });
+
+      if (!response.ok) {
+        console.warn(`⚠️ Expense types endpoint responded with ${response.status}. Falling back to default types.`);
+        return getDefaultExpenseTypes();
+      }
+
+      const types = await response.json();
+      // Ensure types is an array and not empty before returning
+      if (!Array.isArray(types) || types.length === 0) { 
+        console.warn('⚠️ Expense types endpoint returned empty or invalid data (not an array or empty array). Falling back to default types.');
+        return getDefaultExpenseTypes();
+      }
+      
+      console.log(`✅ Received ${types.length} expense types from API`);
+      return types;
+    } catch (error: any) {
+      console.error('💥 Error in getExpenseTypes, falling back to default types:', error);
+      return getDefaultExpenseTypes();
+    }
+  }, // End of getExpenseTypes
   
   // Track processed submission IDs to prevent duplicate submissions
   _processedSubmissionIds: new Set<string>(),
+  
+  /**
+   * Get a direct URL for viewing a receipt
+   * @param expenseId The expense ID
+   * @param filename The receipt filename
+   * @returns Promise<string> Direct URL for accessing the receipt
+   */
+  getReceiptUrl: async (expenseId: number, filename: string): Promise<string> => {
+    try {
+      console.log(`🔄 Getting receipt URL for expense ${expenseId}, filename ${filename}...`);
+      const headers = await getAuthHeaders();
+      
+      // Make a request to a dedicated endpoint for receipt access
+      const response = await fetch(`${API_BASE_URL}/expenses/${expenseId}/receipt-url`, {
+        method: 'GET',
+        credentials: 'include',
+        headers
+      });
+      
+      // Store last response for debugging
+      lastReceiptResponse = response;
+      
+      if (!response.ok) {
+        console.error(`❌ getReceiptUrl failed with status: ${response.status}`);
+        
+        // If the endpoint doesn't exist, construct a URL manually
+        if (response.status === 404) {
+          console.warn('⚠️ Receipt URL endpoint not found, constructing URL manually');
+          
+          // Need to get the user ID for the correct path
+          let userId = '';
+          try {
+            // Get user ID from the auth token if available
+            const authHeader = headers['Authorization'] || '';
+            const token = authHeader.replace('Bearer ', '');
+            // Extract user ID from the token or context if possible
+            if (typeof window !== 'undefined' && (window as any).getCurrentUserId) {
+              userId = (window as any).getCurrentUserId();
+            }
+            
+            // If we have a userId, use the correct path structure
+            if (userId) {
+              return `${API_BASE_URL}/uploads/${userId}/receipts/${filename}?token=${token}`;
+            } else {
+              // Fallback - try using the old path structure but this might not work
+              return `${API_BASE_URL}/uploads/receipts/${filename}?token=${token}`;
+            }
+          } catch (err) {
+            console.error('Error getting user ID for receipt path:', err);
+            // Fallback to old structure
+            const token = headers['Authorization']?.replace('Bearer ', '') || '';
+            return `${API_BASE_URL}/uploads/receipts/${filename}?token=${token}`;
+          }
+        }
+        
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ Receipt URL retrieved successfully:', data);
+      return data.url;
+    } catch (error) {
+      console.error('💥 Error getting receipt URL:', error);
+      throw error;
+    }
+  },
+  
+  /**
+   * Check if a receipt file exists and is accessible
+   * @param url The URL to check
+   * @returns Promise<{exists: boolean, contentType?: string}> Whether the file exists and is accessible
+   */
+  checkReceiptExists: async (url: string | null | undefined): Promise<{exists: boolean, contentType?: string}> => {
+    if (!url) {
+      console.log('⚠️ No URL provided to checkReceiptExists');
+      return { exists: false };
+    }
+    
+    try {
+      console.log(`🔄 Checking if receipt exists at: ${url}`);
+      const headers = await getAuthHeaders();
+      
+      // Make a HEAD request to check if the file exists
+      const response = await fetch(url, {
+        method: 'HEAD',
+        credentials: 'include',
+        headers
+      });
+      
+      const exists = response.ok;
+      const contentType = response.headers.get('Content-Type');
+      console.log(`${exists ? '✅' : '❌'} Receipt exists: ${exists}${contentType ? `, type: ${contentType}` : ''}`);
+      
+      // Log additional debug info if the receipt doesn't exist
+      if (!exists) {
+        console.log(`🔍 Debug info for failed receipt access:`);
+        console.log(`- Status: ${response.status} ${response.statusText}`);
+        console.log(`- URL attempted: ${url}`);
+        console.log(`- Headers sent:`, headers);
+        
+        // Try alternate paths if the receipt wasn't found
+        if (url.includes('/receipts/')) {
+          // If URL contains userId, try without receipts subfolder
+          const matchUserId = url.match(/\/uploads\/([^\/]+)\/receipts\//); 
+          if (matchUserId && matchUserId[1]) {
+            const userId = matchUserId[1];
+            const altUrl = url.replace(`/uploads/${userId}/receipts/`, `/uploads/${userId}/`);
+            console.log(`🔄 Trying alternate path without receipts subfolder: ${altUrl}`);
+            const altResponse = await fetch(altUrl, {
+              method: 'HEAD',
+              credentials: 'include',
+              headers
+            });
+            console.log(`${altResponse.ok ? '✅' : '❌'} Alternate path exists: ${altResponse.ok}`);
+          }
+        }
+      }
+      
+      return { exists, contentType: contentType || undefined };
+    } catch (error) {
+      console.error('💥 Error checking if receipt exists:', error);
+      console.error('💥 Error checking receipt existence:', error);
+      return { exists: false };
+    }
+  },
+  
+  /**
+   * Get debug information about the API and receipt handling
+   * @returns Object with debug information
+   */
+  getReceiptDebugInfo: () => {
+    return {
+      apiBaseUrl: API_BASE_URL,
+      lastReceiptResponse: lastReceiptResponse ? {
+        status: lastReceiptResponse.status,
+        statusText: lastReceiptResponse.statusText,
+        headers: Object.fromEntries(lastReceiptResponse.headers.entries()),
+        url: lastReceiptResponse.url
+      } : null
+    };
+  },
   
   /**
    * Create a new expense record.
@@ -407,42 +585,9 @@ export const expensesApi = {
       return summary;
     } catch (error: any) {
       console.error('💥 Error fetching expense summary:', error);
-      throw error; // Rethrow the error instead of returning mock data
-    }
-  },
-
-  /**
-   * Get expense types
-   * @returns Promise<string[]> List of expense types
-   */
-  getExpenseTypes: async (): Promise<string[]> => {
-    try {
-      console.log('🔄 Fetching expense types from API...');
-      const headers = await getAuthHeaders();
-      const response = await fetch(`${API_BASE_URL}/expenses/types`, {
-        method: 'GET',
-        credentials: 'include',
-        headers
-      });
-      
-      if (!response.ok) {
-        console.error(`❌ API getExpenseTypes failed with status: ${response.status}`);
-        
-        // If the API is not yet implemented, return default types
-        if (response.status === 404) {
-          console.warn('⚠️ Expense types endpoint not found, using default types');
-          return getDefaultExpenseTypes();
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const types = await response.json();
-      console.log(`✅ Retrieved ${types.length} expense types:`, types);
-      return types;
-    } catch (error: any) {
-      console.error('💥 Error fetching expense types:', error);
-      throw error;
+      // Optionally, return mock summary or rethrow
+      // For now, rethrowing to make failure explicit
+      throw error; 
     }
   },
 
@@ -643,23 +788,24 @@ function getMockExpenseSummary(): ExpenseSummary {
 
 /**
  * Get default expense types
- * @returns Array of default expense type strings
+ * @returns Array of default ExpenseType objects
  */
-function getDefaultExpenseTypes(): string[] {
+function getDefaultExpenseTypes(): ExpenseType[] {
+  console.log('🔄 Providing default expense types');
   return [
-    'Shipping',
-    'Packaging',
-    'Platform Fees',
-    'Storage',
-    'Supplies',
-    'Software',
-    'Marketing',
-    'Travel',
-    'Utilities',
-    'Rent',
-    'Insurance',
-    'Taxes',
-    'Other'
+    { id: 'shipping', name: 'Shipping' },
+    { id: 'packaging', name: 'Packaging' },
+    { id: 'platform_fees', name: 'Platform Fees' },
+    { id: 'storage', name: 'Storage' },
+    { id: 'supplies', name: 'Supplies' },
+    { id: 'software', name: 'Software' },
+    { id: 'marketing', name: 'Marketing' },
+    { id: 'travel', name: 'Travel' },
+    { id: 'utilities', name: 'Utilities' },
+    { id: 'rent', name: 'Rent' },
+    { id: 'insurance', name: 'Insurance' },
+    { id: 'taxes', name: 'Taxes' },
+    { id: 'other', name: 'Other' },
   ];
 }
 

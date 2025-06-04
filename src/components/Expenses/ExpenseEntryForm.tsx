@@ -25,7 +25,7 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CancelIcon from '@mui/icons-material/Cancel';
 import dayjs from 'dayjs';
 
-import { ExpenseFormData, Expense } from '../../models/expenses';
+import { ExpenseFormData, Expense, ExpenseType } from '../../models/expenses';
 import { expensesApi } from '../../services/expensesApi';
 import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
@@ -43,7 +43,7 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   isEditing = false,
 }) => {
   const { currentUser } = useAuth(); // Get current user
-  const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
+  const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
   const [formData, setFormData] = useState<ExpenseFormData>({
     expenseType: '',
     amount: '',
@@ -85,22 +85,12 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
           setAuthError('Authentication error. Please try logging in again.');
         }
         
-        // Fall back to defaults
-        setExpenseTypes([
-          'Shipping',
-          'Packaging',
-          'Platform Fees',
-          'Storage',
-          'Supplies',
-          'Software',
-          'Marketing',
-          'Travel',
-          'Utilities',
-          'Rent',
-          'Insurance',
-          'Taxes',
-          'Other',
-        ]);
+        // The expensesApi.getExpenseTypes() should handle fallbacks internally.
+        // If it reaches here, it means the API call itself or the fallback mechanism in the API service failed catastrophically.
+        // Setting to an empty array to prevent rendering issues with undefined or malformed data.
+        setExpenseTypes([]); 
+        // Optionally, you could re-throw or set a more specific error message for the UI.
+        setError('Could not load expense categories. Please try again or contact support if the issue persists.');
       }
     };
 
@@ -221,6 +211,11 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
     setLoading(true);
     
     try {
+      // Check if user is logged in
+      if (!currentUser || !currentUser.uid) {
+        throw new Error('You must be logged in to save expenses');
+      }
+      
       // Prepare expense data for API with unique submission ID
       const expenseData = {
         ...formData,
@@ -229,11 +224,13 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         receipt,
         // Add unique submission ID to prevent duplicate backend processing
         submissionId,
+        // Add userId to ensure proper permission handling for receipts
+        userId: currentUser.uid,
         // Disable recurring expense generation
         generateRecurringEntries: false
       };
       
-      console.log(`🧾 Submitting expense with ID ${submissionId}`);
+      console.log(`🧾 Submitting expense with ID ${submissionId} for user ${currentUser.uid}`);
       
       let savedExpense: Expense;
       
@@ -310,8 +307,8 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
                   label="Expense Type"
                 >
                   {expenseTypes.map((type) => (
-                    <MenuItem key={type} value={type}>
-                      {type}
+                    <MenuItem key={type.id} value={type.id}>
+                      {type.name}
                     </MenuItem>
                   ))}
                 </Select>

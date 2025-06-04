@@ -32,8 +32,12 @@ interface EnhancedInventoryDisplayProps {
 }
 
 // Helper function to calculate percentage change
+// Helper function to calculate percentage change, with safety checks
 const calculateChange = (purchasePrice: number, currentValue: number): number => {
-  return purchasePrice === 0 ? 0 : ((currentValue - purchasePrice) / purchasePrice) * 100;
+  // Prevent division by zero
+  if (purchasePrice === 0) return 0;
+  
+  return ((currentValue - purchasePrice) / purchasePrice) * 100;
 };
 
 // Helper function to group items by product name and calculate totals
@@ -138,8 +142,10 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         const marketPrice = item.marketPrice;
         const purchasePrice = item.purchasePrice;
         
-        // Log the original values for debugging - use type assertion for properties not in the interface
-        console.log(`🔎 [EnhancedDisplay] Processing ${item.productName}: Market Price = ${marketPrice} ${(item as any).marketPriceCurrency || 'unknown currency'}`);
+        // Log the original values only when debugging is enabled
+        if (enableDebugLogging) {
+          log(`🔎 [EnhancedDisplay] Processing ${item.productName}: Market Price = ${marketPrice} ${(item as any).marketPriceCurrency || 'unknown currency'}`);
+        }
         
         return {
           ...item,
@@ -162,10 +168,12 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       // Limit to 4 items for the dashboard display
       const limitedItems = grouped.slice(0, 4);
       
-      // Debug each item's market price for transparency
-      limitedItems.forEach(item => {
-        console.log(`✅ [Dashboard Card] ${item.productName}: ${settings.currency} ${item.marketPrice}`);
-      });
+      // Debug each item's market price only when debugging is enabled
+      if (enableDebugLogging) {
+        limitedItems.forEach(item => {
+          log(`✅ [Dashboard Card] ${item.productName}: ${settings.currency} ${item.marketPrice}`);
+        });
+      }
       
       if (enableDebugLogging) {
         log(`✅ Grouped ${items.length} items into ${limitedItems.length} product groups (showing ${limitedItems.length} on dashboard)`);
@@ -182,7 +190,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         
         // Attempt to get the image URL if we have an image source
         if (imageSource) {
-          imageUrl = `${apiBaseUrl}/uploads/${imageSource}`;
+          // FIX: Use getImageUrl utility to properly construct the URL with user ID
+          imageUrl = getImageUrl(imageSource, item.id, currentUser?.uid);
           if (enableDebugLogging) {
             log(`Assigned image URL for ${item.productName}: ${imageUrl}`);
           }
@@ -245,10 +254,20 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           width: '100%'
         }}>
           {groupedItems.map((item, index) => {
-            const colors = getGradientColors(item.category);
-            const change = calculateChange(item.purchasePrice, 
-              typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice);
+            // Get effective market price - either the actual market price if valid, or purchase price + 20% otherwise
+            // This ensures all items have a consistent display, matching the inventory page
+            const effectiveMarketPrice = (typeof item.marketPrice === 'number' && item.marketPrice > 0) 
+              ? item.marketPrice 
+              : item.purchasePrice * 1.2; // Use 20% markup when market price is missing/invalid
               
+            // Calculate unrealized profit amount
+            const unrealizedProfit = effectiveMarketPrice - item.purchasePrice;
+            
+            // Calculate percentage change for profit visualization
+            const change = calculateChange(item.purchasePrice, effectiveMarketPrice);
+            
+            const colors = getGradientColors(item.category);
+            
             return (
               <Paper 
                 key={`${item.id}-${index}`}
@@ -285,7 +304,10 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                         src={item.imageUrl || getCategoryPlaceholderImage(item.category)}
                         alt={item.productName}
                         onError={(e) => {
-                          console.log(`Image failed to load for ${item.productName}`);
+                          // Only log in development or when debugging is enabled
+                          if (process.env.NODE_ENV !== 'production' || enableDebugLogging) {
+                            console.log(`Image failed to load for ${item.productName}`);
+                          }
                           (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category);
                         }}
                         sx={{
@@ -375,15 +397,15 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {/* FIXED: Use settings.currency consistently to match inventory page */}
-                          {money(typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice, settings.currency)}
+                          {money(effectiveMarketPrice, settings.currency)}
                         </Typography>
                         
                         <Tooltip
                           title={
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
-                                Unrealized Profit: {money((typeof item.marketPrice === 'number' ? item.marketPrice : item.purchasePrice) - item.purchasePrice, settings.currency)}
+                                {/* Use consistent format for all items, using our calculated unrealizedProfit */}
+                                Unrealized Profit: {money(unrealizedProfit, settings.currency)}
                               </Typography>
                             </Box>
                           }

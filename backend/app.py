@@ -58,6 +58,7 @@ def create_app():
          supports_credentials=True,
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
+         # Removed the 'resources' dictionary to simplify and rely on route-specific handlers for OPTIONS
          max_age=3600)
 
     db.init_app(app)
@@ -1292,7 +1293,64 @@ def create_app():
             logger.error(f"💥 Error fetching sales for item {item_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # We'll handle OPTIONS requests at each specific endpoint instead of globally
+    # This ensures that each endpoint can properly handle its own preflight requests
+
+    # We don't need the cors_aware_auth decorator anymore since we're handling OPTIONS separately
+
     # EXPENSES API ENDPOINTS
+    # Dedicated route for OPTIONS preflight requests - must be registered BEFORE the main route
+    @app.route('/api/expenses/types', methods=['OPTIONS'])
+    def expense_types_preflight():
+        logger.info("🔄 Handling OPTIONS preflight for /api/expenses/types")
+        try:
+            response = current_app.response_class(status=200)
+            response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            logger.info(f"✅ Successfully prepared preflight response for /api/expenses/types: status=200, headers={dict(response.headers)}")
+            return response
+        except Exception as e:
+            logger.error(f"💥 ERROR in expense_types_preflight: {str(e)}", exc_info=True)
+            # Fallback to a generic error response if something goes wrong internally
+            return jsonify({'error': 'Preflight handler error'}), 500
+        
+    # Main GET route for expense types - requires authentication
+    @app.route('/api/expenses/types', methods=['GET'])
+    @require_auth
+    def get_expense_types(user_id):
+        """
+        Get expense types for the current user.
+        """
+        try:
+            logger.info(f"📋 Fetching expense types for user {user_id}")
+            # Default expense types
+            expense_types = [
+                {"id": "shipping", "name": "Shipping"},
+                {"id": "packaging", "name": "Packaging"},
+                {"id": "platform_fees", "name": "Platform Fees"},
+                {"id": "storage", "name": "Storage"},
+                {"id": "supplies", "name": "Supplies"},
+                {"id": "software", "name": "Software"},
+                {"id": "marketing", "name": "Marketing"},
+                {"id": "travel", "name": "Travel"},
+                {"id": "utilities", "name": "Utilities"},
+                {"id": "rent", "name": "Rent"},
+                {"id": "insurance", "name": "Insurance"},
+                {"id": "taxes", "name": "Taxes"},
+                {"id": "other", "name": "Other"}
+            ]
+            response = jsonify(expense_types)
+            # Add CORS headers to the response
+            response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            return response
+        except Exception as e:
+            logger.error(f"💥 Error fetching expense types for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
+    
     @app.route('/api/expenses', methods=['GET'])
     @require_auth
     def get_expenses(user_id):
@@ -1352,13 +1410,13 @@ def create_app():
                     filename_parts = filename.rsplit('.', 1)
                     timestamped_filename = f"receipt_{int(time.time())}_{user_id}_{filename_parts[0]}.{filename_parts[1]}"
                     
-                    # Create user-specific directory
-                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
-                    if not os.path.exists(user_upload_folder):
-                        os.makedirs(user_upload_folder)
+                    # Create user-specific receipts directory
+                    user_receipts_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id, 'receipts')
+                    if not os.path.exists(user_receipts_folder):
+                        os.makedirs(user_receipts_folder)
                     
                     # Save the file
-                    file_path = os.path.join(user_upload_folder, timestamped_filename)
+                    file_path = os.path.join(user_receipts_folder, timestamped_filename)
                     receipt_file.save(file_path)
                     receipt_filename = timestamped_filename
                     logger.info(f"📄 Saved receipt: {timestamped_filename} for user {user_id}")
@@ -1483,23 +1541,29 @@ def create_app():
                 if receipt_file and allowed_file(receipt_file.filename):
                     # Delete old receipt if it exists
                     if expense.receipt_filename:
+                        # Try to find receipt in both old path and new receipts subfolder
                         old_file_path = os.path.join(app.config['UPLOAD_FOLDER'], user_id, expense.receipt_filename)
+                        new_file_path = os.path.join(app.config['UPLOAD_FOLDER'], user_id, 'receipts', expense.receipt_filename)
+                        
                         if os.path.exists(old_file_path):
                             os.remove(old_file_path)
-                            logger.info(f"🗑️ Deleted old receipt: {expense.receipt_filename} for user {user_id}")
-                    
+                            logger.info(f"🗑️ Deleted old receipt from legacy path: {expense.receipt_filename} for user {user_id}")
+                        elif os.path.exists(new_file_path):
+                            os.remove(new_file_path)
+                            logger.info(f"🗑️ Deleted old receipt from receipts folder: {expense.receipt_filename} for user {user_id}")
+                        
                     # Generate a secure filename with timestamp and user_id
                     filename = secure_filename(receipt_file.filename)
                     filename_parts = filename.rsplit('.', 1)
                     timestamped_filename = f"receipt_{int(time.time())}_{user_id}_{filename_parts[0]}.{filename_parts[1]}"
                     
-                    # Create user-specific directory
-                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
-                    if not os.path.exists(user_upload_folder):
-                        os.makedirs(user_upload_folder)
+                    # Create user-specific receipts directory
+                    user_receipts_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id, 'receipts')
+                    if not os.path.exists(user_receipts_folder):
+                        os.makedirs(user_receipts_folder)
                     
                     # Save the file
-                    file_path = os.path.join(user_upload_folder, timestamped_filename)
+                    file_path = os.path.join(user_receipts_folder, timestamped_filename)
                     receipt_file.save(file_path)
                     expense.receipt_filename = timestamped_filename
                     logger.info(f"📄 Updated receipt: {timestamped_filename} for user {user_id}")
@@ -1516,6 +1580,41 @@ def create_app():
             logger.error(f"💥 Error updating expense {expense_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/api/expenses/<int:expense_id>/receipt-url', methods=['GET'])
+    @require_auth
+    def get_expense_receipt_url(user_id, expense_id):
+        """
+        Get the URL for a receipt associated with an expense.
+        """
+        try:
+            logger.info(f"🔍 Getting receipt URL for expense {expense_id} by user {user_id}")
+            
+            # Find the expense
+            expense = Expense.query.get(expense_id)
+            if not expense:
+                logger.error(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # Verify ownership
+            if expense.user_id != user_id:
+                logger.warning(f"🚫 User {user_id} attempted to access receipt for expense {expense_id} belonging to user {expense.user_id}")
+                return jsonify({'error': 'Unauthorized access'}), 403
+            
+            # Check if receipt exists
+            if not expense.receipt_filename:
+                logger.error(f"❌ No receipt attached to expense {expense_id}")
+                return jsonify({'error': 'No receipt attached to this expense'}), 404
+            
+            # Generate the URL path to the receipt in the receipts subfolder
+            receipt_url = f"/api/uploads/{user_id}/receipts/{expense.receipt_filename}"
+            
+            logger.info(f"✅ Generated receipt URL for expense {expense_id}: {receipt_url}")
+            return jsonify(receipt_url), 200
+            
+        except Exception as e:
+            logger.error(f"💥 Error getting receipt URL for expense {expense_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    
     @app.route('/api/expenses/<int:expense_id>', methods=['DELETE'])
     @require_auth
     def delete_expense(user_id, expense_id):
@@ -2346,13 +2445,31 @@ def create_app():
             logger.error(f"💥 Error generating dashboard KPI metrics for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # Dedicated route for OPTIONS preflight requests for file uploads
+    @app.route('/api/uploads/<path:filename>', methods=['OPTIONS'])
+    def serve_user_image_options(filename):
+        logger.info(f"🔄 Handling OPTIONS preflight for /api/uploads/{filename}")
+        try:
+            response = current_app.response_class(status=200)
+            response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            logger.info(f"✅ Successfully prepared preflight response for /api/uploads/{filename}: status=200, headers={dict(response.headers)}")
+            return response
+        except Exception as e:
+            logger.error(f"💥 ERROR in serve_user_image_options for {filename}: {str(e)}", exc_info=True)
+            return jsonify({'error': 'Preflight handler error'}), 500
+        
     # Serve uploaded images with user verification
-    @app.route('/api/uploads/<path:filename>')
-    def serve_user_image(filename): # CORRECTED SIGNATURE
+    @app.route('/api/uploads/<path:filename>', methods=['GET', 'HEAD'])
+    def serve_user_image(filename):
         """
-        Serve uploaded images.
-        The 'filename' path is expected to be 'user_id/actual_image_name.ext'.
+        Serve uploaded files (images or receipts).
+        The 'filename' path is expected to be 'user_id/actual_image_name.ext' or 'user_id/receipts/receipt_name.ext'.
         """
+        # OPTIONS requests are now handled by the separate route
+        
         img_req_logger_instance = logging.getLogger('sneaker_app.image_requests')
         img_req_logger_instance.info(f"Image request for: {filename}")
         
@@ -2362,21 +2479,62 @@ def create_app():
             return jsonify({"error": "Invalid path"}), 400
 
         try:
+            # Extract user_id from the path to verify ownership
+            parts = filename.split('/')
+            if len(parts) >= 1:
+                user_id = parts[0]
+                img_req_logger_instance.info(f"User ID from path: {user_id}")
+                
+                # Optional: Verify the user has access to this file (from token or query param)
+                # For now, we'll just log the info and proceed
+            
             # Construct the full path to the image
             image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            img_req_logger_instance.info(f"Looking for file at: {image_path}")
             
             if os.path.exists(image_path):
-                img_req_logger_instance.info(f"Serving image: {image_path}")
-                return send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=False)
+                img_req_logger_instance.info(f"✅ Serving file: {image_path}")
+                response = send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=False)
+                
+                # Add CORS headers to the response
+                response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+                response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+                response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                
+                return response
             else:
+                # Try to find the file in alternative locations
+                # 1. Check if it's in the receipts folder but path doesn't include it
+                if 'receipts' not in filename and '/receipts/' not in filename:
+                    alt_path = os.path.join(current_app.config['UPLOAD_FOLDER'], user_id, 'receipts', os.path.basename(filename))
+                    if os.path.exists(alt_path):
+                        img_req_logger_instance.info(f"Found file in receipts folder: {alt_path}")
+                        new_filename = f"{user_id}/receipts/{os.path.basename(filename)}"
+                        response = send_from_directory(current_app.config['UPLOAD_FOLDER'], new_filename, as_attachment=False)
+                        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+                        return response
+                
+                # 2. Check if it's not in receipts folder but path includes it
+                if 'receipts' in filename:
+                    alt_path = os.path.join(current_app.config['UPLOAD_FOLDER'], user_id, os.path.basename(filename))
+                    if os.path.exists(alt_path):
+                        img_req_logger_instance.info(f"Found file in user folder: {alt_path}")
+                        new_filename = f"{user_id}/{os.path.basename(filename)}"
+                        response = send_from_directory(current_app.config['UPLOAD_FOLDER'], new_filename, as_attachment=False)
+                        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+                        return response
+                
                 # Log that the image was not found, and serve a placeholder
-                img_req_logger_instance.warning(f"Image not found: {image_path}. Serving placeholder.")
-                static_folder_images = os.path.join(current_app.static_folder, 'images') # Assuming placeholder is in static/images
+                img_req_logger_instance.warning(f"❌ File not found: {image_path}. Tried alternative paths too.")
+                static_folder_images = os.path.join(current_app.static_folder, 'images')
                 placeholder_path = os.path.join(static_folder_images, 'placeholder.png')
             
             if os.path.exists(placeholder_path):
                 img_req_logger_instance.info(f"Serving placeholder image for: {filename} from {static_folder_images}")
-                return send_from_directory(static_folder_images, 'placeholder.png', as_attachment=False)
+                response = send_from_directory(static_folder_images, 'placeholder.png', as_attachment=False)
+                response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+                return response
             else:
                 # If placeholder itself is not found, return a generic 404
                 img_req_logger_instance.error(f"Placeholder image not found at: {placeholder_path}")

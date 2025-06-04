@@ -93,6 +93,7 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
   const theme = useTheme();
   const { money } = useFormat();
   const { currentUser: ctxUser } = useAuth();
+  const { settings } = require('../contexts/SettingsContext').useSettings();
 
   const user: User | null | undefined = props.currentUser ?? ctxUser;
 
@@ -180,13 +181,14 @@ const PortfolioValue: React.FC<PortfolioValueProps> = (props) => {
               tickLine={false}
               tick={{ fill: theme.palette.text.secondary, fontSize: 12 }}
               tickFormatter={(value) => {
+                const currencySymbol = settings?.currencySymbol || '$';
                 // Format based on value magnitude
                 if (value >= 1000000) {
-                  return `$${(value / 1000000).toFixed(1)}M`;
+                  return `${currencySymbol}${(value / 1000000).toFixed(1)}M`;
                 } else if (value >= 1000) {
-                  return `$${(value / 1000).toFixed(0)}k`;
+                  return `${currencySymbol}${(value / 1000).toFixed(0)}k`;
                 } else {
-                  return `$${value.toFixed(0)}`;
+                  return `${currencySymbol}${value.toFixed(0)}`;
                 }
               }}
               domain={['dataMin - dataMin * 0.05', 'dataMax + dataMax * 0.05']} // Add 5% padding
