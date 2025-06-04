@@ -95,6 +95,17 @@ const ExpensesPage: React.FC = () => {
     requestUrl: undefined,
     errorType: undefined
   });
+
+  // State for filters
+  const [filters, setFilters] = useState<ExpenseFiltersType>({
+    startDate: null,
+    endDate: null,
+    expenseType: '',
+    minAmount: '',
+    maxAmount: '',
+    vendor: '',
+    searchQuery: '',
+  });
   
   // Handler for receipt loading error
   const handleReceiptLoadError = (e?: React.SyntheticEvent<HTMLImageElement | HTMLIFrameElement>) => {
@@ -292,6 +303,48 @@ const ExpensesPage: React.FC = () => {
   const handleCloseSnackbar = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
+
+  // Function to apply filters to expenses
+  const applyFilters = (allExpenses: Expense[], currentFilters: ExpenseFiltersType): Expense[] => {
+    return allExpenses.filter(expense => {
+      let passes = true;
+      if (currentFilters.startDate && dayjs(expense.expenseDate).isBefore(currentFilters.startDate, 'day')) {
+        passes = false;
+      }
+      if (currentFilters.endDate && dayjs(expense.expenseDate).isAfter(currentFilters.endDate, 'day')) {
+        passes = false;
+      }
+      if (currentFilters.expenseType && expense.expenseType !== currentFilters.expenseType) {
+        passes = false;
+      }
+      if (currentFilters.minAmount && expense.amount < Number(currentFilters.minAmount)) {
+        passes = false;
+      }
+      if (currentFilters.maxAmount && expense.amount > Number(currentFilters.maxAmount)) {
+        passes = false;
+      }
+      if (currentFilters.vendor && expense.vendor && !expense.vendor.toLowerCase().includes(currentFilters.vendor.toLowerCase())) {
+        passes = false;
+      }
+      if (currentFilters.searchQuery && 
+          !(
+            expense.notes.toLowerCase().includes(currentFilters.searchQuery.toLowerCase()) ||
+            (expense.vendor && expense.vendor.toLowerCase().includes(currentFilters.searchQuery.toLowerCase())) ||
+            expense.expenseType.toLowerCase().includes(currentFilters.searchQuery.toLowerCase())
+          )
+      ) {
+        passes = false;
+      }
+      return passes;
+    });
+  };
+
+  // Handler for filter changes from ExpenseFilters component
+  const handleFilterChange = (newFilters: Partial<ExpenseFiltersType>) => {
+    const updatedFilters = { ...filters, ...newFilters };
+    setFilters(updatedFilters);
+    setFilteredExpenses(applyFilters(expenses, updatedFilters));
+  };
   
   // Function to confirm expense deletion
   const handleConfirmDelete = async () => {
@@ -299,6 +352,7 @@ const ExpensesPage: React.FC = () => {
     
     try {
       await expensesApi.deleteExpense(expenseToDelete.id);
+      await loadExpenses(); // Refresh the list
       setSnackbar({
         open: true,
         message: 'Expense deleted successfully',
@@ -323,7 +377,7 @@ const ExpensesPage: React.FC = () => {
       await Promise.all(
         selectedExpenses.map(id => expensesApi.deleteExpense(id))
       );
-      
+      await loadExpenses(); // Refresh the list
       setSnackbar({
         open: true,
         message: `${selectedExpenses.length} expenses deleted successfully`,
@@ -346,10 +400,22 @@ const ExpensesPage: React.FC = () => {
   // State for confirmation dialog
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isBulkDeleteConfirmOpen, setIsBulkDeleteConfirmOpen] = useState(false);
+
+  // Handler for when an expense is saved (added or edited)
+  const handleExpenseSaved = async (savedExpense: Expense, action: 'added' | 'updated') => {
+    setIsAddExpenseModalOpen(false);
+    setIsEditExpenseModalOpen(false);
+    setCurrentExpense(null);
+    await loadExpenses(); // Refresh the list
+    setSnackbar({
+      open: true,
+      message: `Expense ${action} successfully`,
+      severity: 'success',
+    });
+  };
   
   // Effect to load expenses when component mounts or auth state changes
-  useEffect(() => {
-    // Don't load expenses if user is not authenticated
+  const loadExpenses = useCallback(async () => {
     if (authLoading || !currentUser) {
       if (!authLoading && !currentUser) {
         setSnackbar({
@@ -358,51 +424,60 @@ const ExpensesPage: React.FC = () => {
           severity: 'warning'
         });
       }
+      // Clear expenses if user logs out or auth is loading
+      setExpenses([]);
+      setFilteredExpenses([]);
+      setExpenseSummary({
+        totalAmount: 0,
+        expenseCount: 0,
+        expenseByType: {},
+        monthOverMonthChange: 0
+      });
+      setLoading(false); // Ensure loading is false if we return early
       return;
     }
     
-    const loadExpenses = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        
-        // Get expenses from API
-        const expenses = await expensesApi.getExpenses();
-        setExpenses(expenses);
-        setFilteredExpenses(expenses); // Initially, filtered is same as all
-        
-        // Calculate expense summary
-        const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-        const expenseCount = expenses.length;
-        
-        // Group expenses by type
-        const expenseByType = expenses.reduce((groups, expense) => {
-          const type = expense.expenseType || 'Other';
-          groups[type] = (groups[type] || 0) + expense.amount;
-          return groups;
-        }, {} as Record<string, number>);
-        
-        // Calculate month-over-month change (mock calculation for now)
-        const monthOverMonthChange = 5.2; // This would be calculated based on previous month's data
-        
-        // Update summary
-        setExpenseSummary({
-          totalAmount,
-          expenseCount,
-          expenseByType,
-          monthOverMonthChange
-        });
-        
-      } catch (error: any) {
-        console.error('Failed to load expenses:', error);
-        setError(error.message || 'Failed to load expenses');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Get expenses from API
+      const fetchedExpenses = await expensesApi.getExpenses(); // Renamed to avoid conflict with state
+      setExpenses(fetchedExpenses);
+      // Apply current filters to the newly fetched expenses
+      const currentlyFiltered = applyFilters(fetchedExpenses, filters);
+      setFilteredExpenses(currentlyFiltered);
+      
+      // Calculate expense summary from all fetched (unfiltered) expenses
+      const totalAmount = fetchedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const expenseCount = fetchedExpenses.length;
+      
+      const expenseByType = fetchedExpenses.reduce((groups, expense) => {
+        const type = expense.expenseType || 'Other';
+        groups[type] = (groups[type] || 0) + expense.amount;
+        return groups;
+      }, {} as Record<string, number>);
+      
+      const monthOverMonthChange = 5.2; // Mock calculation
+      
+      setExpenseSummary({
+        totalAmount,
+        expenseCount,
+        expenseByType,
+        monthOverMonthChange
+      });
+      
+    } catch (error: any) {
+      console.error('Failed to load expenses:', error);
+      setError(error.message || 'Failed to load expenses');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, authLoading, filters, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Added filters and setters to dependencies
+
+  useEffect(() => {
     loadExpenses();
-  }, [currentUser, authLoading]);
+  }, [loadExpenses]); // useEffect now depends on the stable loadExpenses callback
   
   return (
     <Box sx={{ p: 3 }}>
@@ -470,8 +545,8 @@ const ExpensesPage: React.FC = () => {
         {/* Filters Section */}
         <Grid item xs={12}>
           <ExpenseFilters 
-            onFilterChange={() => console.log('Filters changed')} 
-            activeFiltersCount={0} 
+            onFilterChange={handleFilterChange} 
+            activeFiltersCount={Object.values(filters).filter(v => v !== '' && v !== null).length} 
           />
         </Grid>
         
@@ -529,11 +604,8 @@ const ExpensesPage: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <ExpenseEntryForm 
-            onSave={(expense: Expense) => {
-              console.log('Adding expense:', expense);
-              setIsAddExpenseModalOpen(false);
-            }}
-            onCancel={() => setIsAddExpenseModalOpen(false)}
+            onSave={(expense: Expense) => handleExpenseSaved(expense, 'added')} 
+            onCancel={() => setIsAddExpenseModalOpen(false)} 
           />
         </DialogContent>
       </Dialog>
@@ -553,11 +625,8 @@ const ExpensesPage: React.FC = () => {
         <DialogContent>
           {currentExpense && (
             <ExpenseEntryForm 
-              initialExpense={currentExpense}
-              onSave={(updatedExpense: Expense) => {
-                console.log('Updating expense:', updatedExpense);
-                setIsEditExpenseModalOpen(false);
-              }}
+              initialExpense={currentExpense} 
+              onSave={(expense: Expense) => handleExpenseSaved(expense, 'updated')} 
               onCancel={() => setIsEditExpenseModalOpen(false)}
               isEditing={true}
             />
