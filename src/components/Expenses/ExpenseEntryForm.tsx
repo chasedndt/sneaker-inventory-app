@@ -26,6 +26,7 @@ import CancelIcon from '@mui/icons-material/Cancel';
 import dayjs from 'dayjs';
 
 import { ExpenseFormData, Expense, ExpenseType } from '../../models/expenses';
+import { CURRENCY_SYMBOLS } from '../../utils/currencyUtils';
 import { expensesApi } from '../../services/expensesApi';
 import { useAuth } from '../../contexts/AuthContext'; // Import auth context
 
@@ -316,22 +317,35 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
             </Grid>
             
             {/* Amount */}
-            <Grid item xs={12} sm={6}>
+            <Grid item xs={7} sm={4}>
               <TextField
                 fullWidth
                 required
                 label="Amount"
                 name="amount"
+                type="number"
                 value={formData.amount}
                 onChange={handleInputChange}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      {formData.currency}
-                    </InputAdornment>
-                  ),
-                }}
               />
+            </Grid>
+
+            {/* Currency */}
+            <Grid item xs={5} sm={2}>
+              <FormControl fullWidth required>
+                <InputLabel>Currency</InputLabel>
+                <Select
+                  name="currency"
+                  value={formData.currency} // Ensure formData.currency is initialized (e.g., 'USD')
+                  onChange={handleSelectChange}
+                  label="Currency"
+                >
+                  {Object.keys(CURRENCY_SYMBOLS).map((code) => (
+                    <MenuItem key={code} value={code}>
+                      {code}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </Grid>
             
             {/* Date */}

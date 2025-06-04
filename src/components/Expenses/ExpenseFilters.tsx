@@ -31,6 +31,8 @@ import dayjs from 'dayjs';
 import { expensesApi } from '../../services/expensesApi';
 import { ExpenseFilters as ExpenseFiltersType, ExpenseType } from '../../models/expenses';
 import { useAuth } from '../../contexts/AuthContext'; // Import auth context
+import { useSettings } from '../../contexts/SettingsContext'; // Import settings context
+import { CURRENCY_SYMBOLS } from '../../utils/currencyUtils'; // Import currency symbols
 
 interface ExpenseFiltersProps {
   onFilterChange: (filters: ExpenseFiltersType) => void;
@@ -45,6 +47,8 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
 }) => {
   const theme = useTheme();
   const { currentUser } = useAuth(); // Get current user
+  const { currency } = useSettings(); // Get currency from settings
+  const currencySymbol = CURRENCY_SYMBOLS[currency] || currency; // Get currency symbol
   
   // State for expense types dropdown options
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
@@ -305,24 +309,24 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <TextField
                   fullWidth
-                  label="Min Amount"
+                  label={`Min Amount (${currencySymbol})`}
                   type="number"
                   size="small"
                   value={filters.minAmount}
                   onChange={(e) => handleFilterChange('minAmount', e.target.value)}
                   InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>
+                    startAdornment: <InputAdornment position="start">{currencySymbol}</InputAdornment>,
                   }}
                 />
                 <TextField
                   fullWidth
-                  label="Max Amount"
+                  label={`Max Amount (${currencySymbol})`}
                   type="number"
                   size="small"
                   value={filters.maxAmount}
                   onChange={(e) => handleFilterChange('maxAmount', e.target.value)}
                   InputProps={{
-                    startAdornment: <InputAdornment position="start">$</InputAdornment>
+                    startAdornment: <InputAdornment position="start">{currencySymbol}</InputAdornment>,
                   }}
                 />
               </Box>
@@ -401,7 +405,7 @@ const ExpenseFilters: React.FC<ExpenseFiltersProps> = ({
           {/* Amount Range Filter */}
           {(filters.minAmount || filters.maxAmount) && (
             <Chip
-              label={`Amount: ${filters.minAmount ? `$${filters.minAmount}` : '$0'} - ${filters.maxAmount ? `$${filters.maxAmount}` : 'Any'}`}
+              label={`Amount: ${filters.minAmount ? `${currencySymbol}${filters.minAmount}` : `${currencySymbol}0`} - ${filters.maxAmount ? `${currencySymbol}${filters.maxAmount}` : 'Any'}`}
               onDelete={() => {
                 handleClearFilter('minAmount');
                 handleClearFilter('maxAmount');

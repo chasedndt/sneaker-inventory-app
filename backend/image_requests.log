@@ -8390,3 +8390,75 @@
 2025-06-04 18:03:47,121 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/receipts/receipt_1748898937_PpdcAvliVrR4zBAH6WGBeLqd0c73_Screenshot_309.png
 2025-06-04 18:03:47,122 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
 2025-06-04 18:03:47,122 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/receipts/receipt_1748898937_PpdcAvliVrR4zBAH6WGBeLqd0c73_Screenshot_309.png
+2025-06-04 18:14:45,200 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,203 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,205 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,205 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:14:45,205 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:14:45,205 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:14:45,206 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,207 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:14:45,208 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,208 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:14:45,208 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:14:45,208 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:16:52,200 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,201 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:16:52,201 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,204 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,205 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,207 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:16:52,213 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:16:52,213 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:16:52,214 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:16:52,214 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,214 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:16:52,214 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:18:32,204 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,204 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:18:32,204 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,205 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,207 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,208 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:18:32,214 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:18:32,214 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:18:32,215 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:18:32,215 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,215 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:18:32,216 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:21:44,122 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,123 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:21:44,124 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,124 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,124 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:21:44,125 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,126 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,126 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:21:44,127 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:21:44,134 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:21:44,136 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:21:44,146 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:22:02,034 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,035 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:22:02,035 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,037 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,038 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,040 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:22:02,046 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:22:02,047 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:22:02,047 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:22:02,048 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,048 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:22:02,048 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:25:13,590 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:25:13,590 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:25:13,590 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/bf3d814e8fd3bf69b95fd2d19cdb7487_1748371969_PpdcAvliVrR4zBAH6WGBeLqd0c73.jpg
+2025-06-04 18:25:13,591 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:25:13,592 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:25:13,593 - INFO - Image request for: PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:25:13,598 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:25:13,598 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:25:13,599 - INFO - User ID from path: PpdcAvliVrR4zBAH6WGBeLqd0c73
+2025-06-04 18:25:13,599 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_36_1747601206_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:25:13,599 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_65_1747601301_PpdcAvliVrR4zBAH6WGBeLqd0c73.png
+2025-06-04 18:25:13,600 - INFO - Looking for file at: C:\Users\johno\Documents\Full Stack Developing\Projects\sneaker-inventory-app\backend\uploads\PpdcAvliVrR4zBAH6WGBeLqd0c73/Screenshot_67_1747601539_PpdcAvliVrR4zBAH6WGBeLqd0c73.png

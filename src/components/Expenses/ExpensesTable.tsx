@@ -49,6 +49,7 @@ interface ExpensesTableProps {
   expenses: Expense[];
   onEdit: (expense: Expense) => void;
   onDelete: (expense: Expense) => void;
+  formatCurrency: (amount: number, fromCurrency?: string) => string;
   onViewReceipt?: (expense: Expense) => void;
   loading?: boolean;
   error?: string | null;
@@ -61,6 +62,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
   expenses,
   onEdit,
   onDelete,
+  formatCurrency,
   onViewReceipt,
   loading = false,
   error = null,
@@ -111,7 +113,7 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
       label: 'Amount',
       minWidth: 100,
       align: 'right',
-      format: (value) => money(value), // Use money formatter
+      format: (value, row) => formatCurrency(value, row?.currency || 'USD'), // Use passed formatCurrency
       sortable: true
     },
     {

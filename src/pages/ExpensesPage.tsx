@@ -36,11 +36,13 @@ import { expensesApi, API_BASE_URL } from '../services/expensesApi';
 import { Expense, ExpenseFilters as ExpenseFiltersType } from '../models/expenses';
 import { useAuth } from '../contexts/AuthContext'; // Import auth context
 import { useApi } from '../services/api'; // Import useApi for authenticated API calls
+import { useSettings } from '../contexts/SettingsContext'; // Import useSettings
 
 const ExpensesPage: React.FC = () => {
   const theme = useTheme();
   const { currentUser, loading: authLoading } = useAuth(); // Get auth state
   const api = useApi(); // Get authenticated API methods
+  const { currency: displayCurrency, convertCurrency, formatCurrency } = useSettings(); // Get currency settings
   
   // State for expenses
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -305,7 +307,11 @@ const ExpensesPage: React.FC = () => {
   };
 
   // Function to apply filters to expenses
-  const applyFilters = (allExpenses: Expense[], currentFilters: ExpenseFiltersType): Expense[] => {
+  const applyFilters = (
+    allExpenses: Expense[], 
+    currentFilters: ExpenseFiltersType,
+    convertCurrencyFunc: (amount: number, fromCurrency: string) => number
+  ): Expense[] => {
     return allExpenses.filter(expense => {
       let passes = true;
       if (currentFilters.startDate && dayjs(expense.expenseDate).isBefore(currentFilters.startDate, 'day')) {
@@ -317,10 +323,14 @@ const ExpensesPage: React.FC = () => {
       if (currentFilters.expenseType && expense.expenseType !== currentFilters.expenseType) {
         passes = false;
       }
-      if (currentFilters.minAmount && expense.amount < Number(currentFilters.minAmount)) {
+
+      // Convert expense amount to display currency before comparing with filter amounts
+      const expenseAmountInDisplayCurrency = convertCurrencyFunc(expense.amount, expense.currency || 'USD');
+
+      if (currentFilters.minAmount && expenseAmountInDisplayCurrency < Number(currentFilters.minAmount)) {
         passes = false;
       }
-      if (currentFilters.maxAmount && expense.amount > Number(currentFilters.maxAmount)) {
+      if (currentFilters.maxAmount && expenseAmountInDisplayCurrency > Number(currentFilters.maxAmount)) {
         passes = false;
       }
       if (currentFilters.vendor && expense.vendor && !expense.vendor.toLowerCase().includes(currentFilters.vendor.toLowerCase())) {
@@ -340,10 +350,9 @@ const ExpensesPage: React.FC = () => {
   };
 
   // Handler for filter changes from ExpenseFilters component
+    // Handler for filter changes from ExpenseFilters component
   const handleFilterChange = (newFilters: Partial<ExpenseFiltersType>) => {
-    const updatedFilters = { ...filters, ...newFilters };
-    setFilters(updatedFilters);
-    setFilteredExpenses(applyFilters(expenses, updatedFilters));
+    setFilters(prevFilters => ({ ...prevFilters, ...newFilters }));
   };
   
   // Function to confirm expense deletion
@@ -414,6 +423,19 @@ const ExpensesPage: React.FC = () => {
     });
   };
   
+  // Effect to apply filters whenever expenses, filters, or currency settings change
+  useEffect(() => {
+    // Only apply filters if there are expenses to filter or if filters are actually set
+    // This prevents running filter logic unnecessarily on initial empty states
+    if (expenses.length > 0 || Object.values(filters).some(f => f !== null && f !== '' && f !== undefined)) {
+      const newlyFiltered = applyFilters(expenses, filters, convertCurrency);
+      setFilteredExpenses(newlyFiltered);
+    } else {
+      // If no expenses or no filters, filteredExpenses should mirror expenses (which might be empty)
+      setFilteredExpenses(expenses);
+    }
+  }, [expenses, filters, convertCurrency]); // Dependencies for re-filtering
+
   // Effect to load expenses when component mounts or auth state changes
   const loadExpenses = useCallback(async () => {
     if (authLoading || !currentUser) {
@@ -445,16 +467,20 @@ const ExpensesPage: React.FC = () => {
       const fetchedExpenses = await expensesApi.getExpenses(); // Renamed to avoid conflict with state
       setExpenses(fetchedExpenses);
       // Apply current filters to the newly fetched expenses
-      const currentlyFiltered = applyFilters(fetchedExpenses, filters);
+      const currentlyFiltered = applyFilters(fetchedExpenses, filters, convertCurrency);
       setFilteredExpenses(currentlyFiltered);
       
       // Calculate expense summary from all fetched (unfiltered) expenses
-      const totalAmount = fetchedExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+      const totalAmount = fetchedExpenses.reduce((sum, expense) => {
+        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD'); // Convert to display currency
+        return sum + convertedAmount;
+      }, 0);
       const expenseCount = fetchedExpenses.length;
       
       const expenseByType = fetchedExpenses.reduce((groups, expense) => {
         const type = expense.expenseType || 'Other';
-        groups[type] = (groups[type] || 0) + expense.amount;
+        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD'); // Convert to display currency
+        groups[type] = (groups[type] || 0) + convertedAmount;
         return groups;
       }, {} as Record<string, number>);
       
@@ -473,7 +499,7 @@ const ExpensesPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentUser, authLoading, filters, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Added filters and setters to dependencies
+  }, [currentUser, authLoading, filters, convertCurrency, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Added convertCurrency and other setters
 
   useEffect(() => {
     loadExpenses();
@@ -561,6 +587,7 @@ const ExpensesPage: React.FC = () => {
           ) : (
             <ExpensesTable 
               expenses={filteredExpenses} 
+              formatCurrency={formatCurrency} // Pass formatCurrency
               onEdit={(expense) => {
                 setCurrentExpense(expense);
                 setIsEditExpenseModalOpen(true);
