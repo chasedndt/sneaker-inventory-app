@@ -20,19 +20,28 @@ import { dashboardService, ComprehensiveMetrics } from '../services/dashboardSer
 
 import { AppUser } from '../contexts/AuthContext';
 import { useAuthReady } from '../hooks/useAuthReady';
-import MetricsCard from './MetricsCard';
 import { useRenderLog } from '../hooks/useRenderLog';
-import {
-  LineChart,
-  Line as RechartsLine,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartsTooltip,
-  Legend as RechartsLegend,
-  ResponsiveContainer,
-  TooltipProps
-} from 'recharts';
+import MetricsCard from './MetricsCard';
+import { LineChart, Line as RechartsLine, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend as RechartsLegend, ResponsiveContainer, TooltipProps } from 'recharts';
+
+// Define a simple isEqual function to avoid lodash dependency
+function isEqual(objA: any, objB: any): boolean {
+  if (objA === objB) return true;
+  if (objA === null || objB === null) return false;
+  if (typeof objA !== 'object' || typeof objB !== 'object') return objA === objB;
+  
+  const keysA = Object.keys(objA);
+  const keysB = Object.keys(objB);
+  
+  if (keysA.length !== keysB.length) return false;
+  
+  for (const key of keysA) {
+    if (!keysB.includes(key)) return false;
+    if (!isEqual(objA[key], objB[key])) return false;
+  }
+  
+  return true;
+}
 
 // Define the props for the ReportsSection component
 interface ReportsSectionProps {
@@ -373,14 +382,27 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     return value;
   }, []);
   
-  // Memoized components to prevent re-renders - with equality check
-  const MemoizedTooltip = memo(RechartsTooltip, (prev, next) => {
-    // Always consider equal to prevent unnecessary re-renders
-    return true;
-  });
+  // Create deeply memoized components for all Recharts elements
   const MemoizedLegend = memo(RechartsLegend, (prev, next) => {
-    // Always consider equal to prevent unnecessary re-renders
-    return true;
+    // Use deep comparison for complex objects
+    return isEqual(prev, next);
+  });
+  
+  const MemoizedCartesianGrid = memo(CartesianGrid, (prev, next) => {
+    return isEqual(prev, next);
+  });
+  
+  const MemoizedXAxis = memo(XAxis, (prev, next) => {
+    return isEqual(prev, next);
+  });
+  
+  const MemoizedYAxis = memo(YAxis, (prev, next) => {
+    return isEqual(prev, next);
+  });
+  
+  const MemoizedLine = memo(RechartsLine, (prev, next) => {
+    // Deep comparison of all props
+    return isEqual(prev, next);
   });
   
   // Memoized Line component with props and custom equality check
@@ -402,67 +424,89 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
            prevProps.name === nextProps.name;
   });
 
-  const chartProps = useMemo(() => ({
-    margin: { top: 10, right: 30, left: 0, bottom: 0 },
-    tickFormatter: (value: number) => `$${value}`,
+  // Memoized chart props with frozen references
+  const chartProps = useMemo(() => Object.freeze({
+    margin: Object.freeze({ top: 5, right: 30, left: 20, bottom: 5 }),
   }), []);
+
+  // Create a completely custom tooltip solution that bypasses Recharts tooltip components
+  // This avoids the problematic TooltipBoundingBox that causes console errors
+  const [tooltipData, setTooltipData] = useState<{
+    show: boolean;
+    x: number;
+    y: number;
+    payload: any[];
+    label: string;
+  }>({ show: false, x: 0, y: 0, payload: [], label: '' });
   
-  // Create a custom tooltip component with stable styles to avoid prop stability issues
-  const tooltipStyles = useMemo(() => ({
+  // Stable tooltip styles with frozen reference
+  const tooltipStyles = useMemo(() => Object.freeze({
+    position: 'absolute' as 'absolute',
     backgroundColor: theme.palette.background.paper,
     border: `1px solid ${theme.palette.divider}`,
-    p: 1,
-    borderRadius: 1,
-  }), [theme.palette.background.paper, theme.palette.divider]);
+    padding: '8px',
+    borderRadius: '4px',
+    pointerEvents: 'none' as 'none', // Type assertion for TypeScript
+    zIndex: 1000,
+    boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
+    transition: 'opacity 0.2s',
+    opacity: tooltipData.show ? 1 : 0,
+    left: `${tooltipData.x}px`,
+    top: `${tooltipData.y - 10}px`,
+    minWidth: '120px',
+  }), [theme.palette.background.paper, theme.palette.divider, tooltipData]);
   
-  const CustomTooltip = memo(({ active, payload, label }: TooltipProps<number, string>) => {
-    if (!active || !payload || payload.length === 0) {
+  // Custom tooltip component completely separate from Recharts tooltip system
+  const CustomTooltip = memo(() => {
+    if (!tooltipData.show || !tooltipData.payload || tooltipData.payload.length === 0) {
       return null;
     }
     
-    // Use memoized styles to avoid re-renders
     const textSecondary = theme.palette.text.secondary;
     
     return (
-      <Box sx={tooltipStyles}>
+      <div style={tooltipStyles}>
         <Typography variant="body2" color={textSecondary}>
-          {label}
+          {tooltipData.label}
         </Typography>
-        {payload.map((entry, index) => (
+        {tooltipData.payload.map((entry, index) => (
           <Typography key={index} variant="body2" style={{ color: entry.color }}>
             {entry.name}: ${typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
           </Typography>
         ))}
-      </Box>
+      </div>
     );
-  }, (prevProps, nextProps) => {
-    // Custom equality check to prevent unnecessary re-renders
-    // If label and active state are the same, consider it equal
-    if (prevProps.label === nextProps.label && prevProps.active === nextProps.active) {
-      return true;
-    }
-    return false;
-  });
+  }, (prevProps, nextProps) => true); // Always consider equal to prevent re-renders
   
-  // Memoized props for CartesianGrid
-  const cartesianGridProps = useMemo(() => ({
-    strokeDasharray: "3 3",
-    stroke: theme.palette.divider
+  // Memoized props for CartesianGrid with frozen references
+  const cartesianGridProps = useMemo(() => Object.freeze({
+    strokeDasharray: '3 3',
+    stroke: theme.palette.divider,
+    vertical: true,
+    horizontal: true,
   }), [theme.palette.divider]);
   
-  // Memoized props for XAxis
-  const xAxisProps = useMemo(() => ({
-    dataKey: "date",
+  // Memoized props for XAxis with frozen references
+  const xAxisProps = useMemo(() => Object.freeze({
+    dataKey: 'date',
     stroke: theme.palette.text.secondary,
-    tick: { fill: theme.palette.text.secondary, fontSize: 12 }
+    style: Object.freeze({
+      fontSize: '0.75rem',
+    }),
+    height: 60,
+    tickMargin: 10,
   }), [theme.palette.text.secondary]);
   
-  // Memoized props for YAxis
-  const yAxisProps = useMemo(() => ({
-    tickFormatter: chartProps.tickFormatter,
+  // Memoized props for YAxis with frozen references
+  const yAxisProps = useMemo(() => Object.freeze({
     stroke: theme.palette.text.secondary,
-    tick: { fill: theme.palette.text.secondary, fontSize: 12 }
-  }), [chartProps.tickFormatter, theme.palette.text.secondary]);
+    style: Object.freeze({
+      fontSize: '0.75rem',
+    }),
+    tickFormatter: (value: number) => `$${value}`,
+    width: 80,
+    tickMargin: 10,
+  }), [theme.palette.text.secondary]);
 
   const chartData = useMemo(() => {
     console.log('[ReportsSection] Deriving chartData from metricsData');
@@ -494,25 +538,164 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     }
   }, [chartData]);
 
-  // Stable line props to prevent re-renders
-  const lineProps = useMemo(() => ({
-    sales: {
-      dataKey: "sales",
+  // Memoized props for Line components with frozen references
+  const lineProps = useMemo(() => Object.freeze({
+    sales: Object.freeze({
+      type: 'monotone' as const,
+      dataKey: 'sales',
       stroke: theme.palette.primary.main,
-      activeDot: { r: 6 },
-      name: "Sales"
-    },
-    profit: {
-      dataKey: "profit",
+      activeDot: Object.freeze({ r: 8 }),
+      isAnimationActive: false,
+      dot: false,
+      // Add additional props to stabilize
+      strokeWidth: 2,
+      name: 'Sales',
+      connectNulls: true,
+    }),
+    profit: Object.freeze({
+      type: 'monotone' as const,
+      dataKey: 'profit',
       stroke: theme.palette.success.main,
-      name: "Profit"
-    },
-    expenses: {
-      dataKey: "expenses",
+      activeDot: Object.freeze({ r: 8 }),
+      isAnimationActive: false,
+      dot: false,
+      // Add additional props to stabilize
+      strokeWidth: 2,
+      name: 'Profit',
+      connectNulls: true,
+    }),
+    expenses: Object.freeze({
+      type: 'monotone' as const,
+      dataKey: 'expenses',
       stroke: theme.palette.error.main,
-      name: "Expenses"
-    }
+      activeDot: Object.freeze({ r: 8 }),
+      isAnimationActive: false,
+      dot: false,
+      // Add additional props to stabilize
+      strokeWidth: 2,
+      name: 'Expenses',
+      connectNulls: true,
+    })
   }), [theme.palette.primary.main, theme.palette.success.main, theme.palette.error.main]);
+  
+  // Custom mouse move handler for tooltip
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!chartData || chartData.length === 0) return;
+    
+    // Get chart container dimensions
+    const chartContainer = e.currentTarget;
+    const rect = chartContainer.getBoundingClientRect();
+    
+    // Calculate relative position within chart
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Calculate which data point is closest to mouse position
+    const chartWidth = rect.width;
+    const dataPointWidth = chartWidth / chartData.length;
+    const dataIndex = Math.min(
+      Math.floor(x / dataPointWidth),
+      chartData.length - 1
+    );
+    
+    if (dataIndex >= 0 && dataIndex < chartData.length) {
+      const currentPoint = chartData[dataIndex];
+      setTooltipData({
+        show: true,
+        x: x + 20, // Offset to not cover the point
+        y: y,
+        payload: [
+          { name: 'Sales', value: currentPoint.sales, color: theme.palette.primary.main },
+          { name: 'Profit', value: currentPoint.profit, color: theme.palette.success.main },
+          { name: 'Expenses', value: currentPoint.expenses, color: theme.palette.error.main }
+        ],
+        label: currentPoint.date
+      });
+    }
+  }, [chartData, theme.palette.primary.main, theme.palette.success.main, theme.palette.error.main]);
+  
+  const handleMouseLeave = useCallback(() => {
+    setTooltipData(prev => ({ ...prev, show: false }));
+  }, []);
+  
+  // Define the props interface for the chart wrapper
+  interface ChartWrapperProps {
+    chartData: Array<any>;
+    chartProps: {
+      margin: { top: number; right: number; left: number; bottom: number };
+    };
+    cartesianGridProps: {
+      strokeDasharray: string;
+      stroke: string;
+      vertical: boolean;
+      horizontal: boolean;
+    };
+    xAxisProps: {
+      dataKey: string;
+      stroke: string;
+      style: { fontSize: string };
+      height: number;
+      tickMargin: number;
+    };
+    yAxisProps: {
+      stroke: string;
+      style: { fontSize: string };
+      tickFormatter: (value: number) => string;
+      width: number;
+      tickMargin: number;
+    };
+    lineProps: {
+      sales: any;
+      profit: any;
+      expenses: any;
+    };
+    handleMouseMove: (e: React.MouseEvent<HTMLDivElement>) => void;
+    handleMouseLeave: () => void;
+  }
+  
+  // Create a deeply memoized chart wrapper component
+  const MemoizedChartWrapper = memo((props: ChartWrapperProps) => {
+    const { 
+      chartData, 
+      chartProps, 
+      cartesianGridProps, 
+      xAxisProps, 
+      yAxisProps, 
+      lineProps,
+      handleMouseMove,
+      handleMouseLeave
+    } = props;
+    console.log('[ReportsSection] MemoizedChartWrapper rendered');
+    
+    if (!Array.isArray(chartData) || chartData.length === 0) {
+      return <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }} />;
+    }
+    
+    // Use a stable key to prevent unnecessary re-renders
+    const chartKey = 'metrics-chart';
+    
+    return (
+      <div 
+        style={{ position: 'relative', width: '100%', height: '100%' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        <LineChart key={chartKey} data={chartData} margin={chartProps.margin}>
+          <MemoizedCartesianGrid {...cartesianGridProps} />
+          <MemoizedXAxis {...xAxisProps} />
+          <MemoizedYAxis {...yAxisProps} />
+          <MemoizedLegend />
+          <MemoizedLine {...lineProps.sales} />
+          <MemoizedLine {...lineProps.profit} />
+          <MemoizedLine {...lineProps.expenses} />
+        </LineChart>
+        <CustomTooltip />
+      </div>
+    );
+  }, (prevProps, nextProps) => {
+    // Deep comparison of all props
+    return isEqual(prevProps, nextProps);
+  });
   
   // Memoize the chart JSX content itself
   const chartContent = useMemo(() => {
@@ -523,22 +706,19 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       return <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }} />;
     }
     
-    // Use a stable key to prevent unnecessary re-renders
-    const chartKey = 'metrics-chart';
-    
     return (
-      <LineChart key={chartKey} data={chartData} margin={chartProps.margin}>
-        <CartesianGrid {...cartesianGridProps} />
-        <XAxis {...xAxisProps} />
-        <YAxis {...yAxisProps} />
-        <MemoizedTooltip content={<CustomTooltip />} />
-        <MemoizedLegend />
-        <Line {...lineProps.sales} />
-        <Line {...lineProps.profit} />
-        <Line {...lineProps.expenses} />
-      </LineChart>
+      <MemoizedChartWrapper
+        chartData={chartData}
+        chartProps={chartProps}
+        cartesianGridProps={cartesianGridProps}
+        xAxisProps={xAxisProps}
+        yAxisProps={yAxisProps}
+        lineProps={lineProps}
+        handleMouseMove={handleMouseMove}
+        handleMouseLeave={handleMouseLeave}
+      />
     );
-  }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, lineProps]);
+  }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, lineProps, handleMouseMove, handleMouseLeave]);
 
   // This useEffect has been consolidated with the one above
   // to prevent duplicate fetch requests
