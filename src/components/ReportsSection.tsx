@@ -88,7 +88,12 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     startDate: startDate?.toISOString() ?? 'N/A', endDate: endDate?.toISOString() ?? 'N/A',
   });
 
-  const hasFetchedRef = useRef(false);
+  // Track both whether we've fetched and what range was used
+  const fetchStateRef = useRef({
+    hasFetched: false,
+    lastRangeStart: null as string | null,
+    lastRangeEnd: null as string | null
+  });
 
   const fetchMetricsData = useCallback(async () => {
     if (isFetching) {
@@ -99,7 +104,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     // Set loading states
     setIsFetching(true);
     setShowSpinner(true);
-    console.log('[ReportsSection] Fetching metrics data...');
+    console.log('[ReportsSection] Fetching metrics data with range:', { start: range.start, end: range.end });
     
     try {
       const data = await dashboardService.fetchDashboardMetrics(
@@ -122,14 +127,20 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
         console.log('[ReportsSection] Metrics data unchanged - skipping update');
       }
       
-      hasFetchedRef.current = true;
+      // Update fetch state ref with current range
+      fetchStateRef.current = {
+        hasFetched: true,
+        lastRangeStart: range.start,
+        lastRangeEnd: range.end
+      };
+      console.log('[ReportsSection] Updated fetchStateRef:', fetchStateRef.current);
     } catch (err: any) {
-      console.error('[ReportsSection] Error fetching dashboard metrics:', err);
+      console.error('[ReportsSection] Error fetching metrics:', err);
     } finally {
       setIsFetching(false);
       setShowSpinner(false);
     }
-  }, [range.start, range.end, startDate, endDate]); // Include startDate and endDate to ensure refetch when filters change
+  }, [range.start, range.end, metricsData, startDate, endDate]); // Include startDate and endDate to ensure refetch when filters change
 
   useEffect(() => {
     if (authReady) {
@@ -142,7 +153,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
 
   // Add explicit effect to refetch when date range changes
   useEffect(() => {
-    if (authReady && hasFetchedRef.current) {
+    if (authReady && fetchStateRef.current.hasFetched) {
       console.log('📅 Date range changed, refetching metrics:', { startDate: startDate?.format('YYYY-MM-DD'), endDate: endDate?.format('YYYY-MM-DD') });
       fetchMetricsData();
     }
@@ -432,14 +443,23 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       return;
     }
     
-    if (hasFetchedRef.current) {
-      console.log('[ReportsSection] Fetch skipped: already fetched with current range');
+    // Check if we need to fetch based on range changes
+    const rangeChanged = 
+      fetchStateRef.current.lastRangeStart !== range.start || 
+      fetchStateRef.current.lastRangeEnd !== range.end;
+    
+    // Only fetch if we haven't fetched yet or if the range has changed
+    if (fetchStateRef.current.hasFetched && !rangeChanged) {
+      console.log('[ReportsSection] Fetch skipped: already fetched with current range', {
+        current: { start: range.start, end: range.end },
+        last: { start: fetchStateRef.current.lastRangeStart, end: fetchStateRef.current.lastRangeEnd }
+      });
       return;
     }
     
-    console.log('🚀 Fetching metrics with dependencies:', { authReady, range });
+    console.log('🚀 Fetching metrics with dependencies:', { authReady, range, rangeChanged });
     fetchMetricsData();
-  }, [authReady, fetchMetricsData]);
+  }, [authReady, fetchMetricsData, range]);
 
   // Monitor key dependency changes that might cause fetch loops
   useEffect(() => {
@@ -447,7 +467,22 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   }, [isFetching]);
   
   useEffect(() => {
-    console.log('[ReportsSection] Range or user changed:', { range, currentUserUid: currentUser?.uid });
+    console.log('[ReportsSection] Range or user changed:', { 
+      range, 
+      currentUserUid: currentUser?.uid,
+      fetchState: fetchStateRef.current
+    });
+    
+    // Reset fetch state when user changes to force a new fetch
+    if (currentUser?.uid) {
+      const userChanged = fetchStateRef.current.hasFetched && 
+                         !fetchStateRef.current.lastRangeStart && 
+                         !fetchStateRef.current.lastRangeEnd;
+      if (userChanged) {
+        console.log('[ReportsSection] User changed, resetting fetch state');
+        fetchStateRef.current.hasFetched = false;
+      }
+    }
   }, [range, currentUser?.uid]);
   
   // Add ref to track render count and identify potential loops
