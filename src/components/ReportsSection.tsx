@@ -1,5 +1,5 @@
 // src/components/ReportsSection.tsx
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import {
   Grid,
   Typography,
@@ -24,13 +24,14 @@ import MetricsCard from './MetricsCard';
 import { useRenderLog } from '../hooks/useRenderLog';
 import {
   LineChart,
-  Line,
+  Line as RechartsLine,
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  ResponsiveContainer,
+  TooltipProps
 } from 'recharts';
 
 // Define the props for the ReportsSection component
@@ -75,11 +76,11 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   const [showSpinner, setShowSpinner] = useState(false); // UI indicator
   const [metricsLoaded, setMetricsLoaded] = useState(false);
 
-  // Stabilize the date range using useState with a function initializer
-  const [range] = useState(() => ({
+  // Use useMemo for date range to update when props change
+  const range = useMemo(() => ({
     start: startDate ? dayjs(startDate).startOf('day').toISOString() : null,
     end: endDate ? dayjs(endDate).endOf('day').toISOString() : null,
-  }));
+  }), [startDate, endDate]);
 
   useRenderLog('ReportsSection', {
     authReady, isFetching, showSpinner, accountTier,
@@ -128,7 +129,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       setIsFetching(false);
       setShowSpinner(false);
     }
-  }, [range.start, range.end]); // Removed currentUser and isFetching from dependencies to prevent loops
+  }, [range.start, range.end, startDate, endDate]); // Include startDate and endDate to ensure refetch when filters change
 
   useEffect(() => {
     if (authReady) {
@@ -138,6 +139,14 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       console.log('⏳ Waiting for auth to be ready...');
     }
   }, [authReady, fetchMetricsData]);
+
+  // Add explicit effect to refetch when date range changes
+  useEffect(() => {
+    if (authReady && hasFetchedRef.current) {
+      console.log('📅 Date range changed, refetching metrics:', { startDate: startDate?.format('YYYY-MM-DD'), endDate: endDate?.format('YYYY-MM-DD') });
+      fetchMetricsData();
+    }
+  }, [startDate, endDate, authReady, fetchMetricsData]);
 
   useEffect(() => {
     console.log('[ReportsSection] Props updated:', { metricsLoaded });
@@ -288,14 +297,86 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     }
   }), [kpiValues, changeValues, isFeatureLocked]);
   
-  const tooltipFormatter = useCallback((value: number) => {
-    return `$${value.toFixed(2)}`;
+  // Memoized tooltip formatter to prevent re-renders
+  const tooltipFormatter = useCallback((value: number | string | Array<any> | undefined) => {
+    if (typeof value === 'number') {
+      return `$${value.toFixed(2)}`;
+    }
+    return value;
   }, []);
+  
+  // Memoized components to prevent re-renders
+  const MemoizedTooltip = memo(RechartsTooltip);
+  const MemoizedLegend = memo(RechartsLegend);
+  
+  // Memoized Line component with props
+  const Line = memo(({ dataKey, stroke, name, activeDot }: { dataKey: string; stroke: string; name: string; activeDot?: any }) => {
+    return <RechartsLine 
+      type="monotone" 
+      dataKey={dataKey} 
+      stroke={stroke} 
+      name={name}
+      activeDot={activeDot} 
+      isAnimationActive={false} // Disable animation to reduce render spam
+    />;
+  });
 
   const chartProps = useMemo(() => ({
     margin: { top: 10, right: 30, left: 0, bottom: 0 },
     tickFormatter: (value: number) => `$${value}`,
   }), []);
+  
+  // Create a custom tooltip component to avoid prop stability issues
+  const CustomTooltip = memo(({ active, payload, label }: TooltipProps<number, string>) => {
+    if (!active || !payload || payload.length === 0) {
+      return null;
+    }
+    
+    // Use theme from closure to avoid dependency issues
+    const backgroundColor = theme.palette.background.paper;
+    const borderColor = theme.palette.divider;
+    const textSecondary = theme.palette.text.secondary;
+    
+    return (
+      <Box
+        sx={{
+          backgroundColor,
+          border: `1px solid ${borderColor}`,
+          p: 1,
+          borderRadius: 1,
+        }}
+      >
+        <Typography variant="body2" color={textSecondary}>
+          {label}
+        </Typography>
+        {payload.map((entry, index) => (
+          <Typography key={index} variant="body2" style={{ color: entry.color }}>
+            {entry.name}: ${typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+          </Typography>
+        ))}
+      </Box>
+    );
+  });
+  
+  // Memoized props for CartesianGrid
+  const cartesianGridProps = useMemo(() => ({
+    strokeDasharray: "3 3",
+    stroke: theme.palette.divider
+  }), [theme.palette.divider]);
+  
+  // Memoized props for XAxis
+  const xAxisProps = useMemo(() => ({
+    dataKey: "date",
+    stroke: theme.palette.text.secondary,
+    tick: { fill: theme.palette.text.secondary, fontSize: 12 }
+  }), [theme.palette.text.secondary]);
+  
+  // Memoized props for YAxis
+  const yAxisProps = useMemo(() => ({
+    tickFormatter: chartProps.tickFormatter,
+    stroke: theme.palette.text.secondary,
+    tick: { fill: theme.palette.text.secondary, fontSize: 12 }
+  }), [chartProps.tickFormatter, theme.palette.text.secondary]);
 
   const chartData = useMemo(() => {
     console.log('[ReportsSection] Deriving chartData from metricsData');
@@ -333,17 +414,17 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     }
     return (
       <LineChart data={chartData} margin={chartProps.margin}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="date" />
-        <YAxis tickFormatter={chartProps.tickFormatter} />
-        <Tooltip formatter={tooltipFormatter} />
-        <Legend />
-        <Line type="monotone" dataKey="sales" stroke={theme.palette.primary.main} activeDot={{ r: 8 }} name="Sales" />
-        <Line type="monotone" dataKey="profit" stroke={theme.palette.success.main} name="Profit" />
-        <Line type="monotone" dataKey="expenses" stroke={theme.palette.error.main} name="Expenses" />
+        <CartesianGrid {...cartesianGridProps} />
+        <XAxis {...xAxisProps} />
+        <YAxis {...yAxisProps} />
+        <RechartsTooltip content={<CustomTooltip />} />
+        <MemoizedLegend />
+        <Line dataKey="sales" stroke={theme.palette.primary.main} activeDot={{ r: 8 }} name="Sales" />
+        <Line dataKey="profit" stroke={theme.palette.success.main} name="Profit" />
+        <Line dataKey="expenses" stroke={theme.palette.error.main} name="Expenses" />
       </LineChart>
     );
-  }, [chartData, chartProps, tooltipFormatter, theme]);
+  }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, theme]);
 
   useEffect(() => {
     if (!authReady || isFetching) {
@@ -374,6 +455,9 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   useEffect(() => {
     renderCountRef.current++;
     console.log(`[ReportsSection] Component rendered ${renderCountRef.current} times`);
+    
+    // Log when chart components render to track optimization progress
+    console.log('[ReportsSection] Chart render optimization check - verify reduced render spam');
   });
 
   // Log detailed calculations only once per render
