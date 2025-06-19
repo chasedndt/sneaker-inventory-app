@@ -142,22 +142,36 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     }
   }, [range.start, range.end, metricsData, startDate, endDate]); // Include startDate and endDate to ensure refetch when filters change
 
+  // Single consolidated useEffect for fetching metrics data
+  // This replaces multiple fetch effects to prevent duplicate requests
   useEffect(() => {
-    if (authReady) {
-      console.log('🚀 Fetching metrics with dependencies:', { authReady, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() });
-      fetchMetricsData();
-    } else {
-      console.log('⏳ Waiting for auth to be ready...');
+    // Skip if auth is not ready or already fetching
+    if (!authReady || isFetching) {
+      console.log('⏳ [ReportsSection] Fetch skipped: auth not ready or already fetching');
+      return;
     }
-  }, [authReady, fetchMetricsData]);
-
-  // Add explicit effect to refetch when date range changes
-  useEffect(() => {
-    if (authReady && fetchStateRef.current.hasFetched) {
-      console.log('📅 Date range changed, refetching metrics:', { startDate: startDate?.format('YYYY-MM-DD'), endDate: endDate?.format('YYYY-MM-DD') });
-      fetchMetricsData();
+    
+    console.log('[ReportsSection] Fetch effect triggered with:', {
+      authReady,
+      startDate: startDate?.format('YYYY-MM-DD') || 'null',
+      endDate: endDate?.format('YYYY-MM-DD') || 'null',
+      fetchState: fetchStateRef.current
+    });
+    
+    // Check if we need to fetch based on range changes
+    const rangeChanged = 
+      fetchStateRef.current.lastRangeStart !== range.start || 
+      fetchStateRef.current.lastRangeEnd !== range.end;
+      
+    // Only fetch if we haven't fetched yet or if the range has changed
+    if (fetchStateRef.current.hasFetched && !rangeChanged) {
+      console.log('[ReportsSection] Fetch skipped: already fetched with current range');
+      return;
     }
-  }, [startDate, endDate, authReady, fetchMetricsData]);
+    
+    console.log('🚀 [ReportsSection] Fetching metrics data...');
+    fetchMetricsData();
+  }, [authReady, isFetching, startDate, endDate, range, fetchMetricsData]);
 
   useEffect(() => {
     console.log('[ReportsSection] Props updated:', { metricsLoaded });
@@ -437,29 +451,8 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     );
   }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, theme]);
 
-  useEffect(() => {
-    if (!authReady || isFetching) {
-      console.log('[ReportsSection] Fetch skipped: auth not ready or already fetching');
-      return;
-    }
-    
-    // Check if we need to fetch based on range changes
-    const rangeChanged = 
-      fetchStateRef.current.lastRangeStart !== range.start || 
-      fetchStateRef.current.lastRangeEnd !== range.end;
-    
-    // Only fetch if we haven't fetched yet or if the range has changed
-    if (fetchStateRef.current.hasFetched && !rangeChanged) {
-      console.log('[ReportsSection] Fetch skipped: already fetched with current range', {
-        current: { start: range.start, end: range.end },
-        last: { start: fetchStateRef.current.lastRangeStart, end: fetchStateRef.current.lastRangeEnd }
-      });
-      return;
-    }
-    
-    console.log('🚀 Fetching metrics with dependencies:', { authReady, range, rangeChanged });
-    fetchMetricsData();
-  }, [authReady, fetchMetricsData, range]);
+  // This useEffect has been consolidated with the one above
+  // to prevent duplicate fetch requests
 
   // Monitor key dependency changes that might cause fetch loops
   useEffect(() => {
