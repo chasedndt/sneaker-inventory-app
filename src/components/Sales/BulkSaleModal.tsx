@@ -41,7 +41,7 @@ import dayjs, { Dayjs } from 'dayjs';
 
 import { SalesItem } from '../../pages/SalesPage';
 import { salesApi } from '../../services/salesApi';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { useApi } from '../../services/api';
 
 interface BulkSaleModalProps {
@@ -80,8 +80,7 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   onClose,
   sales
 }) => {
-  const { currentUser, loading: authLoading } = useAuth();
-  const { isAuthenticated } = useApi();
+  const { authReady, currentUser } = useAuthReady();
   
   const [sharedFormData, setSharedFormData] = useState<SharedFormData>({
     platform: '',
@@ -163,12 +162,13 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   };
   
   // When any individual field changes and shareAllFields is true, update all items
+  const firstItemDataFromState = selectedItems.length > 0 ? individualFormData[selectedItems[0]] : undefined;
+
   useEffect(() => {
     if (shareAllFields && selectedItems.length > 0) {
-      // Get the values from the first selected item
       const firstItemId = selectedItems[0];
-      const firstItemData = individualFormData[firstItemId];
-      
+      const firstItemData = firstItemDataFromState;
+
       if (firstItemData) {
         const newIndividualFormData = { ...individualFormData };
         
@@ -182,7 +182,7 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
         setIndividualFormData(newIndividualFormData);
       }
     }
-  }, [shareAllFields, individualFormData[selectedItems[0]], selectedItems]);
+  }, [shareAllFields, firstItemDataFromState, selectedItems, individualFormData]);
   
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {
@@ -244,7 +244,7 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   
   const handleSubmit = async () => {
     // Check if user is authenticated
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSubmitError('Authentication required. Please log in to update sales.');
       return;
     }
@@ -308,7 +308,7 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   };
   
   // Show authentication message if not authenticated
-  if (!isAuthenticated && !authLoading) {
+  if (authReady && !currentUser) {
     return (
       <Dialog
         open={open}
@@ -329,7 +329,7 @@ const BulkSaleModal: React.FC<BulkSaleModalProps> = ({
   }
   
   // Show loading state while checking authentication
-  if (authLoading) {
+  if (!authReady) {
     return (
       <Dialog
         open={open}

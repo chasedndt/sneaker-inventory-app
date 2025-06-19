@@ -18,7 +18,10 @@ import SellIcon from '@mui/icons-material/Sell';
 import ReceiptIcon from '@mui/icons-material/Receipt';
 import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { useAuth } from '../contexts/AuthContext';
+import LockIcon from '@mui/icons-material/Lock';
+import AssessmentIcon from '@mui/icons-material/Assessment'; // For Reports
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'; // For Admin
+import { useAuthReady } from '../hooks/useAuthReady';
 
 interface SidebarProps {
   onNavigate: (page: string) => void;
@@ -34,24 +37,31 @@ type MenuItemType = {
 
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
   const theme = useTheme();
-  const { currentUser } = useAuth();
+  const { currentUser, authReady } = useAuthReady();
+  const accountTier = currentUser?.accountTier || 'Free';
 
   // Define menu items
-  const menuItems: MenuItemType[] = [
+  let menuItems: MenuItemType[] = [ // Changed to let to allow modification
     { label: 'Dashboard', icon: <DashboardIcon />, value: 'dashboard' },
     { label: 'Inventory', icon: <InventoryIcon />, value: 'inventory' },
     { label: 'Sales', icon: <SellIcon />, value: 'sales' },
     { label: 'Expenses', icon: <ReceiptIcon />, value: 'expenses' },
-    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists', dividerAfter: true },
+    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists' },
+    { label: 'Reports', icon: <AssessmentIcon />, value: 'reports', dividerAfter: true },
     { label: 'Settings', icon: <SettingsIcon />, value: 'settings' },
   ];
+
+  // Conditionally add Admin link if user is an admin
+  if (currentUser && accountTier === 'admin') {
+    menuItems.push({ label: 'Admin', icon: <AdminPanelSettingsIcon />, value: 'admin', dividerAfter: false });
+  }
 
   const handleNavigate = (page: string) => {
     onNavigate(page);
   };
 
-  // Return early if not authenticated
-  if (!currentUser) {
+  // Return early if not authenticated or auth not ready
+  if (!authReady || !currentUser) {
     return null;
   }
 
@@ -91,7 +101,7 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
             Hypelist
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Your Plan: Professional
+            Your Plan: {accountTier ? accountTier.charAt(0).toUpperCase() + accountTier.slice(1) : 'Free'}
           </Typography>
         </Box>
       </Box>
@@ -132,9 +142,14 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
                       ? theme.palette.primary.main 
                       : theme.palette.text.secondary,
                     minWidth: 36,
+                    display: 'flex', 
+                    alignItems: 'center'
                   }}
                 >
                   {item.icon}
+                  {item.value === 'reports' && accountTier === 'Free' && 
+                    <LockIcon sx={{ fontSize: '1rem', ml: 0.5, color: theme.palette.text.disabled }} />
+                  }
                 </ListItemIcon>
                 <ListItemText 
                   primary={item.label} 

@@ -1,5 +1,6 @@
 // src/services/salesApi.ts
 import { getImageUrl } from '../utils/imageUtils';
+import { getApiAuthToken } from './api'; // Import the new helper
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
@@ -59,20 +60,11 @@ export interface UpdateSaleData extends RecordSaleData {
   id: number;
 }
 
-const getAuthToken = async () => {
-  const getToken = window.getAuthToken;
-  if (!getToken) {
-    throw new Error('Authentication function not available.');
-  }
-  const token = await getToken();
-  if (!token) {
-    throw new Error('Authentication required.');
-  }
-  return token;
-};
-
 const getAuthHeaders = async (): Promise<Record<string, string>> => {
-  const token = await getAuthToken();
+  const token = await getApiAuthToken(); // Use the imported helper
+  if (!token) { // Add a check here since getApiAuthToken can resolve to null
+    throw new Error('Authentication required: No token available.');
+  }
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${token}`
   };

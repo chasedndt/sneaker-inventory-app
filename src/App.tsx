@@ -18,6 +18,7 @@ import SalesPage from './pages/SalesPage';
 import ExpensesPage from './pages/ExpensesPage';
 import SettingsPage from './pages/SettingsPage';
 import CoplistsPage from './pages/CoplistsPage';
+import AdminPage from './pages/AdminPage'; // Import AdminPage
 
 // Settings Pages
 import SettingsLayout from './pages/Settings/SettingsLayout';
@@ -31,14 +32,15 @@ import InventorySettings from './pages/Settings/InventorySettings';
 import Layout from './components/Layout';
 
 // Contexts
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuthReady } from './hooks/useAuthReady';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 
 // Protected Route component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, authReady } = useAuthReady();
   
-  if (loading) {
+  if (!authReady) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
         <CircularProgress />
@@ -135,10 +137,13 @@ const AppContent: React.FC = () => {
             <Route index element={<Navigate to="/settings/profile" replace />} />
             <Route path="profile" element={<ProfileSettings />} />
             <Route path="billing" element={<BillingSettings />} />
-            <Route path="inventory" element={<InventorySettings />} />
+            <Route path="inventory-settings" element={<InventorySettings />} />
             <Route path="notifications" element={<NotificationSettings />} />
             <Route path="security" element={<SecuritySettings />} />
           </Route>
+          
+          {/* Admin Route */}
+          <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
           
           <Route path="/profile" element={<Profile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

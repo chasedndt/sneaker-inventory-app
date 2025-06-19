@@ -1,5 +1,5 @@
 // src/contexts/AuthContext.tsx
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { 
   User, 
   onAuthStateChanged, 
@@ -14,25 +14,44 @@ import {
   getIdTokenResult
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { initializeApi, setAuthTokenGetter as setAuthTokenGetterForApi } from '../services/api'; // Import initializeApi and setAuthTokenGetter
+
+// Create the auth context with a default undefined value first
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+let authReadyResolver: (() => void) | null = null;
+export const authReadyPromise: Promise<void> = new Promise(res => {
+  authReadyResolver = res;
+});
+
+// Define AppUser interface extending Firebase User
+export interface AppUser extends User {
+  accountTier: 'Free' | 'Starter' | 'Professional' | 'admin';
+  customClaims?: {
+    accountTierSet?: boolean; // Flag to indicate if tier was set via admin tool
+    accountTier?: 'Free' | 'Starter' | 'Professional' | 'admin';
+    admin?: boolean;
+    [key: string]: any; // For any other custom claims
+  };
+}
 
 // Define the shape of our auth context
-interface AuthContextType {
-  currentUser: User | null;
+export interface AuthContextType {
+  currentUser: AppUser | null;
   loading: boolean;
   token: string | null;
   tokenExpiration: Date | null;
-  signup: (email: string, password: string) => Promise<User>;
-  login: (email: string, password: string) => Promise<User>;
+  accountTier: 'Free' | 'Starter' | 'Professional' | 'admin' | undefined;
+  signup: (email: string, password: string) => Promise<AppUser>;
+  login: (email: string, password: string) => Promise<AppUser>;
   logout: () => Promise<void>;
   updateUserEmail: (email: string) => Promise<void>;
   updateUserPassword: (password: string) => Promise<void>;
   reauthenticate: (password: string) => Promise<void>;
   getAuthToken: () => Promise<string | null>;
   refreshToken: () => Promise<string | null>;
+  authReady: boolean;
 }
-
-// Create the auth context with a default undefined value
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Custom hook to use the auth context
 export const useAuth = () => {
@@ -49,17 +68,35 @@ interface AuthProviderProps {
 
 // Auth Provider component
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [token, setToken] = useState<string | null>(null);
   const [tokenExpiration, setTokenExpiration] = useState<Date | null>(null);
 
   // Function to sign up a new user
-  const signup = (email: string, password: string): Promise<User> => {
+  const signup = async (email: string, password: string): Promise<AppUser> => {
     return new Promise((resolve, reject) => {
       createUserWithEmailAndPassword(auth, email, password)
-        .then((userCredential) => {
-          resolve(userCredential.user);
+        .then(async (userCredential) => {
+          // Default to 'Free' tier on new signup, backend will eventually set this via claims
+          const appUser: AppUser = {
+            ...userCredential.user,
+            uid: userCredential.user.uid, // Ensure all User properties are spread
+            email: userCredential.user.email,
+            emailVerified: userCredential.user.emailVerified,
+            isAnonymous: userCredential.user.isAnonymous,
+            metadata: userCredential.user.metadata,
+            providerData: userCredential.user.providerData,
+            refreshToken: userCredential.user.refreshToken,
+            tenantId: userCredential.user.tenantId,
+            displayName: userCredential.user.displayName,
+            photoURL: userCredential.user.photoURL,
+            phoneNumber: userCredential.user.phoneNumber,
+            providerId: userCredential.user.providerId,
+            accountTier: 'Free', // Default tier on signup
+            customClaims: { accountTier: 'Free', accountTierSet: false } // Initialize customClaims
+          };
+          resolve(appUser);
         })
         .catch((error) => {
           reject(error);
@@ -68,11 +105,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Function to log in an existing user
-  const login = (email: string, password: string): Promise<User> => {
+  const login = async (email: string, password: string): Promise<AppUser> => {
     return new Promise((resolve, reject) => {
       signInWithEmailAndPassword(auth, email, password)
-        .then((userCredential) => {
-          resolve(userCredential.user);
+        .then(async (userCredential) => {
+          const tokenResult = await getIdTokenResult(userCredential.user);
+          const tier = (tokenResult.claims.accountTier as AppUser['accountTier']) || 'Free';
+          const appUser: AppUser = {
+            ...userCredential.user,
+            uid: userCredential.user.uid,
+            email: userCredential.user.email,
+            emailVerified: userCredential.user.emailVerified,
+            isAnonymous: userCredential.user.isAnonymous,
+            metadata: userCredential.user.metadata,
+            providerData: userCredential.user.providerData,
+            refreshToken: userCredential.user.refreshToken,
+            tenantId: userCredential.user.tenantId,
+            displayName: userCredential.user.displayName,
+            photoURL: userCredential.user.photoURL,
+            phoneNumber: userCredential.user.phoneNumber,
+            providerId: userCredential.user.providerId,
+            accountTier: tier,
+            customClaims: {
+              accountTier: tier,
+              accountTierSet: tokenResult.claims.accountTierSet as boolean || false,
+              admin: tokenResult.claims.admin as boolean || false,
+              ...tokenResult.claims // Spread all claims to capture any other custom ones
+            }
+          };
+          resolve(appUser);
         })
         .catch((error) => {
           reject(error);
@@ -102,7 +163,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   // Function to get the current auth token
-  const getAuthToken = async (): Promise<string | null> => {
+  const getAuthToken = useCallback(async (): Promise<string | null> => {
     if (!currentUser) {
       console.log('No user is logged in, cannot get token');
       return null;
@@ -131,10 +192,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Error getting auth token:', error);
       return null;
     }
-  };
+  }, [currentUser, token, tokenExpiration]);
 
   // Function to refresh the token
-  const refreshToken = async (): Promise<string | null> => {
+  const refreshToken = useCallback(async (): Promise<string | null> => {
     if (!currentUser) return null;
     
     try {
@@ -152,7 +213,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Error refreshing token:', error);
       return null;
     }
-  };
+  }, [currentUser]);
 
   // Get initial token when user logs in
   useEffect(() => {
@@ -162,35 +223,67 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setToken(null);
       setTokenExpiration(null);
     }
-  }, [currentUser]);
+  }, [currentUser, getAuthToken]);
 
   // Set up listener for auth state changes
   useEffect(() => {
     // Subscribe to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      
-      // If user is logged in, get token
       if (user) {
+        const tokenResult = await getIdTokenResult(user); // Fetch token result once
+        const tier = (tokenResult.claims.accountTier as AppUser['accountTier']) || 'Free';
+        const appUser: AppUser = {
+          ...user,
+          accountTier: tier,
+          customClaims: {
+            accountTier: tier,
+            accountTierSet: tokenResult.claims.accountTierSet as boolean || false,
+            admin: tokenResult.claims.admin as boolean || false,
+            ...tokenResult.claims
+          }
+        };
+        setCurrentUser(appUser);
+
+        // Set token and expiration from the fetched tokenResult
         try {
-          const newToken = await getIdToken(user);
-          const tokenResult = await getIdTokenResult(user);
-          
+          const newToken = await getIdToken(user); // This ensures we get the raw token string
           setToken(newToken);
           if (tokenResult.expirationTime) {
             setTokenExpiration(new Date(tokenResult.expirationTime));
           }
         } catch (error) {
-          console.error('Error getting initial token:', error);
+          console.error('Error getting initial token string:', error);
+          setToken(null);
+          setTokenExpiration(null);
         }
+      } else {
+        setCurrentUser(null);
+        setToken(null);
+        setTokenExpiration(null);
       }
       
       setLoading(false);
+      if (authReadyResolver) authReadyResolver(); // Signal ready AFTER currentUser/token and loading are set
     });
 
     // Cleanup subscription on unmount
     return unsubscribe;
   }, []);
+
+  // Initialize the API service with the getAuthToken function as early as possible.
+  // This runs once when AuthProvider mounts, before child components that might make API calls.
+  useEffect(() => {
+    initializeApi(authReadyPromise);
+  }, []); // authReadyPromise is stable, this should only run once
+
+  // Effect that wires API service to always have the latest getAuthToken
+  useEffect(() => {
+    const authIsReady = !loading; // authReady is derived from !loading
+    if (authIsReady) { 
+      console.log('[AuthContext] Auth ready, providing fresh getAuthToken to api.ts');
+      setAuthTokenGetterForApi(getAuthToken);
+    }
+  }, [getAuthToken, loading]); // loading effectively represents authReady state here
 
   // Set up token refresh timer
   useEffect(() => {
@@ -206,14 +299,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }, Math.max(0, timeUntilRefresh));
     
     return () => clearTimeout(refreshTimer);
-  }, [token, tokenExpiration]);
+  }, [token, tokenExpiration, refreshToken]);
 
   // Create the value object for our context provider
+  // Create the value object for our context provider
+  const accountTier = currentUser?.customClaims?.admin ? 'admin' : currentUser?.accountTier;
   const value: AuthContextType = {
     currentUser,
     loading,
     token,
     tokenExpiration,
+    accountTier, // Added accountTier to context value
     signup,
     login,
     logout,
@@ -221,7 +317,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateUserPassword,
     reauthenticate,
     getAuthToken,
-    refreshToken
+    refreshToken,
+    authReady: !loading
   };
 
   return (

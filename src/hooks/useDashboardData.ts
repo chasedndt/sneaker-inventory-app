@@ -1,7 +1,9 @@
 // src/hooks/useDashboardData.ts
 import { useState, useEffect, useCallback } from 'react';
 import dayjs, { Dayjs } from 'dayjs';
-import { api, Item, useApi } from '../services/api';
+import { api, Item } from '../services/api';
+import { useAuthReady } from './useAuthReady'; // Assuming useAuthReady is in the same hooks folder
+// import { useAuth } from '../contexts/AuthContext'; // If useAuth is no longer needed for other properties
 import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
@@ -37,7 +39,7 @@ interface DashboardDataHook extends DashboardData {
  * Custom hook for fetching and filtering dashboard data
  */
 const useDashboardData = (): DashboardDataHook => {
-  const { isAuthenticated, loading: authLoading } = useApi();
+  const { authReady, currentUser } = useAuthReady();
   const settings = useSettings();
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -80,11 +82,11 @@ const useDashboardData = (): DashboardDataHook => {
 
   // Only fetch data after authentication is verified
   useEffect(() => {
-    if (isAuthenticated && !authLoading) {
+    if (authReady && currentUser) {
       fetchData();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, authLoading]);
+  }, [authReady, currentUser, fetchData]);
 
   // Filter data based on date range
   const getFilteredData = (startDate: Dayjs | null, endDate: Dayjs | null): FilteredData => {

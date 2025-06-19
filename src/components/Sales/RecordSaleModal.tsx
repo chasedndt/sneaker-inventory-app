@@ -32,7 +32,7 @@ import dayjs, { Dayjs } from 'dayjs';
 
 import { Item, api, useApi } from '../../services/api';
 import { salesApi } from '../../services/salesApi';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 
 interface RecordSaleModalProps {
   open: boolean;
@@ -71,8 +71,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   items
 }) => {
   const theme = useTheme();
-  const { currentUser, loading: authLoading } = useAuth();
-  const { isAuthenticated } = useApi();
+  const { authReady, currentUser } = useAuthReady();
   
   const [formData, setFormData] = useState<FormData>({
     itemId: 0,
@@ -210,7 +209,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   };
   
   const handleSubmit = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSubmitError('Authentication required. Please log in to record a sale.');
       return;
     }
@@ -259,7 +258,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   };
   
   // Show authentication message if not authenticated
-  if (!isAuthenticated && !authLoading) {
+  if (authReady && !currentUser) {
     return (
       <Dialog
         open={open}
@@ -280,7 +279,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   }
   
   // Show loading state while checking authentication
-  if (authLoading) {
+  if (!authReady) {
     return (
       <Dialog
         open={open}

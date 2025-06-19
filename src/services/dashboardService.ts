@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { api } from './api';
 import { salesApi } from './salesApi';
 import { expensesApi } from './expensesApi';
+import { getApiAuthToken } from './api'; // Import the new helper
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
@@ -66,16 +67,6 @@ export interface ComprehensiveMetrics {
 
 
 
-// Helper function to get auth token - retrieved from window global
-// This is set up in the api.ts file by the useApi hook
-const getAuthToken = async (): Promise<string | null> => {
-  if (window.getAuthToken) {
-    return window.getAuthToken();
-  }
-  return null;
-};
-
-
 export const dashboardService = {
   /**
    * Fetches dashboard data from the backend with authentication
@@ -98,7 +89,7 @@ export const dashboardService = {
       console.log('🚀 Fetching real dashboard data with authentication...');
       
       // Get auth token
-      const token = await getAuthToken();
+      const token = await getApiAuthToken(); // Use the imported helper
       if (!token) {
         throw new Error('Authentication required. Please log in to view dashboard data.');
       }
@@ -181,7 +172,7 @@ export const dashboardService = {
       console.log('🚀 Fetching comprehensive dashboard metrics with authentication...');
       
       // Get auth token
-      const token = await getAuthToken();
+      const token = await getApiAuthToken(); // Use the imported helper
       if (!token) {
         throw new Error('Authentication required. Please log in to view dashboard metrics.');
       }
@@ -239,7 +230,7 @@ export const dashboardService = {
   getDashboardData: async () => {
     try {
       // Ensure authentication
-      const token = await getAuthToken();
+      const token = await getApiAuthToken(); // Use the imported helper
       if (!token) {
         throw new Error('Authentication required. Please log in to view dashboard data.');
       }

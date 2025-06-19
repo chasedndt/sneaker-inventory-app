@@ -42,7 +42,7 @@ import { InventoryItem } from '../../pages/InventoryPage';
 import { api } from '../../services/api';
 import useFormat from '../../hooks/useFormat';
 import { useSettings } from '../../contexts/SettingsContext';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { useNavigate } from 'react-router-dom';
 
 interface Listing {
@@ -83,7 +83,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   const theme = useTheme();
   const { money } = useFormat();
   const { getCurrentCurrency } = useSettings();
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   const navigate = useNavigate();
   
   const [selectedItemIndex, setSelectedItemIndex] = useState<number>(0);
@@ -109,6 +109,11 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
   const checkAuthentication = async () => {
     setAuthCheckingInProgress(true);
     try {
+      if (!authReady) {
+        setError('Authentication process is not yet complete. Please wait a moment and try again.');
+        // Optional: Add a brief delay or a specific user action if this state is hit unexpectedly.
+        return false;
+      }
       if (!currentUser) {
         setError('Authentication required. Please log in to manage listings.');
         setTimeout(() => {

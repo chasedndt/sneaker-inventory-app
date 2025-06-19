@@ -15,7 +15,8 @@ import {
   AlertTitle,
   IconButton,
   CircularProgress,
-  useTheme
+  useTheme,
+  Tooltip // Added Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
@@ -34,13 +35,14 @@ import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
 import { expensesApi, API_BASE_URL } from '../services/expensesApi';
 import { Expense, ExpenseFilters as ExpenseFiltersType } from '../models/expenses';
-import { useAuth } from '../contexts/AuthContext'; // Import auth context
+import { useAuthReady } from '../hooks/useAuthReady';
 import { useApi } from '../services/api'; // Import useApi for authenticated API calls
 import { useSettings } from '../contexts/SettingsContext'; // Import useSettings
 
 const ExpensesPage: React.FC = () => {
   const theme = useTheme();
-  const { currentUser, loading: authLoading } = useAuth(); // Get auth state
+  const { currentUser, authReady } = useAuthReady(); // Get auth readiness and user
+  const accountTier = currentUser?.accountTier || 'Free'; // Derive accountTier
   const api = useApi(); // Get authenticated API methods
   const { currency: displayCurrency, convertCurrency, formatCurrency } = useSettings(); // Get currency settings
   
@@ -438,68 +440,82 @@ const ExpensesPage: React.FC = () => {
 
   // Effect to load expenses when component mounts or auth state changes
   const loadExpenses = useCallback(async () => {
-    if (authLoading || !currentUser) {
-      if (!authLoading && !currentUser) {
-        setSnackbar({
-          open: true,
-          message: 'Please log in to view your expenses',
-          severity: 'warning'
-        });
-      }
-      // Clear expenses if user logs out or auth is loading
+    // Wait for authentication to be ready
+    if (!authReady) {
+      setLoading(true); // Indicate loading while auth is resolving
+      // Clear data while waiting for auth state
       setExpenses([]);
       setFilteredExpenses([]);
       setExpenseSummary({
         totalAmount: 0,
         expenseCount: 0,
         expenseByType: {},
-        monthOverMonthChange: 0
+        monthOverMonthChange: 0,
       });
-      setLoading(false); // Ensure loading is false if we return early
+      return; // Exit if auth is not ready
+    }
+
+    // If auth is ready but there's no user, prompt to log in
+    if (!currentUser) {
+      setSnackbar({
+        open: true,
+        message: 'Please log in to view your expenses',
+        severity: 'warning',
+      });
+      setExpenses([]);
+      setFilteredExpenses([]);
+      setExpenseSummary({
+        totalAmount: 0,
+        expenseCount: 0,
+        expenseByType: {},
+        monthOverMonthChange: 0,
+      });
+      setLoading(false); // Not loading data because no user
       return;
     }
-    
+
+    // Auth is ready and user exists, proceed to load expenses
     try {
       setLoading(true);
       setError(null);
-      
+
       // Get expenses from API
-      const fetchedExpenses = await expensesApi.getExpenses(); // Renamed to avoid conflict with state
+      const fetchedExpenses = await expensesApi.getExpenses();
       setExpenses(fetchedExpenses);
       // Apply current filters to the newly fetched expenses
       const currentlyFiltered = applyFilters(fetchedExpenses, filters, convertCurrency);
       setFilteredExpenses(currentlyFiltered);
-      
+
       // Calculate expense summary from all fetched (unfiltered) expenses
       const totalAmount = fetchedExpenses.reduce((sum, expense) => {
-        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD'); // Convert to display currency
+        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD');
         return sum + convertedAmount;
       }, 0);
       const expenseCount = fetchedExpenses.length;
-      
+
       const expenseByType = fetchedExpenses.reduce((groups, expense) => {
         const type = expense.expenseType || 'Other';
-        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD'); // Convert to display currency
+        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD');
         groups[type] = (groups[type] || 0) + convertedAmount;
         return groups;
       }, {} as Record<string, number>);
-      
+
       const monthOverMonthChange = 5.2; // Mock calculation
-      
+
       setExpenseSummary({
         totalAmount,
         expenseCount,
         expenseByType,
-        monthOverMonthChange
+        monthOverMonthChange,
       });
-      
+
     } catch (error: any) {
       console.error('Failed to load expenses:', error);
       setError(error.message || 'Failed to load expenses');
     } finally {
       setLoading(false);
     }
-  }, [currentUser, authLoading, filters, convertCurrency, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Added convertCurrency and other setters
+  }, [currentUser, authReady, filters, convertCurrency, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Updated dependencies
 
   useEffect(() => {
     loadExpenses();
@@ -537,13 +553,18 @@ const ExpensesPage: React.FC = () => {
             >
               Import
             </Button>
-            <Button 
-              variant="outlined" 
-              startIcon={<FileDownloadIcon />} 
-              sx={{ mr: 1 }}
-            >
-              Export
-            </Button>
+            <Tooltip title={accountTier === 'Free' ? "Export feature available on Starter and Professional plans." : ""}>
+              <span> {/* Tooltip needs a span wrapper when child is disabled */} 
+                <Button 
+                  variant="outlined" 
+                  startIcon={<FileDownloadIcon />} 
+                  sx={{ mr: 1 }}
+                  disabled={accountTier === 'Free'}
+                >
+                  Export
+                </Button>
+              </span>
+            </Tooltip>
           </Box>
           <Box>
             {selectedExpenses.length > 0 && (
@@ -708,6 +729,7 @@ const ExpensesPage: React.FC = () => {
               {currentReceiptUrl.toLowerCase().endsWith('.pdf') ? (
                 <iframe 
                   src={currentReceiptUrl} 
+                  title="View Receipt PDF"
                   width="100%" 
                   height="100%" 
                   onError={handleReceiptLoadError}

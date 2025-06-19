@@ -1,5 +1,5 @@
 // src/components/ReportsSection.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Grid,
   Typography,
@@ -7,18 +7,31 @@ import {
   Button,
   useTheme,
   CircularProgress,
-  Alert
+  ClickAwayListener
 } from '@mui/material';
 import { Dayjs } from 'dayjs';
+import UpgradeOverlay from './common/UpgradeOverlay';
 import dayjs from 'dayjs';
 import { Item } from '../services/api';
 import { Sale } from '../services/salesApi';
 import { Expense } from '../models/expenses';
 import useFormat from '../hooks/useFormat';
 import { dashboardService, ComprehensiveMetrics } from '../services/dashboardService';
-import { User } from 'firebase/auth';
-import { useAuth } from '../contexts/AuthContext';
+
+import { AppUser } from '../contexts/AuthContext';
+import { useAuthReady } from '../hooks/useAuthReady';
 import MetricsCard from './MetricsCard';
+import { useRenderLog } from '../hooks/useRenderLog';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts';
 
 // Define the props for the ReportsSection component
 interface ReportsSectionProps {
@@ -27,304 +40,414 @@ interface ReportsSectionProps {
   expenses: Expense[];
   startDate: Dayjs | null;
   endDate: Dayjs | null;
-  currentUser: User | null;
+  currentUser: AppUser | null;
 }
 
-// Interface for metrics data
+// Interface for metrics data from the backend
 interface MetricsData {
-  inventoryMetrics: {
-    totalInventory: number;
-    unlistedItems: number;
-    listedItems: number;
-    totalInventoryCost: number;
-    totalShippingCost: number;
-    totalMarketValue: number;
-    potentialProfit: number;
-  };
-  salesMetrics: {
-    totalSales: number;
-    totalSalesRevenue: number;
-    totalPlatformFees: number;
-    totalSalesTax: number;
-    costOfGoodsSold: number;
-    grossProfit: number;
-    revenueChange: number;
-  };
-  expenseMetrics: {
-    totalExpenses: number;
-    expenseByType: Record<string, number>;
-    expenseChange: number;
-  };
-  profitMetrics: {
-    netProfitSold: number;
-    netProfitChange: number;
-    potentialProfit: number;
-    roiSold: number;
-    roiInventory: number;
-    overallRoi: number;
-    roiChange: number;
-  };
+  inventoryMetrics: { totalInventory: number; totalInventoryCost: number; potentialProfit: number; };
+  salesMetrics: { totalSales: number; totalSalesRevenue: number; revenueChange: number; };
+  expenseMetrics: { totalExpenses: number; expenseChange: number; };
+  profitMetrics: { netProfitSold: number; netProfitChange: number; roiSold: number; roiChange: number; };
+  dateMetrics: { date: string; sales: number; expenses: number; profit: number; }[];
 }
 
 // Main component definition
-const ReportsSection: React.FC<ReportsSectionProps> = ({
+export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSection({
   items,
   sales,
   expenses,
   startDate,
   endDate,
   currentUser: propCurrentUser
-}) => {
+}) {
   const theme = useTheme();
   const { money, percentFormat } = useFormat();
-  const { currentUser: ctxUser } = useAuth();
+  const { authReady, currentUser: authCurrentUserFromHook } = useAuthReady();
+  
+  // Hooks are all at the top
+  const currentUser = propCurrentUser ?? authCurrentUserFromHook;
+  const accountTier = currentUser?.accountTier || 'Free';
 
-  const currentUser = propCurrentUser ?? ctxUser;
-
-  // State for metrics data
   const [metricsData, setMetricsData] = useState<MetricsData | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isFetching, setIsFetching] = useState(false); 
+  const [showUpgradeBanner, setShowUpgradeBanner] = useState(false); // Local state for upgrade banner visibility
+  const [showSpinner, setShowSpinner] = useState(false); // UI indicator
+  const [metricsLoaded, setMetricsLoaded] = useState(false);
 
-  // Function to fetch comprehensive KPI metrics with authentication
-  const fetchMetricsData = async () => {
-    if (!currentUser) {
-      setError('Authentication required to fetch metrics data');
+  // Stabilize the date range using useState with a function initializer
+  const [range] = useState(() => ({
+    start: startDate ? dayjs(startDate).startOf('day').toISOString() : null,
+    end: endDate ? dayjs(endDate).endOf('day').toISOString() : null,
+  }));
+
+  useRenderLog('ReportsSection', {
+    authReady, isFetching, showSpinner, accountTier,
+    itemsCount: items.length, salesCount: sales.length, expensesCount: expenses.length,
+    startDate: startDate?.toISOString() ?? 'N/A', endDate: endDate?.toISOString() ?? 'N/A',
+  });
+
+  const hasFetchedRef = useRef(false);
+
+  const fetchMetricsData = useCallback(async () => {
+    if (isFetching) {
+      console.log('[ReportsSection] Fetch skipped: already fetching');
       return;
     }
-    setLoading(true);
-    setError(null);
+    
+    // Set loading states
+    setIsFetching(true);
+    setShowSpinner(true);
+    console.log('[ReportsSection] Fetching metrics data...');
+    
     try {
-      const apiStartDate = startDate ? startDate.toDate() : undefined;
-      const apiEndDate = endDate ? endDate.toDate() : undefined;
-      const data = await dashboardService.fetchDashboardMetrics(apiStartDate, apiEndDate);
-      setMetricsData(data as unknown as MetricsData);
-      console.log('📊 Fetched comprehensive dashboard metrics:', data);
+      const data = await dashboardService.fetchDashboardMetrics(
+        range.start ? new Date(range.start) : undefined, 
+        range.end ? new Date(range.end) : undefined
+      );
+      
+      // Stringified comparison to avoid reference-based re-renders
+      const existingDataString = JSON.stringify(metricsData);
+      const newDataString = JSON.stringify(data);
+      
+      if (existingDataString !== newDataString) {
+        console.log('[ReportsSection] Metrics data changed - updating state', {
+          oldSalesTotal: metricsData?.salesMetrics?.totalSales || 0,
+          newSalesTotal: data?.salesMetrics?.totalSales || 0
+        });
+        setMetricsData(data as unknown as MetricsData);
+        setMetricsLoaded(true);
+      } else {
+        console.log('[ReportsSection] Metrics data unchanged - skipping update');
+      }
+      
+      hasFetchedRef.current = true;
     } catch (err: any) {
-      console.error('💥 Error fetching dashboard KPI metrics:', err);
-      setError(`Failed to load metrics: ${err.message}`);
+      console.error('[ReportsSection] Error fetching dashboard metrics:', err);
     } finally {
-      setLoading(false);
+      setIsFetching(false);
+      setShowSpinner(false);
     }
-  };
+  }, [range.start, range.end]); // Removed currentUser and isFetching from dependencies to prevent loops
 
-  // Fetch metrics when dates or user changes
   useEffect(() => {
-    if (currentUser) {
+    if (authReady) {
+      console.log('🚀 Fetching metrics with dependencies:', { authReady, startDate: startDate?.toISOString(), endDate: endDate?.toISOString() });
       fetchMetricsData();
+    } else {
+      console.log('⏳ Waiting for auth to be ready...');
     }
-  }, [startDate, endDate, currentUser]);
+  }, [authReady, fetchMetricsData]);
 
-  if (!currentUser) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Alert severity="warning">
-          Please log in to view your metrics and reports.
-        </Alert>
-      </Box>
-    );
-  }
+  useEffect(() => {
+    console.log('[ReportsSection] Props updated:', { metricsLoaded });
+  }, [metricsLoaded]);
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">
-          {error}
-          <Button onClick={fetchMetricsData} sx={{ ml: 2 }} size="small" variant="outlined">
-            Retry
-          </Button>
-        </Alert>
-      </Box>
-    );
-  }
-
-  if (!metricsData) {
-    return (
-      <Box sx={{ p: 3, textAlign: 'center' }}>
-        <Typography variant="h6" color="text.secondary">
-          No metrics data available.
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Try adjusting the date filters or ensure data has been recorded.
-        </Typography>
-        <Button 
-          variant="outlined" 
-          onClick={() => fetchMetricsData()}
-          sx={{ mt: 2 }}
-        >
-          Fetch Data
-        </Button>
-      </Box>
-    );
-  }
-
-  // KPI Definitions based on user input
-  const kpiNetProfit = metricsData.inventoryMetrics?.potentialProfit || 0;
-  const kpiSalesIncome = metricsData.salesMetrics?.totalSalesRevenue || 0;
-  const kpiItemSpend = 0; // Placeholder - Needs backend data for 'spend in period'
-  // Format ROI percentage to 2 decimal places
-  const kpiROIPercentage = Number((metricsData.profitMetrics?.roiSold || 0).toFixed(2));
-  const kpiExpenseSpend = metricsData.expenseMetrics?.totalExpenses || 0;
-  // Placeholder for 'Items Purchased (in period)' - using total inventory count for now
-  const kpiItemsPurchased = metricsData.inventoryMetrics?.totalInventory || 0; 
-  const kpiItemsSold = metricsData.salesMetrics?.totalSales || 0;
-  // Calculate realized profit directly from filtered sales and expenses data
-  // Filter sales by date range if specified
-  const filteredSales = startDate && endDate ? sales.filter(sale => {
-    const saleDate = new Date(sale.saleDate);
-    return saleDate >= startDate.toDate() && saleDate <= endDate.toDate();
-  }) : sales;
-  
-  // Filter expenses by date range if specified
-  const filteredExpenses = startDate && endDate ? expenses.filter(expense => {
-    const expenseDate = new Date(expense.expenseDate);
-    return expenseDate >= startDate.toDate() && expenseDate <= endDate.toDate();
-  }) : expenses;
-  
-  // Calculate total PROFIT from sales (not just revenue)
-  // This means: Sale Price - Purchase Price - Platform Fees - Shipping
-  const actualSalesProfit = filteredSales.reduce((total, sale) => {
-    // Get the purchase price of the item (cost of goods sold)
-    const purchasePrice = sale.purchasePrice || 0;
-    // Get the sale price
-    const salePrice = sale.salePrice || 0;
-    // Get platform fees
-    const platformFees = sale.platformFees || 0;
-    // Get shipping costs if available (property is shippingPrice in the Sale interface)
-    const shippingCost = sale.shippingPrice || 0;
-    // Calculate profit for this sale
-    const saleProfit = salePrice - purchasePrice - platformFees - shippingCost;
+  const filteredData = useMemo(() => {
+    const filterByDate = (date: string | Date) => {
+      const d = dayjs(date);
+      const start = startDate ? dayjs(startDate).startOf('day') : null;
+      const end = endDate ? dayjs(endDate).endOf('day') : null;
+      const isAfterStart = start ? d.isAfter(start) : true;
+      const isBeforeEnd = end ? d.isBefore(end) : true;
+      return isAfterStart && isBeforeEnd;
+    };
     
-    console.log(`Sale ID: ${sale.id}, Sale price: $${salePrice}, Purchase price: $${purchasePrice}, Platform fees: $${platformFees}, Shipping: $${shippingCost}, Profit: $${saleProfit}`);
+    return {
+      filteredSales: sales.filter(sale => filterByDate(sale.saleDate)),
+      filteredExpenses: expenses.filter(expense => filterByDate(expense.expenseDate)),
+    };
+  }, [sales, expenses, startDate, endDate]);
+
+  const calculatedValues = useMemo(() => {
+    const { filteredSales, filteredExpenses } = filteredData;
+    const actualSalesProfit = filteredSales.reduce((total, sale) => total + (sale.salePrice - (sale.purchasePrice || 0) - (sale.platformFees || 0) - (sale.shippingPrice || 0)), 0);
+    const actualExpensesTotal = filteredExpenses.reduce((total, expense) => total + (expense.amount || 0), 0);
+    const kpiRealizedProfitExpenses = actualSalesProfit - actualExpensesTotal;
+    return { actualSalesProfit, actualExpensesTotal, kpiRealizedProfitExpenses };
+  }, [filteredData]);
+
+  const changeValues = useMemo(() => ({
+    changeNetProfit: metricsData?.profitMetrics?.netProfitChange || 0,
+    changeSalesIncome: metricsData?.salesMetrics?.revenueChange || 0,
+    changeItemSpend: 0, // Placeholder
+    changeROIPercentage: metricsData?.profitMetrics?.roiChange || 0,
+    changeExpenseSpend: metricsData?.expenseMetrics?.expenseChange || 0,
+    changeItemsPurchased: 0, // Placeholder
+    changeItemsSold: 0, // Placeholder
+    changeRealizedProfitExpenses: 0, // Placeholder
+  }), [metricsData]);
+
+  const memoizedMetrics = useMemo(() => {
+    return {
+      netProfit: metricsData?.profitMetrics?.netProfitSold || 0,
+      salesIncome: metricsData?.salesMetrics?.totalSalesRevenue || 0,
+      itemSpend: metricsData?.inventoryMetrics?.totalInventoryCost || 0,
+      roiPercentage: metricsData?.profitMetrics?.roiSold || 0,
+      expenseSpend: metricsData?.expenseMetrics?.totalExpenses || 0,
+      itemsPurchased: metricsData?.inventoryMetrics?.totalInventory || 0,
+      itemsSold: metricsData?.salesMetrics?.totalSales || 0,
+      realizedProfitExpenses: (metricsData?.salesMetrics?.totalSalesRevenue || 0) - 
+                              (metricsData?.expenseMetrics?.totalExpenses || 0)
+    };
+  }, [
+    metricsData?.profitMetrics?.netProfitSold,
+    metricsData?.salesMetrics?.totalSalesRevenue,
+    metricsData?.inventoryMetrics?.totalInventoryCost,
+    metricsData?.profitMetrics?.roiSold,
+    metricsData?.expenseMetrics?.totalExpenses,
+    metricsData?.inventoryMetrics?.totalInventory,
+    metricsData?.salesMetrics?.totalSales
+  ]);
+
+  const kpiValues = useMemo(() => ({
+    kpiNetProfit: memoizedMetrics.netProfit,
+    kpiSalesIncome: memoizedMetrics.salesIncome,
+    kpiItemSpend: memoizedMetrics.itemSpend,
+    kpiROIPercentage: memoizedMetrics.roiPercentage,
+    kpiExpenseSpend: memoizedMetrics.expenseSpend,
+    kpiItemsPurchased: memoizedMetrics.itemsPurchased,
+    kpiItemsSold: memoizedMetrics.itemsSold,
+    kpiRealizedProfitExpenses: memoizedMetrics.realizedProfitExpenses
+  }), [memoizedMetrics]);
+
+  const isFeatureLocked = useMemo(() => ({
+    isROIPercentageLocked: accountTier === 'Free',
+    isItemsSoldLocked: false, // Items Sold should not be locked for any tier
+    isRealizedProfitExpensesLocked: accountTier === 'Free',
+  }), [accountTier]);
+  
+  const metricsCardProps = useMemo(() => ({
+    netProfit: {
+      title: <>Net Profit <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Unsold)</Typography></>,
+      value: kpiValues.kpiNetProfit,
+      change: changeValues.changeNetProfit,
+      data: [],
+      tooltipText: "Potential profit from current unlisted and listed inventory (Market Price - Purchase Price).",
+      useFormatter: true
+    },
+    salesIncome: {
+      title: "Sales Income",
+      value: kpiValues.kpiSalesIncome,
+      change: changeValues.changeSalesIncome,
+      data: [],
+      tooltipText: "Total revenue from sales in the selected period.",
+      useFormatter: true
+    },
+    itemSpend: {
+      title: <>Item Spend <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>,
+      value: kpiValues.kpiItemSpend,
+      change: changeValues.changeItemSpend,
+      data: [],
+      tooltipText: "Total cost of items acquired/purchased by the user within the selected period. (Data pending backend update)",
+      useFormatter: true
+    },
+    roiPercentage: {
+      title: <>ROI Percentage <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Sold)</Typography></>,
+      value: kpiValues.kpiROIPercentage,
+      change: changeValues.changeROIPercentage,
+      data: [],
+      suffix: "%",
+      tooltipText: "Return on Investment for items sold in the selected period.",
+      useFormatter: false,
+      isLocked: isFeatureLocked.isROIPercentageLocked
+    },
+    expenseSpend: {
+      title: <>Expense Spend <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>,
+      value: kpiValues.kpiExpenseSpend,
+      change: changeValues.changeExpenseSpend,
+      data: [],
+      tooltipText: "Total business expenses logged within the selected period.",
+      useFormatter: true
+    },
+    itemsPurchased: {
+      title: <>Items Purchased <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>,
+      value: kpiValues.kpiItemsPurchased,
+      change: changeValues.changeItemsPurchased,
+      data: [],
+      tooltipText: "Count of new items acquired by the user within the selected period. (Data pending backend update - currently shows total inventory)",
+      useFormatter: false
+    },
+    itemsSold: {
+      title: <>Items Sold <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>,
+      value: kpiValues.kpiItemsSold,
+      change: changeValues.changeItemsSold,
+      data: [],
+      tooltipText: "Count of items sold within the selected period.",
+      useFormatter: false,
+      isLocked: isFeatureLocked.isItemsSoldLocked
+    },
+    realizedProfitExpenses: {
+      title: "Realized Profit - Expenses",
+      value: kpiValues.kpiRealizedProfitExpenses,
+      change: changeValues.changeRealizedProfitExpenses,
+      data: [],
+      tooltipText: "(Sales Revenue - COGS - Platform Fees) - General Business Expenses for the selected period.",
+      useFormatter: true,
+      isLocked: isFeatureLocked.isRealizedProfitExpensesLocked
+    }
+  }), [kpiValues, changeValues, isFeatureLocked]);
+  
+  const tooltipFormatter = useCallback((value: number) => {
+    return `$${value.toFixed(2)}`;
+  }, []);
+
+  const chartProps = useMemo(() => ({
+    margin: { top: 10, right: 30, left: 0, bottom: 0 },
+    tickFormatter: (value: number) => `$${value}`,
+  }), []);
+
+  const chartData = useMemo(() => {
+    console.log('[ReportsSection] Deriving chartData from metricsData');
+    // Use dateMetrics which is an array
+    if (!metricsData || !metricsData.dateMetrics) {
+      return [];
+    }
+    // Make a stable reference of chart data
+    return metricsData.dateMetrics.map(item => ({
+      date: item.date || 'Unknown',
+      sales: Math.round(item.sales || 0),  // Round to ensure stable values
+      expenses: Math.round(item.expenses || 0),
+      profit: Math.round(item.profit || 0),
+    }));
+  }, [metricsData?.dateMetrics]);
+
+  const prevChartDataRef = useRef(chartData);
+  useEffect(() => {
+    const isEqual = JSON.stringify(prevChartDataRef.current) === JSON.stringify(chartData);
+    if (!isEqual) {
+      console.log('[ReportsSection] Chart data changed (deep comparison):', { prev: prevChartDataRef.current, current: chartData });
+      prevChartDataRef.current = chartData;
+    } else {
+      console.log('[ReportsSection] Chart data stable (deep comparison), no change detected');
+    }
+  }, [chartData]);
+
+  // Memoize the chart JSX content itself
+  const chartContent = useMemo(() => {
+    console.log('[ReportsSection] Chart content memoized');
+    // Ensure chartData is an array before checking its length
+    if (!Array.isArray(chartData) || chartData.length === 0) {
+      // Render an empty placeholder box to avoid Recharts' default "No data available" message
+      return <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }} />;
+    }
+    return (
+      <LineChart data={chartData} margin={chartProps.margin}>
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="date" />
+        <YAxis tickFormatter={chartProps.tickFormatter} />
+        <Tooltip formatter={tooltipFormatter} />
+        <Legend />
+        <Line type="monotone" dataKey="sales" stroke={theme.palette.primary.main} activeDot={{ r: 8 }} name="Sales" />
+        <Line type="monotone" dataKey="profit" stroke={theme.palette.success.main} name="Profit" />
+        <Line type="monotone" dataKey="expenses" stroke={theme.palette.error.main} name="Expenses" />
+      </LineChart>
+    );
+  }, [chartData, chartProps, tooltipFormatter, theme]);
+
+  useEffect(() => {
+    if (!authReady || isFetching) {
+      console.log('[ReportsSection] Fetch skipped: auth not ready or already fetching');
+      return;
+    }
     
-    return total + saleProfit;
-  }, 0);
-  
-  // Calculate total expenses from filtered expenses
-  const actualExpensesTotal = filteredExpenses.reduce((total, expense) => {
-    console.log(`Expense: ${expense.expenseType}, Amount: $${expense.amount}`);
-    return total + (expense.amount || 0);
-  }, 0);
-  
-  // Calculate realized profit (actual profit from sales - expenses)
-  const kpiRealizedProfitExpenses = actualSalesProfit - actualExpensesTotal;
-  
-  console.log('-------- DETAILED CALCULATION BREAKDOWN --------');
-  console.log('Date range:', startDate?.format('MM/DD/YYYY') || 'all', 'to', endDate?.format('MM/DD/YYYY') || 'all');
-  console.log('Filtered sales count:', filteredSales.length);
-  console.log('Filtered expenses count:', filteredExpenses.length);
-  console.log('TOTAL SALES REVENUE:', filteredSales.reduce((t, s) => t + (s.salePrice || 0), 0));
-  console.log('COST OF GOODS SOLD:', filteredSales.reduce((t, s) => t + (s.purchasePrice || 0), 0));
-  console.log('PLATFORM FEES:', filteredSales.reduce((t, s) => t + (s.platformFees || 0), 0));
-  console.log('SHIPPING COSTS:', filteredSales.reduce((t, s) => t + (s.shippingPrice || 0), 0));
-  console.log('ACTUAL SALES PROFIT:', actualSalesProfit);
-  console.log('ACTUAL EXPENSES TOTAL:', actualExpensesTotal);
-  console.log('REALIZED PROFIT CALCULATION:', actualSalesProfit, '-', actualExpensesTotal, '=', kpiRealizedProfitExpenses);
-  console.log('-------- END CALCULATION BREAKDOWN --------');
+    if (hasFetchedRef.current) {
+      console.log('[ReportsSection] Fetch skipped: already fetched with current range');
+      return;
+    }
+    
+    console.log('🚀 Fetching metrics with dependencies:', { authReady, range });
+    fetchMetricsData();
+  }, [authReady, fetchMetricsData]);
 
-  // Change data (placeholders where specific change not available)
-  const changeNetProfit = metricsData.profitMetrics?.netProfitChange || 0; // This is for sold profit, might not align with potential inventory profit
-  const changeSalesIncome = metricsData.salesMetrics?.revenueChange || 0;
-  const changeItemSpend = 0; // Placeholder
-  const changeROIPercentage = metricsData.profitMetrics?.roiChange || 0;
-  const changeExpenseSpend = metricsData.expenseMetrics?.expenseChange || 0;
-  const changeItemsPurchased = 0; // Placeholder
-  const changeItemsSold = 0; // Placeholder
-  const changeRealizedProfitExpenses = 0; // Placeholder
+  // Monitor key dependency changes that might cause fetch loops
+  useEffect(() => {
+    console.log('[ReportsSection] isFetching changed:', isFetching, 'current fetch status');
+  }, [isFetching]);
+  
+  useEffect(() => {
+    console.log('[ReportsSection] Range or user changed:', { range, currentUserUid: currentUser?.uid });
+  }, [range, currentUser?.uid]);
+  
+  // Add ref to track render count and identify potential loops
+  const renderCountRef = useRef(0);
+  useEffect(() => {
+    renderCountRef.current++;
+    console.log(`[ReportsSection] Component rendered ${renderCountRef.current} times`);
+  });
 
+  // Log detailed calculations only once per render
+  useEffect(() => {
+    // Log expense details
+    filteredData.filteredExpenses.forEach(expense => {
+      console.log(`Expense: ${expense.expenseType}, Amount: $${expense.amount}`);
+    });
+    
+    console.log('-------- DETAILED CALCULATION BREAKDOWN --------');
+    console.log('Date range:', startDate?.format('MM/DD/YYYY') || 'all', 'to', endDate?.format('MM/DD/YYYY') || 'all');
+    console.log('Filtered sales count:', filteredData.filteredSales.length);
+    console.log('Filtered expenses count:', filteredData.filteredExpenses.length);
+    console.log('TOTAL SALES REVENUE:', filteredData.filteredSales.reduce((t, s) => t + (s.salePrice || 0), 0));
+    console.log('COST OF GOODS SOLD:', filteredData.filteredSales.reduce((t, s) => t + (s.purchasePrice || 0), 0));
+    console.log('PLATFORM FEES:', filteredData.filteredSales.reduce((t, s) => t + (s.platformFees || 0), 0));
+    console.log('SHIPPING COSTS:', filteredData.filteredSales.reduce((t, s) => t + (s.shippingPrice || 0), 0));
+    console.log('ACTUAL SALES PROFIT:', calculatedValues.actualSalesProfit);
+    console.log('ACTUAL EXPENSES TOTAL:', calculatedValues.actualExpensesTotal);
+    console.log('REALIZED PROFIT CALCULATION:', calculatedValues.actualSalesProfit, '-', calculatedValues.actualExpensesTotal, '=', kpiValues.kpiRealizedProfitExpenses);
+    console.log('-------- END CALCULATION BREAKDOWN --------');
+  }, [filteredData, calculatedValues, kpiValues, startDate, endDate]);
+
+  
   return (
-    <Box sx={{ width: '100%', p: 0, m: 0 }}> 
-      <Grid container spacing={1.5}> 
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>Net Profit <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Unsold)</Typography></>}
-            value={kpiNetProfit}
-            change={changeNetProfit} 
-            data={[]}
-            tooltipText="Potential profit from current unlisted and listed inventory (Market Price - Purchase Price)."
-            useFormatter={true}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Sales Income" // No suffix needed here
-            value={kpiSalesIncome}
-            change={changeSalesIncome}
-            data={[]}
-            tooltipText="Total revenue from sales in the selected period."
-            useFormatter={true}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>Item Spend <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>}
-            value={kpiItemSpend} // Placeholder
-            change={changeItemSpend} // Placeholder
-            data={[]}
-            tooltipText="Total cost of items acquired/purchased by the user within the selected period. (Data pending backend update)"
-            useFormatter={true}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>ROI Percentage <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Sold)</Typography></>}
-            value={kpiROIPercentage}
-            change={changeROIPercentage}
-            data={[]}
-            suffix="%"
-            tooltipText="Return on Investment for items sold in the selected period."
-            useFormatter={false} // Percentage, not currency
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>Expense Spend <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>}
-            value={kpiExpenseSpend}
-            change={changeExpenseSpend}
-            data={[]}
-            tooltipText="Total business expenses logged within the selected period."
-            useFormatter={true}
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>Items Purchased <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>}
-            value={kpiItemsPurchased} // Placeholder (currently total inventory count)
-            change={changeItemsPurchased} // Placeholder
-            data={[]}
-            tooltipText="Count of new items acquired by the user within the selected period. (Data pending backend update - currently shows total inventory)"
-            useFormatter={false} // Count, not currency
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title={<>Items Sold <Typography component="span" variant="caption" sx={{ color: 'text.secondary', fontWeight: 'normal' }}>(Period)</Typography></>}
-            value={kpiItemsSold}
-            change={changeItemsSold} // Placeholder
-            data={[]}
-            tooltipText="Count of items sold within the selected period."
-            useFormatter={false} // Count, not currency
-          />
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <MetricsCard
-            title="Realized Profit - Expenses" // No suffix needed here
-            value={kpiRealizedProfitExpenses}
-            change={changeRealizedProfitExpenses} // Placeholder
-            data={[]}
-            tooltipText="(Sales Revenue - COGS - Platform Fees) - General Business Expenses for the selected period."
-            useFormatter={true}
-          />
-        </Grid>
-      </Grid>
+    <Box sx={{ width: '100%', p: 0, m: 0, overflow: 'visible' }}>
+      {showSpinner && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
+          <CircularProgress />
+        </Box>
+      )}
+      {/* --- KPI Metrics Section --- */}
+      {!showSpinner && metricsLoaded && metricsData && (
+        <>
+          {/* Premium Upgrade Banner (conditional, not static) */}
+          {showUpgradeBanner && (
+            <ClickAwayListener onClickAway={() => setShowUpgradeBanner(false)}>
+              <div>
+                <UpgradeOverlay text="Upgrade to unlock full analytics and see all your KPI details!" />
+              </div>
+            </ClickAwayListener>
+          )}
+          
+          {/* KPI Metrics Cards */}
+          <Grid container spacing={1.5} sx={{ width: '100%', m: 0, overflowY: 'visible', overflowX: 'visible' }}>
+            {Object.entries(metricsCardProps).map(([key, props]) => (
+              <Grid item xs={12} sm={6} md={3} key={key}>
+                <div
+                  onClick={() => {
+                    if ('isLocked' in props && props.isLocked) {
+                      setShowUpgradeBanner(true);
+                    }
+                  }}
+                  style={{
+                    height: '100%',
+                    cursor: ('isLocked' in props && props.isLocked) ? 'pointer' : 'default',
+                    filter: (showUpgradeBanner && 'isLocked' in props && props.isLocked) ? 'blur(3px)' : 'none',
+                    transition: 'filter 0.3s ease-in-out'
+                  }}
+                >
+                  <MetricsCard {...props} />
+                </div>
+              </Grid>
+            ))}
+          </Grid>
+          
+          {/* Chart Section */}
+          <Box sx={{ width: '100%', mb: 2 }}>
+            <ResponsiveContainer minHeight={300}>
+              {chartContent}
+            </ResponsiveContainer>
+          </Box>
+        </>
+      )}
     </Box>
   );
 };

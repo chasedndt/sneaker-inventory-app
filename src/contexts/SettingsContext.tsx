@@ -1,11 +1,10 @@
 // src/contexts/SettingsContext.tsx
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { 
   currencyConverter, 
   fetchExchangeRates, 
   storeExchangeRates, 
-  getStoredExchangeRates,
-  formatCurrencyWithSymbol
+  getStoredExchangeRates
 } from '../utils/currencyUtils';
 import { formatDate as formatDateUtil } from '../utils/dateUtils';
 import { useAuth } from './AuthContext';
@@ -126,49 +125,46 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   }, [settings, userSettingsKey]);
 
   // Toggle dark mode
-  const toggleDarkMode = () => {
-    setSettings(prev => ({
-      ...prev,
-      darkMode: !prev.darkMode,
+  const toggleDarkMode = useCallback(() => {
+    setSettings(prevSettings => ({
+      ...prevSettings,
+      darkMode: !prevSettings.darkMode,
     }));
     console.log("Dark mode toggled, new value:", !darkMode);
-  };
+  }, [darkMode]);
 
   // Set currency with enhanced logging and persistence
-  const setCurrency = (newCurrency: string) => {
-    if (newCurrency === settings.currency) {
-      console.log("Currency unchanged, already set to:", newCurrency);
-      return; // No change needed
-    }
-    
-    setSettings(prev => ({
-      ...prev,
-      currency: newCurrency,
-    }));
-    
-    // Force refresh exchange rates when currency changes
-    refreshExchangeRates()
-      .then(success => {
-        if (success) {
-          console.log("Exchange rates refreshed after currency change");
+  const setCurrency = useCallback((newCurrency: string) => {
+    console.log(`[SettingsContext] Attempting to set currency to: ${newCurrency}`);
+    setSettings(prevSettings => {
+      if (newCurrency !== prevSettings.currency) {
+        const updatedSettings = { ...prevSettings, currency: newCurrency };
+        console.log('[SettingsContext] Currency updated in state:', updatedSettings);
+        // Persist immediately after state update
+        try {
+          localStorage.setItem(userSettingsKey, JSON.stringify(updatedSettings));
+          console.log('[SettingsContext] Currency settings persisted to localStorage.');
+        } catch (error) {
+          console.error('[SettingsContext] Error persisting currency settings:', error);
         }
-      })
-      .catch(err => console.error("Failed to refresh rates after currency change:", err));
-    
-    console.log("Currency changed to:", newCurrency);
-  };
+        return updatedSettings;
+      }
+      console.log(`[SettingsContext] Currency is already ${newCurrency}, no update needed.`);
+      return prevSettings;
+    });
+  }, [userSettingsKey]);
 
   // Set date format
-  const setDateFormat = (newFormat: string) => {
+  const setDateFormat = useCallback((newFormat: string) => {
     setSettings(prev => ({
       ...prev,
       dateFormat: newFormat,
     }));
     console.log("Date format changed to:", newFormat);
-  };
+  }, []);
 
   // Refresh exchange rates manually
-  const refreshExchangeRates = async (): Promise<boolean> => {
+  const refreshExchangeRates = useCallback(async (): Promise<boolean> => {
     try {
       const freshRates = await fetchExchangeRates();
       setExchangeRates(freshRates);
@@ -177,65 +173,68 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       console.log('Manually refreshed exchange rates');
       return true;
     } catch (error) {
-      console.error('Failed to refresh exchange rates:', error);
+      console.error('Failed to manually refresh exchange rates:', error);
       return false;
     }
-  };
+  }, []);
 
   // Format date according to selected format
-  const formatDate = (date: Date | string): string => {
+  const formatDate = useCallback((date: Date | string): string => {
     return formatDateUtil(date, dateFormat);
-  };
+  }, [dateFormat]);
 
   // Get the current currency symbol with robust error handling
-  const getCurrentCurrency = (): string => {
-    // Create a mapping of currency codes to their symbols
-    const currencySymbols: Record<string, string> = {
-      'USD': '$',
-      'EUR': '€',
-      'GBP': '£',
-      'JPY': '¥',
-      'CAD': 'C$',
-      'AUD': 'A$',
-      'CNY': '¥',
-      'INR': '₹',
-      'CHF': 'Fr',
-      'SEK': 'kr',
-      'NZD': 'NZ$',
-      'KRW': '₩',
-      'SGD': 'S$',
-      'HKD': 'HK$',
-    };
-    
-    // Check if the currency is in our known list
-    if (currency in currencySymbols) {
-      return currencySymbols[currency];
+  const getCurrentCurrency = useCallback((): string => {
+    // Only log in debug mode to reduce console noise
+    const isDebugMode = false; // Set to true only when actively debugging
+
+    if (isDebugMode) {
+      console.log(`[SettingsContext] getCurrentCurrency called. Current currency setting: ${currency}`);
     }
-    
-    // If we don't recognize the currency, try to get it from Intl API
+
+    if (!currency) {
+      if (isDebugMode) {
+        console.warn('[SettingsContext] Currency is not set, defaulting to USD symbol ($).');
+      }
+      return '$'; // Default to USD symbol if currency is not set
+    }
+
     try {
-      // This uses the browser's Intl API to format a currency symbol
-      const formatted = new Intl.NumberFormat('en', { 
-        style: 'currency', 
+      // Use Intl.NumberFormat to get the currency symbol
+      // This is a more robust way to get symbols for various currencies
+      const formatter = new Intl.NumberFormat(undefined, { // Use undefined locale to let browser decide
+        style: 'currency',
         currency: currency,
-        currencyDisplay: 'symbol' 
-      }).format(0);
+        minimumFractionDigits: 0, // We only need the symbol
+        maximumFractionDigits: 0
+      });
       
-      // Extract just the symbol part (remove the zeros/digits)
-      const symbol = formatted.replace(/[0-9.,\s]/g, '');
+      // Extract the symbol part. This is a bit hacky but generally works.
+      const parts = formatter.formatToParts(0);
+      const symbolPart = parts.find(part => part.type === 'currency');
       
-      if (symbol) return symbol;
+      if (symbolPart) {
+        if (isDebugMode) {
+          console.log(`[SettingsContext] Resolved currency symbol: ${symbolPart.value} for ${currency}`);
+        }
+        return symbolPart.value;
+      } else {
+        if (isDebugMode) {
+          console.warn(`[SettingsContext] Could not resolve symbol for ${currency} using Intl, returning currency code.`);
+        }
+        return currency; // Fallback to currency code if symbol not found
+      }
     } catch (error) {
-      console.error(`Error getting symbol for currency ${currency}:`, error);
+      if (isDebugMode) {
+        console.error(`[SettingsContext] Error getting currency symbol for ${currency}:`, error);
+      }
+      // Fallback for unsupported currencies or errors
+      return currency; // Return the currency code as a fallback
     }
-    
-    // Default fallback to USD if everything else fails
-    console.warn(`Using fallback $ symbol for unknown currency: ${currency}`);
-    return '$';
-  };
+  }, [currency]);
 
   // Convert currency using the latest exchange rates with minimal logging
-  const convertCurrency = (amount: number, fromCurrency: string = 'USD'): number => {
+  const convertCurrency = useCallback((amount: number, fromCurrency: string = 'USD'): number => {
     // Only log important conversions to reduce noise
     const isSignificantAmount = amount > 100 || Math.abs(amount) > 100;
     const isDebugMode = false; // Set to true only when actively debugging currency issues
@@ -291,10 +290,10 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       console.log(`💱 [CURRENCY CONVERSION] Fallback conversion: ${amount} ${fromCurrency} = ${result} ${currency}`);
     }
     return result;
-  };
+  }, [currency, exchangeRates]);
 
   // Format currency according to selected currency with improved error handling and locale support
-  const formatCurrency = (amount: number, fromCurrency?: string): string => {
+  const formatCurrency = useCallback((amount: number, fromCurrency?: string): string => {
     if (isNaN(amount)) {
       console.warn('Invalid amount provided to formatCurrency');
       amount = 0;
@@ -345,15 +344,15 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
       // Fallback to a basic formatting with the current currency symbol
       return `${getCurrentCurrency()}${amount.toFixed(2)}`;
     }
-  };
+  }, [currency, convertCurrency, getCurrentCurrency]);
 
   // Save all settings at once (for use in settings page)
-  const saveSettings = (newSettings: Settings) => {
+  const saveSettings = useCallback((newSettings: Settings) => {
     setSettings(newSettings);
-  };
+  }, []);
 
-  // Create value object for the context
-  const value: SettingsContextType = {
+  // Create value object for the context, memoized to prevent unnecessary re-renders
+  const value = useMemo(() => ({
     darkMode,
     toggleDarkMode,
     currency,
@@ -368,7 +367,22 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     refreshExchangeRates,
     exchangeRates,
     lastRatesUpdate,
-  };
+  }), [
+    darkMode,
+    toggleDarkMode,
+    currency,
+    setCurrency,
+    dateFormat,
+    setDateFormat,
+    formatDate,
+    formatCurrency,
+    getCurrentCurrency,
+    convertCurrency,
+    saveSettings,
+    refreshExchangeRates,
+    exchangeRates,
+    lastRatesUpdate,
+  ]);
 
   return (
     <SettingsContext.Provider value={value}>

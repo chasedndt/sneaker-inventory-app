@@ -1,8 +1,44 @@
 // src/services/api.ts
 import { CategoryType } from '../components/AddItem/SizesQuantityForm';
 import { getImageUrl, safeImageUrl } from '../utils/imageUtils';
-import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { authReadyPromise as authContextAuthReadyPromise } from '../contexts/AuthContext'; // Renamed to avoid conflict
+
+// Module-level variable to store the getAuthToken function.
+// It's initialized to a function that throws an error, indicating it hasn't been properly set yet.
+let _getAuthToken: () => Promise<string | null> = async () => {
+  console.error('[api.ts] Auth token getter not initialized. Call setAuthTokenGetter.');
+  throw new Error('Auth getter not initialised');
+};
+let _authReadyPromise: Promise<void> | null = null;
+
+// Function to allow AuthContext to supply the token getter.
+export const setAuthTokenGetter = (fn: () => Promise<string | null>) => {
+  console.log('[api.ts] Setting/updating auth token getter.');
+  _getAuthToken = fn;
+};
+
+// Function to initialize the API service with the auth ready promise.
+// The authTokenGetter is now supplied via setAuthTokenGetter.
+export const initializeApi = (authReadyPromiseInstance: Promise<void>) => {
+  if (_authReadyPromise) {
+    console.warn('🔑 API service authReadyPromise already initialized. Skipping re-initialization of promise.');
+  } else {
+    _authReadyPromise = authReadyPromiseInstance; // Store the auth ready promise
+    console.log('🔑 API service initialized with auth ready promise.');
+  }
+  // _getAuthToken is no longer set here; it's set via setAuthTokenGetter
+};
+
+// Exported helper to safely access the initialized _getAuthToken
+export const getApiAuthToken = async (): Promise<string | null> => {
+  if (!_authReadyPromise) {
+    console.error('[api.ts] Auth promise missing in getApiAuthToken. Initialize API service first.');
+    throw new Error('Auth promise missing');
+  }
+  await _authReadyPromise;
+  return _getAuthToken();
+};
 
 // Add global type definitions for our cache and settings
 declare global {
@@ -126,29 +162,14 @@ export interface Item {
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
-// Helper function to get auth token from the AuthContext
-export const useGetAuthToken = () => {
-  const { getAuthToken } = useAuth();
-  return getAuthToken;
-};
-
 export const api = {
   testConnection: async () => {
     try {
       console.log('🔄 Testing connection to API endpoint with authentication...');
       
       // Get authentication token
-      const getToken = window.getAuthToken;
+      const token = await _getAuthToken();
       
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
-      
-      if (!token) {
-        throw new Error('Authentication required. Please log in.');
-      }
       
       // Instead of using the /test-connection endpoint that has CORS issues,
       // use the /tags endpoint which seems to be working fine from the logs
@@ -178,19 +199,8 @@ export const api = {
 
   // Helper function to make authenticated requests
   authenticatedFetch: async (url: string, options: RequestInit = {}) => {
-    // We need to get the auth context directly in this function
-    // This is a bit of a workaround since we can't use hooks directly in this object
-    const getToken = window.getAuthToken;
-    
-    if (!getToken) {
-      throw new Error('Authentication function not available. Are you using this outside of the AuthProvider?');
-    }
-    
-    const token = await getToken();
-    
-    if (!token) {
-      throw new Error('Authentication required. Please log in.');
-    }
+    // Get authentication token
+    const token = await _getAuthToken();
     
     const headers = {
       ...options.headers,
@@ -220,17 +230,8 @@ export const api = {
       console.log('Form data:', formData);
       
       // Get authentication token
-      const getToken = window.getAuthToken;
+      const token = await _getAuthToken();
       
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
-      
-      if (!token) {
-        throw new Error('Authentication required. Please log in.');
-      }
       
       // Get the user's currency preference to save with the item data
       // This ensures the backend knows which currency the values are in
@@ -338,13 +339,7 @@ export const api = {
       console.log(`🔄 Preparing to update item ${formData.id} with user authentication...`);
       
       // Get authentication token
-      const getToken = window.getAuthToken;
-      
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
+      const token = await _getAuthToken();
       
       if (!token) {
         throw new Error('Authentication required. Please log in to update items.');
@@ -551,7 +546,7 @@ export const api = {
   // updateItemField now uses updateMarketPrice for market price updates
   // and updateItem for all other field updates
   
-updateItemField: async (itemId: number, field: string, value: any) => {
+  updateItemField: async (itemId: number, field: string, value: any) => {
     try {
       console.log(`🔄 Updating ${field} for item ${itemId} with user authentication:`, value);
       
@@ -569,13 +564,7 @@ updateItemField: async (itemId: number, field: string, value: any) => {
       }
       
       // Get authentication token
-      const getToken = window.getAuthToken;
-      
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
+      const token = await _getAuthToken();
       
       if (!token) {
         throw new Error('Authentication required. Please log in to update items.');
@@ -624,13 +613,7 @@ updateItemField: async (itemId: number, field: string, value: any) => {
       console.log(`🔄 Deleting item ${itemId} with user authentication...`);
       
       // Get authentication token
-      const getToken = window.getAuthToken;
-      
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
+      const token = await _getAuthToken();
       
       if (!token) {
         throw new Error('Authentication required. Please log in to delete items.');
@@ -670,13 +653,7 @@ updateItemField: async (itemId: number, field: string, value: any) => {
       console.log('🔄 Fetching items from API with user authentication...');
       
       // Get authentication token
-      const getToken = window.getAuthToken;
-      
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
+      const token = await _getAuthToken();
       
       if (!token) {
         throw new Error('Authentication required. Please log in to view items.');
@@ -736,13 +713,7 @@ updateItemField: async (itemId: number, field: string, value: any) => {
       console.log(`🔄 Fetching item with ID ${id} from API with user authentication...`);
       
       // Get authentication token
-      const getToken = window.getAuthToken;
-      
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
+      const token = await _getAuthToken();
       
       if (!token) {
         throw new Error('Authentication required. Please log in to view items.');
@@ -815,17 +786,8 @@ updateItemField: async (itemId: number, field: string, value: any) => {
       }
       
       // Get authentication token
-      const getToken = window.getAuthToken;
+      const token = await _getAuthToken();
       
-      if (!getToken) {
-        throw new Error('Authentication function not available');
-      }
-      
-      const token = await getToken();
-      
-      if (!token) {
-        throw new Error('Authentication required. Please log in.');
-      }
       
       console.log(`🔍 Checking if image exists with authentication: ${filename}`);
       const response = await fetch(`${API_BASE_URL}/check-image/${filename}`, {
@@ -890,18 +852,7 @@ updateItemField: async (itemId: number, field: string, value: any) => {
 
 // Create a hook to use the API with authentication context and settings
 export const useApi = () => {
-  const auth = useAuth();
   const settings = useSettings();
-  
-  // Add getAuthToken to window for access in the API methods
-  window.getAuthToken = auth.getAuthToken;
-  
-  // Store user settings in window for access in API methods
-  window.userSettings = {
-    currency: settings.currency,
-    dateFormat: settings.dateFormat,
-    darkMode: settings.darkMode
-  };
   
   // Create an enhanced API that includes user settings
   const enhancedApi = {
@@ -1066,9 +1017,6 @@ export const useApi = () => {
   
   return {
     ...enhancedApi,
-    isAuthenticated: !!auth.currentUser,
-    user: auth.currentUser,
-    loading: auth.loading,
     userCurrency: settings.currency,
     getCurrentCurrency: settings.getCurrentCurrency
   };

@@ -26,7 +26,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import { Tag } from '../../pages/InventoryPage';
 import { tagService } from '../../services/tagService';
 import { api } from '../../services/api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { useNavigate } from 'react-router-dom';
 
 interface BatchTagsModalProps {
@@ -47,7 +47,7 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   tags
 }) => {
   const theme = useTheme();
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState<boolean>(false);
@@ -66,6 +66,10 @@ const BatchTagsModal: React.FC<BatchTagsModalProps> = ({
   const checkAuthentication = async () => {
     setAuthCheckingInProgress(true);
     try {
+      if (!authReady) {
+        setError('Authentication process is not yet complete. Please wait and try again.');
+        return false;
+      }
       if (!currentUser) {
         setError('Authentication required. Please log in to manage tags.');
         setTimeout(() => {

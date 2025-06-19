@@ -29,7 +29,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import useFormat from '../../hooks/useFormat'; // Import the formatting hook
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { useApi } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
 
@@ -62,8 +62,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
 }) => {
   const theme = useTheme();
   const { money, date } = useFormat(); // Use the formatting hook
-  const { currentUser } = useAuth();
-  const { isAuthenticated } = useApi();
+  const { currentUser } = useAuthReady();
   
   const handleChangePage = (event: unknown, newPage: number) => {
     onPageChange(newPage);
@@ -178,7 +177,7 @@ const SalesTable: React.FC<SalesTableProps> = ({
   };
   
   // If not authenticated, show a message
-  if (!isAuthenticated) {
+  if (!currentUser) {
     return (
       <Paper sx={{ p: 3, borderRadius: 2, mb: 2 }}>
         <Alert severity="warning">

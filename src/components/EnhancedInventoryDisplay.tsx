@@ -91,6 +91,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   currentUser
 }) => {
   // Global debugging flag - TURN OFF for production
+  const { accountTier: currentAccountTier } = useAuth(); // Renamed to avoid conflict if 'accountTier' is used elsewhere in props or state
+
   const enableDebugLogging = false;
   
   const theme = useTheme();
@@ -101,7 +103,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
-  const { getAuthToken } = useAuth();
+  const { getAuthToken } = useAuth(); // accountTier is already available as currentAccountTier
   
   // Debugging logger function
   const log = (message: string, ...args: any[]) => {
@@ -222,8 +224,15 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     }
   }, [items, currentUser, getAuthToken, apiBaseUrl, settings]);
 
+  const showFreeTierLimitWarning = currentAccountTier === 'Free' && items.length >= 30;
+
   return (
     <Box sx={{ width: '100%', p: 2 }}>
+      {showFreeTierLimitWarning && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          You've reached the 30 item limit for the Free plan. Some features may be restricted. Consider upgrading for more capacity.
+        </Alert>
+      )}
       {errorMessage && (
         <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>
       )}

@@ -1,6 +1,7 @@
 // src/services/expensesApi.ts
 import { Expense, ExpenseSummary, ExpenseFormData, ExpenseType } from '../models/expenses';
 import { generateRecurringExpenseEntries } from '../utils/recurringExpensesUtils';
+import { getApiAuthToken } from './api'; // Adjusted path assuming api.ts is in the same directory
 
 export const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
@@ -11,22 +12,19 @@ export const API_BASE_URL = 'http://127.0.0.1:5000/api';
 // Track the last API response for receipts to aid debugging
 let lastReceiptResponse: Response | null = null;
 // --- AUTHENTICATION HELPERS ---
-async function getAuthToken(): Promise<string> {
-  // Try to get the token from the window or context
-  if (typeof window !== 'undefined' && (window as any).getAuthToken) {
-    const token = await (window as any).getAuthToken();
-    if (!token) throw new Error('No auth token found');
-    return token;
-  }
-  throw new Error('No getAuthToken function available on window');
-}
-
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const token = await getAuthToken();
+  const token = await getApiAuthToken(); // Use imported getApiAuthToken
+  if (!token) {
+    // This case should ideally be handled by getApiAuthToken itself by throwing an error
+    // or by the calling function checking for a null token if getApiAuthToken can return null.
+    // For now, assume getApiAuthToken throws if no token is available or returns a string.
+    console.error('🔴 Failed to get auth token in getAuthHeaders.');
+    throw new Error('Authentication token is not available.');
+  }
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${token}`
   };
-  console.log('➡️ Sending Authorization header:', headers['Authorization']);
+  // console.log('➡️ Sending Authorization header:', headers['Authorization']); // Optional: keep for debugging if needed
   return headers;
 }
 

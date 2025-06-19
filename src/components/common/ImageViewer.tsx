@@ -1,5 +1,5 @@
 // src/components/common/ImageViewer.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -19,7 +19,7 @@ import ArrowForwardIosIcon from '@mui/icons-material/ArrowForwardIos';
 import LoginIcon from '@mui/icons-material/Login';
 import { api } from '../../services/api';
 import { getImageUrl } from '../../utils/imageUtils';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { useNavigate } from 'react-router-dom';
 
 interface ImageViewerProps {
@@ -36,7 +36,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   initialImageIndex = 0
 }) => {
   const theme = useTheme();
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   const navigate = useNavigate();
   
   const [loading, setLoading] = useState<boolean>(true);
@@ -47,9 +47,14 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
   const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
 
   // Authentication check function
-  const checkAuthentication = async () => {
+  const checkAuthentication = useCallback(async () => {
     setAuthCheckingInProgress(true);
     try {
+      if (!authReady) {
+        setAuthError(true);
+        setError('Authentication process is not yet complete. Please wait and try again.');
+        return false;
+      }
       if (!currentUser) {
         setAuthError(true);
         setError('Authentication required. Please log in to view images.');
@@ -90,7 +95,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     } finally {
       setAuthCheckingInProgress(false);
     }
-  };
+  }, [authReady, currentUser, getAuthToken, navigate, onClose, setError, setAuthError, setAuthCheckingInProgress]);
 
   // Fetch images when the dialog opens
   useEffect(() => {
@@ -158,16 +163,16 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
       
       fetchImages();
     }
-  }, [open, itemId, initialImageIndex, currentUser]);
+  }, [open, itemId, initialImageIndex, currentUser, checkAuthentication, onClose, navigate]);
 
   // Handle navigation
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     setCurrentIndex((prevIndex) => (prevIndex > 0 ? prevIndex - 1 : images.length - 1));
-  };
+  }, [images]);
   
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     setCurrentIndex((prevIndex) => (prevIndex < images.length - 1 ? prevIndex + 1 : 0));
-  };
+  }, [images]);
 
   // Get current image URL with user ID in the path
   const currentImageUrl = images.length > 0 ? 
@@ -198,7 +203,7 @@ const ImageViewer: React.FC<ImageViewerProps> = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [open, onClose]);
+  }, [open, onClose, handlePrevious, handleNext]);
 
   return (
     <Dialog 

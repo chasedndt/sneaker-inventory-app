@@ -1,5 +1,5 @@
 // src/components/MetricsCard.tsx
-import React from 'react';
+import React, { useMemo } from 'react';
 import { 
   Card, 
   CardContent, 
@@ -18,7 +18,8 @@ import {
   Tooltip as RechartsTooltip, 
   ResponsiveContainer 
 } from 'recharts';
-import useFormat from '../hooks/useFormat'; 
+import useFormat from '../hooks/useFormat';
+import classNames from 'classnames'; 
 
 interface MetricsCardProps {
   title: React.ReactNode;
@@ -28,6 +29,7 @@ interface MetricsCardProps {
   tooltipText?: string;
   useFormatter?: boolean; 
   suffix?: string; 
+  isLocked?: boolean;
 }
 
 const MetricsCard: React.FC<MetricsCardProps> = ({ 
@@ -37,7 +39,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
   data,
   tooltipText,
   useFormatter = true, 
-  suffix = '' 
+  suffix = '',
+  isLocked = false
 }) => {
   const theme = useTheme();
   const { money } = useFormat(); 
@@ -70,6 +73,32 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         : theme.palette.success.main;
   }
 
+  // Memoize chart margin to prevent re-renders
+  const chartMargin = useMemo(() => ({ top: 5, right: 5, left: -25, bottom: 5 }), []);
+  
+  // Memoize tooltip styles
+  const tooltipContentStyle = useMemo(() => ({ 
+    backgroundColor: theme.palette.background.paper, 
+    border: `1px solid ${theme.palette.divider}`, 
+    borderRadius: '8px',
+    padding: '8px 12px',
+    boxShadow: theme.shadows[3],
+  }), [theme.palette.background.paper, theme.palette.divider, theme.shadows]);
+  
+  const tooltipItemStyle = useMemo(() => ({ 
+    color: theme.palette.text.primary, 
+    fontSize: '0.875rem' 
+  }), [theme.palette.text.primary]);
+  
+  const tooltipLabelStyle = useMemo(() => ({ 
+    display: 'none' 
+  }), []);
+  
+  // Memoize formatter function
+  const valueFormatter = useMemo(() => {
+    return (val: number) => [useFormatter ? money(val) : val, null];
+  }, [useFormatter, money]);
+  
   return (
     <Card sx={{ 
       display: 'flex', 
@@ -82,8 +111,8 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
     }}> 
       <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', p: '6px !important' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.5 }}>
-          <Typography variant="subtitle2" component="div" sx={{ fontWeight: 600, color: 'text.secondary', lineHeight: 1.4 }}>
-            {title}
+          <Typography variant="subtitle2" component="div" sx={{ fontWeight: 600, color: 'text.secondary', lineHeight: 1.4, display: 'flex', alignItems: 'center' }}>
+            {isLocked && <span style={{ marginRight: '4px' }}>🔒</span>}{title}
           </Typography>
           {tooltipText && (
             <Tooltip title={tooltipText} placement="top" arrow>
@@ -94,8 +123,10 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
           )}
         </Box>
         <Box sx={{ mb: 0.5 }}>
-          <Typography variant="h5" component="div" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
-            {formattedValue}
+          <Typography variant="h5" component="div" sx={{ fontWeight: 'bold', color: 'text.primary' }} className={classNames({
+            'text-transparent blur-sm select-none': isLocked,
+          })}>
+            {isLocked ? '******' : formattedValue}
           </Typography>
           {actualChangeDefined && (
             <Typography variant="caption" sx={{ color: changeColor, display: 'flex', alignItems: 'center', fontWeight: 500 }}>
@@ -106,20 +137,14 @@ const MetricsCard: React.FC<MetricsCardProps> = ({
         <Box sx={{ height: 60, width: '100%', mt: 'auto', mb: 0, minHeight: 60 }}> 
           {displayChartData && displayChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={displayChartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}> 
+              <LineChart data={displayChartData} margin={chartMargin}> 
                 <XAxis dataKey="name" hide />
                 <YAxis hide domain={['dataMin - Math.abs(dataMin*0.1)', 'dataMax + Math.abs(dataMax*0.1)']} /> 
                 <RechartsTooltip 
-                  contentStyle={{ 
-                    backgroundColor: theme.palette.background.paper, 
-                    border: `1px solid ${theme.palette.divider}`, 
-                    borderRadius: '8px',
-                    padding: '8px 12px',
-                    boxShadow: theme.shadows[3],
-                  }}
-                  itemStyle={{ color: theme.palette.text.primary, fontSize: '0.875rem' }}
-                  labelStyle={{ display: 'none' }} 
-                  formatter={(val: number) => [useFormatter ? money(val) : val, null]} 
+                  contentStyle={tooltipContentStyle}
+                  itemStyle={tooltipItemStyle}
+                  labelStyle={tooltipLabelStyle} 
+                  formatter={valueFormatter} 
                 />
                 <Line 
                   type="monotone" 

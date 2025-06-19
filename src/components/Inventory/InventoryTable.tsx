@@ -46,7 +46,7 @@ import { InventoryItem, Tag } from '../../pages/InventoryPage';
 import useFormat from '../../hooks/useFormat';
 import dayjs from 'dayjs';
 import ImageViewer from '../common/ImageViewer';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import { api } from '../../services/api';
 import { useSettings } from '../../contexts/SettingsContext';
 import { convertAndFormatCurrency } from '../../utils/currencyUtils';
@@ -104,7 +104,7 @@ const InventoryTable = ({
   const navigate = useNavigate();
   const { money, date } = useFormat();
   const { getCurrentCurrency } = useSettings();
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
@@ -137,6 +137,10 @@ const InventoryTable = ({
   
   // Check authentication before sensitive operations
   const checkAuth = async (): Promise<boolean> => {
+    if (!authReady) {
+      setAuthError('Authentication process is not yet complete. Please wait and try again.');
+      return false;
+    }
     if (!currentUser) {
       setAuthError('You must be logged in to perform this action');
       return false;

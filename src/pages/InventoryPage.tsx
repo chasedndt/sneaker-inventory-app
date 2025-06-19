@@ -19,17 +19,9 @@ import {
   Checkbox,
   IconButton,
   Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Stack,
   SelectChangeEvent,
   Collapse,
-  Badge,
-  Fab,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
@@ -37,9 +29,6 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import EditIcon from '@mui/icons-material/Edit';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import LocalOfferIcon from '@mui/icons-material/LocalOffer';
 import ShoppingBasketIcon from '@mui/icons-material/ShoppingBasket';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -48,7 +37,6 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import AddIcon from '@mui/icons-material/Add';
 import LoginIcon from '@mui/icons-material/Login';
-import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
 import KPIMetrics from '../components/Inventory/KPIMetrics';
@@ -64,10 +52,10 @@ import BatchTagsModal from '../components/Inventory/BatchTagsModal';
 import AddItemModal from '../components/AddItemModal';
 import InventoryFilter, { ActiveFilter } from '../components/Inventory/InventoryFilter';
 
-import { api, Item, useApi } from '../services/api';
+import { api, Item } from '../services/api';
 import { exportToCSV, exportToExcel, exportToPDF } from '../utils/exportUtils';
 import { tagService } from '../services/tagService';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthReady } from '../hooks/useAuthReady';
 import { useApiConnection } from '../hooks/useApiConnection';
 import { useSettings } from '../contexts/SettingsContext';
 import { currencyConverter } from '../utils/currencyUtils';
@@ -112,8 +100,7 @@ const calculateDaysInInventory = (purchaseDate: string): number => {
 const InventoryPage: React.FC = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-  const { currentUser, loading: authLoading } = useAuth();
-  const { isAuthenticated, loading: apiLoading } = useApi();
+  const { currentUser, authReady } = useAuthReady();
   const { currency: defaultCurrency } = useSettings();
   const { 
     isConnected, 
@@ -128,7 +115,6 @@ const InventoryPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [connectionRetryCount, setConnectionRetryCount] = useState<number>(0);
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
   const [page, setPage] = useState<number>(0);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
@@ -192,23 +178,39 @@ const InventoryPage: React.FC = () => {
   // Active filter state
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
   
-  // Cooldown state to prevent infinite error loops
-  const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
 
   useEffect(() => {
-    if (!authLoading && !currentUser) {
+    // Redirect to login if auth is ready but no user is logged in
+    if (authReady && !currentUser) {
       console.log('User not authenticated, redirecting to login');
-      navigate('/login', { 
-        state: { 
+      navigate('/login', {
+        state: {
           from: '/inventory',
-          message: 'Please log in to view your inventory' 
-        } 
+          message: 'Please log in to view your inventory'
+        }
       });
     }
-  }, [authLoading, currentUser, navigate]);
+  }, [authReady, currentUser, navigate]);
 
   // Define fetchItems function outside of useEffect for better code organization
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
+    if (!authReady) {
+      setLoading(true); // Indicate loading while auth is resolving
+      setRefreshing(true);
+      setItems([]); // Clear data while waiting for auth state
+      return; // Exit if auth is not ready
+    }
+
+    if (!currentUser) {
+      // This case should ideally be handled by the redirect useEffect or the main data fetching useEffect
+      // but as a safeguard:
+      setSnackbar({ open: true, message: 'Please log in to view inventory.', severity: 'warning' });
+      setItems([]);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setRefreshing(true);
@@ -310,11 +312,11 @@ const InventoryPage: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [authReady, currentUser, checkConnection, setLoading, setRefreshing, setItems, setError, setSnackbar]);
   
   // Define fetchTags function
-  const fetchTags = async () => {
-    if (!isAuthenticated) return;
+  const fetchTags = useCallback(async () => {
+    if (!authReady || !currentUser) return;
     
     try {
       const tagsData = await tagService.getTags();
@@ -323,21 +325,33 @@ const InventoryPage: React.FC = () => {
       console.error('Error fetching tags:', err);
       // Don't set the main error state for tags - we can proceed without them
     }
-  };
+  }, [authReady, currentUser, setTags]);
   
-  // Fetch items when the component mounts and the user is authenticated
+  // Fetch items and tags when auth state is ready and user is available
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (authReady && currentUser) {
       fetchItems();
       fetchTags();
+    } else if (authReady && !currentUser) {
+      // Auth is ready, but no user. Clear data. Redirect is handled by another useEffect.
+      setItems([]);
+      setTags([]);
+      setLoading(false);
+      setRefreshing(false);
+    } else if (!authReady) {
+      // Auth is not ready yet, show loading and clear data.
+      setLoading(true);
+      setRefreshing(true);
+      setItems([]);
+      setTags([]);
     }
-    
+
     // Reset connection state when component is unmounted
     return () => {
       resetConnectionState();
       stopRetrying();
     };
-  }, [isAuthenticated, authLoading, resetConnectionState, stopRetrying]);
+  }, [authReady, currentUser, fetchItems, fetchTags, resetConnectionState, stopRetrying]);
 
   useEffect(() => {
     // If connection was restored, try fetching items again
@@ -377,7 +391,7 @@ const InventoryPage: React.FC = () => {
   }, [error, connectionError, isCheckingConnection, snackbar]);
 
   const handleRefresh = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) { // fetchItems will handle authReady internally
       setSnackbar({
         open: true,
         message: 'Please log in to refresh inventory',
@@ -451,7 +465,7 @@ const InventoryPage: React.FC = () => {
     if (priceCurrency === '£') priceCurrency = 'GBP';
     if (priceCurrency === '$') priceCurrency = 'USD';
     if (priceCurrency === '€') priceCurrency = 'EUR';
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to update market price',
@@ -521,7 +535,7 @@ const InventoryPage: React.FC = () => {
 
   // New handler for marking items as unlisted
   const handleMarkAsUnlisted = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to update items',
@@ -591,7 +605,7 @@ const InventoryPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async (itemIds: number[], newStatus: 'unlisted' | 'listed' | 'sold') => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to update items',
@@ -720,7 +734,7 @@ const InventoryPage: React.FC = () => {
   
   // Edit item handlers
   const handleEditItem = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to edit items',
@@ -749,7 +763,7 @@ const InventoryPage: React.FC = () => {
   
   // Delete functionality
   const handleDeleteClick = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to delete items',
@@ -836,7 +850,7 @@ const InventoryPage: React.FC = () => {
   
   // Duplicate item functionality
   const handleDuplicateItem = (item: InventoryItem) => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to duplicate items',
@@ -854,9 +868,6 @@ const InventoryPage: React.FC = () => {
     
     try {
       // Clone the item without the id
-      const { id, ...itemWithoutId } = itemToDuplicate;
-      
-      // Set the new name to indicate it's a duplicate
       const newItem = {
         productDetails: {
           category: itemToDuplicate.category as any,
@@ -893,7 +904,7 @@ const InventoryPage: React.FC = () => {
       };
       
       // Call the API to create a new item
-      const result = await api.addItem(newItem, []); // Empty array for images (we're not copying images)
+      await api.addItem(newItem, []); // Empty array for images (we're not copying images)
       
       // Update the UI
       handleRefresh();
@@ -940,7 +951,7 @@ const InventoryPage: React.FC = () => {
   
   // Tag management
   const handleOpenTagManager = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to manage tags',
@@ -961,7 +972,7 @@ const InventoryPage: React.FC = () => {
   
   // Batch tags functionality
   const handleOpenBatchTags = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to manage tags',
@@ -1003,7 +1014,7 @@ const InventoryPage: React.FC = () => {
 
   // Add Item Modal handlers
   const handleOpenAddItemModal = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to add items',
@@ -1033,7 +1044,7 @@ const InventoryPage: React.FC = () => {
 
   // Export functionality
   const handleExportCSV = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to export data',
@@ -1051,7 +1062,7 @@ const InventoryPage: React.FC = () => {
   };
   
   const handleExportExcel = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to export data',
@@ -1069,7 +1080,7 @@ const InventoryPage: React.FC = () => {
   };
   
   const handleExportPDF = () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to export data',
@@ -1197,7 +1208,7 @@ const InventoryPage: React.FC = () => {
       totalMarketValue,
       totalEstimatedProfit
     };
-  }, [filteredItems]);
+  }, [filteredItems, defaultCurrency]);
 
   // Paginate the filtered items
   const paginatedItems = useMemo(() => {
@@ -1215,7 +1226,7 @@ const InventoryPage: React.FC = () => {
   }, [tags]);
 
   // Loading states with authentication context
-  if (authLoading) {
+  if (!authReady) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -1233,7 +1244,7 @@ const InventoryPage: React.FC = () => {
   }
   
   // If not authenticated, show login prompt
-  if (!isAuthenticated && !authLoading) {
+  if (authReady && !currentUser) {
     return (
       <Box sx={{ 
         display: 'flex', 

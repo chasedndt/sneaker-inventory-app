@@ -1,5 +1,5 @@
 // src/pages/SalesPage.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Box, 
   Paper, 
@@ -14,30 +14,19 @@ import {
   MenuItem,
   Select,
   FormControl,
-  InputLabel,
   IconButton,
   Tooltip,
-  Chip,
   Checkbox,
   SelectChangeEvent
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import EditIcon from '@mui/icons-material/Edit';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import ShoppingBagIcon from '@mui/icons-material/ShoppingBag';
-import PaymentIcon from '@mui/icons-material/Payment';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
-import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
 import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
 import DeleteIcon from '@mui/icons-material/Delete';
-import dayjs from 'dayjs';
 
 import SearchBar from '../components/Inventory/SearchBar';
 import SalesKPIMetrics from '../components/Sales/SalesKPIMetrics';
@@ -47,9 +36,9 @@ import RecordSaleModal from '../components/Sales/RecordSaleModal';
 import BulkSaleModal from '../components/Sales/BulkSaleModal';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
 
-import { Item, api, useApi } from '../services/api';
+import { Item, api } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthReady } from '../hooks/useAuthReady';
 
 export interface SalesItem extends Sale {
   itemName: string;
@@ -66,8 +55,9 @@ export interface SalesItem extends Sale {
 
 const SalesPage: React.FC = () => {
   const theme = useTheme();
-  const { currentUser, loading: authLoading } = useAuth();
-  const { isAuthenticated } = useApi();
+  const { authReady, currentUser } = useAuthReady();
+  const accountTier = currentUser?.accountTier || 'Free'; // Derive accountTier
+
   
   const [sales, setSales] = useState<SalesItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -114,21 +104,27 @@ const SalesPage: React.FC = () => {
 
   // Fetch sales from API
   useEffect(() => {
-    const fetchSales = async () => {
-      // Don't fetch if not authenticated
-      if (!isAuthenticated && !authLoading) {
+    const fetchSalesData = async () => { // Renamed to avoid potential naming conflicts
+      if (!authReady) {
+        // Auth state not ready yet, wait for the next effect trigger
+        setLoading(true); 
+        console.log('[SalesPage] Auth not ready, waiting...');
+        return;
+      }
+
+      if (!currentUser) {
+        // Auth check complete, but no user is logged in
         setLoading(false);
+        setSales([]); // Clear any existing sales data
         setError('Authentication required to view sales. Please log in.');
+        setRefreshing(false);
         return;
       }
       
-      // Wait for auth check to complete
-      if (authLoading) {
-        return;
-      }
-      
+      // User is authenticated, proceed to fetch data
       try {
-        setLoading(true);
+        setLoading(true); // Ensure loading is true before fetching
+        setError(null); // Clear previous errors
         // First get all inventory items
         const inventoryItems = await api.getItems();
         
@@ -196,11 +192,11 @@ const SalesPage: React.FC = () => {
       }
     };
 
-    fetchSales();
-  }, [isAuthenticated, authLoading]);
+    fetchSalesData();
+  }, [authReady, currentUser, accountTier]);
 
   const handleRefresh = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to refresh sales data.',
@@ -288,7 +284,7 @@ const SalesPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async (saleIds: number[], newStatus: 'pending' | 'needsShipping' | 'completed') => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to update sale status.',
@@ -392,7 +388,7 @@ const SalesPage: React.FC = () => {
   
   // Record Sale Modal handlers
   const handleOpenRecordSaleModal = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to record sales.',
@@ -446,7 +442,7 @@ const SalesPage: React.FC = () => {
   
   // Bulk Sale Modal handlers
   const handleOpenBulkSaleModal = async () => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to update sales.',
@@ -454,7 +450,6 @@ const SalesPage: React.FC = () => {
       });
       return;
     }
-    
     try {
       if (selectedSales.length <= 1) {
         // Get unsold inventory items for normal recording
@@ -495,7 +490,7 @@ const SalesPage: React.FC = () => {
       }
     }
   };
-  
+
   const handleBulkSaleModalClose = (refresh = false) => {
     setIsBulkSaleModalOpen(false);
     if (refresh) {
@@ -505,7 +500,7 @@ const SalesPage: React.FC = () => {
 
   // Handle Delete Sale
   const handleDeleteSale = (saleId: number) => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to delete sales.',
@@ -566,7 +561,7 @@ const SalesPage: React.FC = () => {
 
   // Handle Restore to Inventory
   const handleRestoreToInventory = (saleId: number) => {
-    if (!isAuthenticated) {
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Authentication required to restore items to inventory.',
@@ -670,7 +665,7 @@ const SalesPage: React.FC = () => {
   }, [filteredSales, page, rowsPerPage]);
 
   // Display loading or error states if necessary
-  if (authLoading) {
+  if (!authReady) {
     return (
       <Box sx={{ 
         display: 'flex', 
@@ -683,7 +678,7 @@ const SalesPage: React.FC = () => {
     );
   }
   
-  if (!isAuthenticated && !loading) {
+  if (!currentUser && !loading) {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -753,29 +748,44 @@ const SalesPage: React.FC = () => {
           
           <Grid item xs={12} md={6}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-              <Button 
-                variant="outlined" 
-                startIcon={<FileDownloadIcon />}
-                size="small"
-              >
-                Export CSV
-              </Button>
+              <Tooltip title={accountTier === 'Free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span> {/* Tooltip needs a span wrapper when child is disabled */} 
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<FileDownloadIcon />}
+                    size="small"
+                    disabled={accountTier === 'Free'}
+                  >
+                    Export CSV
+                  </Button>
+                </span>
+              </Tooltip>
               
-              <Button 
-                variant="outlined" 
-                startIcon={<InsertDriveFileIcon />}
-                size="small"
-              >
-                Export Excel
-              </Button>
+              <Tooltip title={accountTier === 'Free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span> {/* Tooltip needs a span wrapper when child is disabled */} 
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<InsertDriveFileIcon />}
+                    size="small"
+                    disabled={accountTier === 'Free'}
+                  >
+                    Export Excel
+                  </Button>
+                </span>
+              </Tooltip>
               
-              <Button 
-                variant="outlined" 
-                startIcon={<PictureAsPdfIcon />}
-                size="small"
-              >
-                Export PDF
-              </Button>
+              <Tooltip title={accountTier === 'Free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span> {/* Tooltip needs a span wrapper when child is disabled */} 
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<PictureAsPdfIcon />}
+                    size="small"
+                    disabled={accountTier === 'Free'}
+                  >
+                    Export PDF
+                  </Button>
+                </span>
+              </Tooltip>
               
               <Tooltip title="Customize columns">
                 <IconButton onClick={handleColumnMenuOpen}>

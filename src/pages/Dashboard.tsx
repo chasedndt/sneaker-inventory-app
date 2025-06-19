@@ -22,6 +22,7 @@ import {
   styled
 } from '@mui/material';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { useAuthReady } from '../hooks/useAuthReady';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -39,6 +40,7 @@ import EnhancedInventoryDisplay from '../components/EnhancedInventoryDisplay';
 import dayjs, { Dayjs } from 'dayjs';
 import { debugNetProfitFromSoldItems } from '../utils/profitCalculator';
 import { InventoryItem } from './InventoryPage';
+import { useRenderLog } from '../hooks/useRenderLog';
 
 // Custom styled ToggleButton
 const StyledToggleButton = styled(ToggleButton)(({ theme }) => ({
@@ -102,11 +104,17 @@ const Dashboard: React.FC = () => {
   const [backendStatus, setBackendStatus] = useState<'ok' | 'down' | 'unknown'>('unknown');
   const [backendError, setBackendError] = useState<string | null>(null);
   const theme = useTheme();
+  const { authReady } = useAuthReady();
   const auth = useAuth();
   const currentUser = auth.currentUser;
   const authLoading = auth.loading;
   const getAuthToken = auth.getAuthToken;
   const api = useApi();
+
+  // Log auth readiness immediately on mount for diagnostics
+  useEffect(() => {
+    console.log('[AuthReady Dashboard] authReady=', authReady, '| currentUser.id=', currentUser?.uid);
+  }, [authReady, currentUser]);
   const settings = useSettings(); // Get the user's currency settings
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -125,6 +133,17 @@ const Dashboard: React.FC = () => {
     severity: 'success' as 'success' | 'info' | 'warning' | 'error'
   });
   const [authErrorCooldown, setAuthErrorCooldown] = useState(false);
+
+  // Diagnostic render log to track re-renders and key state changes
+  useRenderLog('Dashboard', {
+    backendStatus,
+    itemsCount: items.length,
+    salesCount: sales.length,
+    expensesCount: expenses.length,
+    loading,
+    refreshing,
+    userLoaded: !!currentUser
+  });
 
   // Memoized portfolio stats to prevent recalculation on every render
   const [portfolioStats, setPortfolioStats] = useState<{
@@ -205,22 +224,41 @@ const Dashboard: React.FC = () => {
   // Memoized checkBackend (no dependencies)
   // Stable backend check function (now inside Dashboard)
   const checkBackend = useCallback(async () => {
+    console.log('[Dashboard] Performing backend health check via /api/ping');
     try {
       const res = await fetch(`${process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000'}/api/ping`);
+      console.log('[Dashboard] /api/ping status:', res.status);
       if (res.ok) {
         setBackendStatus('ok');
+        setBackendError(null);
       } else {
         setBackendStatus('down');
         setBackendError('Backend responded with error');
       }
-    } catch (e) {
+    } catch (e: any) {
+      console.error('[Dashboard] Backend health check failed:', e);
       setBackendStatus('down');
-      setBackendError('Backend is unreachable');
+      setBackendError(e.message || 'Backend is unreachable');
     }
   }, []);
 
+  // --- Backend health check ---
+
+
+  // Run backend health check once on mount
+  useEffect(() => {
+    checkBackend();
+  }, [checkBackend]);
+
   // Fetch data from the API - now using the enhanced API that correctly handles currency conversion
   const fetchData = useCallback(async (showRefreshing = false) => {
+    console.log('[Dashboard.fetchData START]', {
+      showRefreshing,
+      backendStatus,
+      authLoading,
+      authReady,
+      currentUserUid: currentUser?.uid
+    });
     console.log('[Dashboard] fetchData called. showRefreshing:', showRefreshing, '| currentUser:', currentUser);
     if (authLoading) {
       console.log('[Dashboard] Auth is still loading, aborting fetchData.');
@@ -228,6 +266,7 @@ const Dashboard: React.FC = () => {
     }
     try {
       if (backendStatus === 'down') {
+        console.log('[Dashboard.fetchData EARLY EXIT] backendStatus=down');
         setError('Backend is down. Please try again later.');
         setLoading(false);
         setRefreshing(false);
@@ -313,6 +352,7 @@ const Dashboard: React.FC = () => {
       });
       
       // Log detailed comparison for a "sanity check"
+      console.log('[Dashboard Health] backendStatus=', backendStatus);
       console.log('🧪 [DASHBOARD] Item values from enhanced API:');
       processedItems.forEach((item: Item) => {
         console.log(`${item.productName}: ${settings.currency} ${item.marketPrice?.toFixed(2)} ` +
@@ -360,8 +400,9 @@ const Dashboard: React.FC = () => {
       
       setBackendStatus('ok');
       
+          console.log('[Dashboard.fetchData SUCCESS]');
     } catch (error: any) {
-      console.error('Error fetching data:', error);
+      console.error('[Dashboard.fetchData ERROR]', error);
       setError('Failed to load data. Please try again.');
       setLoading(false);
       setRefreshing(false);
@@ -376,8 +417,10 @@ const Dashboard: React.FC = () => {
           severity: 'error'
         });
       }
+    } finally {
+      console.log('[Dashboard.fetchData FINALLY] loading=', loading, '| refreshing=', refreshing);
     }
-  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus, authLoading, settings.currency]);
+  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus, authLoading, authReady, settings.currency]);
 
   // Backend health check on mount and when user logs in/out
   useEffect(() => {
@@ -879,7 +922,7 @@ const Dashboard: React.FC = () => {
           <Box sx={{ 
             flex: 2.5, 
             minHeight: 0, 
-            overflowY: 'auto', 
+            overflowY: 'visible', 
           }}>
             <ReportsSection 
               items={items}

@@ -23,7 +23,7 @@ import SizesQuantityForm, { CategoryType } from './AddItem/SizesQuantityForm';
 import PurchaseDetailsForm from './AddItem/PurchaseDetailsForm';
 import ImagesUploadForm from './AddItem/ImagesUploadForm';
 import { api, ImageFile, Item } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthReady } from '../hooks/useAuthReady';
 import { useNavigate } from 'react-router-dom';
 
 const steps = [
@@ -90,7 +90,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
 
   // Auth integration
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   const navigate = useNavigate();
 
   // Form state
@@ -132,6 +132,10 @@ const EditItemModal: React.FC<EditItemModalProps> = ({
   const checkAuthentication = async () => {
     setAuthCheckingInProgress(true);
     try {
+      if (!authReady) {
+        setSubmitError('Authentication process is not yet complete. Please wait and try again.');
+        return false;
+      }
       if (!currentUser) {
         setSubmitError('Authentication required. Please log in to edit items.');
         setTimeout(() => {

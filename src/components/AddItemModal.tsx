@@ -1,5 +1,5 @@
 // src/components/AddItemModal.tsx
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -25,7 +25,7 @@ import ImagesUploadForm from './AddItem/ImagesUploadForm';
 import RecoveryDialog from './AddItem/RecoveryDialog';
 import { api, ImageFile } from '../services/api';
 import { loadFormData, saveFormData, clearFormData } from '../utils/formPersistence';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuthReady } from '../hooks/useAuthReady';
 import { useNavigate } from 'react-router-dom';
 
 const steps = [
@@ -87,7 +87,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   const [authCheckingInProgress, setAuthCheckingInProgress] = useState(false);
   
   // Auth integration
-  const { currentUser, getAuthToken } = useAuth();
+  const { currentUser, getAuthToken, authReady } = useAuthReady();
   const navigate = useNavigate();
 
   const [productDetails, setProductDetails] = useState<ProductDetailsFormData>({
@@ -141,6 +141,10 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
   const checkAuthentication = async () => {
     setAuthCheckingInProgress(true);
     try {
+      if (!authReady) {
+        setSubmitError('Authentication process is not yet complete. Please wait and try again.');
+        return false;
+      }
       if (!currentUser) {
         setSubmitError('Authentication required. Please log in to add items.');
         setTimeout(() => {
@@ -180,25 +184,30 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ open, onClose }) => {
     }
   };
 
+  const formDataToSave = useMemo(() => {
+    return {
+      activeStep,
+      productDetails,
+      sizesQuantity,
+      purchaseDetails: {
+        ...purchaseDetails,
+        purchaseDate: purchaseDetails.purchaseDate?.isValid()
+          ? purchaseDetails.purchaseDate.toISOString()
+          : null,
+      }
+    };
+  }, [activeStep, productDetails, sizesQuantity, purchaseDetails]);
+
   useEffect(() => {
     if (open) {
       try {
-        saveFormData({
-          activeStep,
-          productDetails,
-          sizesQuantity,
-          purchaseDetails: {
-            ...purchaseDetails,
-            purchaseDate: purchaseDetails.purchaseDate?.isValid()
-              ? purchaseDetails.purchaseDate.toISOString()
-              : null
-          }
-        });
+        saveFormData(formDataToSave);
       } catch (error) {
         console.error('Error saving form data:', error);
       }
     }
-  }, [open, activeStep, productDetails, sizesQuantity, purchaseDetails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, JSON.stringify(formDataToSave)]);
 
   const handleRecover = () => {
     if (savedData) {
