@@ -92,19 +92,38 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   const fetchStateRef = useRef({
     hasFetched: false,
     lastRangeStart: null as string | null,
-    lastRangeEnd: null as string | null
+    lastRangeEnd: null as string | null,
+    lastRequestTime: 0, // Track the timestamp of the last request
+    pendingRequest: false // Track if there's a request in flight
   });
 
   const fetchMetricsData = useCallback(async () => {
-    if (isFetching) {
+    // Implement request deduplication
+    const now = Date.now();
+    const timeSinceLastRequest = now - fetchStateRef.current.lastRequestTime;
+    
+    // Skip if already fetching or if there was a recent request (within 500ms)
+    if (isFetching || fetchStateRef.current.pendingRequest) {
       console.log('[ReportsSection] Fetch skipped: already fetching');
       return;
     }
     
-    // Set loading states
+    if (timeSinceLastRequest < 500) {
+      console.log(`[ReportsSection] Fetch skipped: too soon after last request (${timeSinceLastRequest}ms)`);
+      return;
+    }
+    
+    // Set loading states and update request tracking
     setIsFetching(true);
     setShowSpinner(true);
-    console.log('[ReportsSection] Fetching metrics data with range:', { start: range.start, end: range.end });
+    fetchStateRef.current.lastRequestTime = now;
+    fetchStateRef.current.pendingRequest = true;
+    
+    console.log('[ReportsSection] Fetching metrics data with range:', { 
+      start: range.start, 
+      end: range.end,
+      requestTime: new Date(now).toISOString()
+    });
     
     try {
       const data = await dashboardService.fetchDashboardMetrics(
@@ -131,7 +150,9 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       fetchStateRef.current = {
         hasFetched: true,
         lastRangeStart: range.start,
-        lastRangeEnd: range.end
+        lastRangeEnd: range.end,
+        lastRequestTime: now,
+        pendingRequest: false
       };
       console.log('[ReportsSection] Updated fetchStateRef:', fetchStateRef.current);
     } catch (err: any) {
@@ -139,38 +160,60 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     } finally {
       setIsFetching(false);
       setShowSpinner(false);
+      fetchStateRef.current.pendingRequest = false;
     }
   }, [range.start, range.end, metricsData, startDate, endDate]); // Include startDate and endDate to ensure refetch when filters change
 
+  // Ref to track initial mount to prevent double fetching
+  const mountRef = useRef(false);
+  
   // Single consolidated useEffect for fetching metrics data
   // This replaces multiple fetch effects to prevent duplicate requests
   useEffect(() => {
-    // Skip if auth is not ready or already fetching
-    if (!authReady || isFetching) {
-      console.log('⏳ [ReportsSection] Fetch skipped: auth not ready or already fetching');
-      return;
-    }
-    
-    console.log('[ReportsSection] Fetch effect triggered with:', {
-      authReady,
-      startDate: startDate?.format('YYYY-MM-DD') || 'null',
-      endDate: endDate?.format('YYYY-MM-DD') || 'null',
-      fetchState: fetchStateRef.current
-    });
-    
-    // Check if we need to fetch based on range changes
-    const rangeChanged = 
-      fetchStateRef.current.lastRangeStart !== range.start || 
-      fetchStateRef.current.lastRangeEnd !== range.end;
+    if (mountRef.current) {
+      // Not the first render, so proceed with normal logic
+      // Skip if auth is not ready or already fetching
+      if (!authReady || isFetching) {
+        console.log('⏳ [ReportsSection] Fetch skipped: auth not ready or already fetching');
+        return;
+      }
       
-    // Only fetch if we haven't fetched yet or if the range has changed
-    if (fetchStateRef.current.hasFetched && !rangeChanged) {
-      console.log('[ReportsSection] Fetch skipped: already fetched with current range');
-      return;
+      console.log('[ReportsSection] Fetch effect triggered with:', {
+        authReady,
+        startDate: startDate?.format('YYYY-MM-DD') || 'null',
+        endDate: endDate?.format('YYYY-MM-DD') || 'null',
+        fetchState: fetchStateRef.current
+      });
+      
+      // Check if we need to fetch based on range changes
+      const rangeChanged = 
+        fetchStateRef.current.lastRangeStart !== range.start || 
+        fetchStateRef.current.lastRangeEnd !== range.end;
+        
+      // Only fetch if we haven't fetched yet or if the range has changed
+      if (fetchStateRef.current.hasFetched && !rangeChanged) {
+        console.log('[ReportsSection] Fetch skipped: already fetched with current range');
+        return;
+      }
+      
+      console.log('🚀 [ReportsSection] Fetching metrics data...');
+      fetchMetricsData();
+    } else {
+      // First render - mark as mounted but don't fetch yet
+      // This prevents the initial double fetch
+      mountRef.current = true;
+      console.log('[ReportsSection] Initial mount - deferring fetch to avoid duplicate requests');
+      
+      // Use a small timeout to ensure we only fetch once after initial mount effects settle
+      const timerId = setTimeout(() => {
+        if (authReady && !isFetching) {
+          console.log('[ReportsSection] Executing deferred initial fetch');
+          fetchMetricsData();
+        }
+      }, 100);
+      
+      return () => clearTimeout(timerId);
     }
-    
-    console.log('🚀 [ReportsSection] Fetching metrics data...');
-    fetchMetricsData();
   }, [authReady, isFetching, startDate, endDate, range, fetchMetricsData]);
 
   useEffect(() => {
@@ -330,11 +373,17 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     return value;
   }, []);
   
-  // Memoized components to prevent re-renders
-  const MemoizedTooltip = memo(RechartsTooltip);
-  const MemoizedLegend = memo(RechartsLegend);
+  // Memoized components to prevent re-renders - with equality check
+  const MemoizedTooltip = memo(RechartsTooltip, (prev, next) => {
+    // Always consider equal to prevent unnecessary re-renders
+    return true;
+  });
+  const MemoizedLegend = memo(RechartsLegend, (prev, next) => {
+    // Always consider equal to prevent unnecessary re-renders
+    return true;
+  });
   
-  // Memoized Line component with props
+  // Memoized Line component with props and custom equality check
   const Line = memo(({ dataKey, stroke, name, activeDot }: { dataKey: string; stroke: string; name: string; activeDot?: any }) => {
     return <RechartsLine 
       type="monotone" 
@@ -343,7 +392,14 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       name={name}
       activeDot={activeDot} 
       isAnimationActive={false} // Disable animation to reduce render spam
+      dot={false} // Disable dots to reduce render spam
+      strokeWidth={2} // Consistent stroke width
     />;
+  }, (prevProps, nextProps) => {
+    // Custom equality check to prevent unnecessary re-renders
+    return prevProps.dataKey === nextProps.dataKey && 
+           prevProps.stroke === nextProps.stroke && 
+           prevProps.name === nextProps.name;
   });
 
   const chartProps = useMemo(() => ({
@@ -351,26 +407,24 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     tickFormatter: (value: number) => `$${value}`,
   }), []);
   
-  // Create a custom tooltip component to avoid prop stability issues
+  // Create a custom tooltip component with stable styles to avoid prop stability issues
+  const tooltipStyles = useMemo(() => ({
+    backgroundColor: theme.palette.background.paper,
+    border: `1px solid ${theme.palette.divider}`,
+    p: 1,
+    borderRadius: 1,
+  }), [theme.palette.background.paper, theme.palette.divider]);
+  
   const CustomTooltip = memo(({ active, payload, label }: TooltipProps<number, string>) => {
     if (!active || !payload || payload.length === 0) {
       return null;
     }
     
-    // Use theme from closure to avoid dependency issues
-    const backgroundColor = theme.palette.background.paper;
-    const borderColor = theme.palette.divider;
+    // Use memoized styles to avoid re-renders
     const textSecondary = theme.palette.text.secondary;
     
     return (
-      <Box
-        sx={{
-          backgroundColor,
-          border: `1px solid ${borderColor}`,
-          p: 1,
-          borderRadius: 1,
-        }}
-      >
+      <Box sx={tooltipStyles}>
         <Typography variant="body2" color={textSecondary}>
           {label}
         </Typography>
@@ -381,6 +435,13 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
         ))}
       </Box>
     );
+  }, (prevProps, nextProps) => {
+    // Custom equality check to prevent unnecessary re-renders
+    // If label and active state are the same, consider it equal
+    if (prevProps.label === nextProps.label && prevProps.active === nextProps.active) {
+      return true;
+    }
+    return false;
   });
   
   // Memoized props for CartesianGrid
@@ -409,8 +470,12 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     if (!metricsData || !metricsData.dateMetrics) {
       return [];
     }
-    // Make a stable reference of chart data
-    return metricsData.dateMetrics.map(item => ({
+    
+    // Create a stable JSON string first to ensure consistent reference
+    const stableData = JSON.stringify(metricsData.dateMetrics);
+    
+    // Parse and transform to ensure stable references
+    return JSON.parse(stableData).map((item: any) => ({
       date: item.date || 'Unknown',
       sales: Math.round(item.sales || 0),  // Round to ensure stable values
       expenses: Math.round(item.expenses || 0),
@@ -429,6 +494,26 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     }
   }, [chartData]);
 
+  // Stable line props to prevent re-renders
+  const lineProps = useMemo(() => ({
+    sales: {
+      dataKey: "sales",
+      stroke: theme.palette.primary.main,
+      activeDot: { r: 6 },
+      name: "Sales"
+    },
+    profit: {
+      dataKey: "profit",
+      stroke: theme.palette.success.main,
+      name: "Profit"
+    },
+    expenses: {
+      dataKey: "expenses",
+      stroke: theme.palette.error.main,
+      name: "Expenses"
+    }
+  }), [theme.palette.primary.main, theme.palette.success.main, theme.palette.error.main]);
+  
   // Memoize the chart JSX content itself
   const chartContent = useMemo(() => {
     console.log('[ReportsSection] Chart content memoized');
@@ -437,19 +522,23 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       // Render an empty placeholder box to avoid Recharts' default "No data available" message
       return <Box sx={{ minHeight: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }} />;
     }
+    
+    // Use a stable key to prevent unnecessary re-renders
+    const chartKey = 'metrics-chart';
+    
     return (
-      <LineChart data={chartData} margin={chartProps.margin}>
+      <LineChart key={chartKey} data={chartData} margin={chartProps.margin}>
         <CartesianGrid {...cartesianGridProps} />
         <XAxis {...xAxisProps} />
         <YAxis {...yAxisProps} />
-        <RechartsTooltip content={<CustomTooltip />} />
+        <MemoizedTooltip content={<CustomTooltip />} />
         <MemoizedLegend />
-        <Line dataKey="sales" stroke={theme.palette.primary.main} activeDot={{ r: 8 }} name="Sales" />
-        <Line dataKey="profit" stroke={theme.palette.success.main} name="Profit" />
-        <Line dataKey="expenses" stroke={theme.palette.error.main} name="Expenses" />
+        <Line {...lineProps.sales} />
+        <Line {...lineProps.profit} />
+        <Line {...lineProps.expenses} />
       </LineChart>
     );
-  }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, theme]);
+  }, [chartData, chartProps, cartesianGridProps, xAxisProps, yAxisProps, lineProps]);
 
   // This useEffect has been consolidated with the one above
   // to prevent duplicate fetch requests
@@ -486,7 +575,12 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
     
     // Log when chart components render to track optimization progress
     console.log('[ReportsSection] Chart render optimization check - verify reduced render spam');
-  });
+    
+    // Return cleanup function to help with memory management
+    return () => {
+      console.log('[ReportsSection] Component cleanup');
+    };
+  }, []);
 
   // Log detailed calculations only once per render
   useEffect(() => {
