@@ -1,5 +1,5 @@
 // src/pages/InventoryPage.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
@@ -113,6 +113,10 @@ const InventoryPage: React.FC = () => {
   
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  // Add a ref to track if data has been fetched to prevent multiple fetches
+  const dataFetchedRef = useRef<boolean>(false);
+  // Add a render counter for debugging
+  const renderCount = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [rowsPerPage, setRowsPerPage] = useState<number>(10);
@@ -193,7 +197,14 @@ const InventoryPage: React.FC = () => {
   }, [authReady, currentUser, navigate]);
 
   // Define fetchItems function outside of useEffect for better code organization
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (forceRefresh = false) => {
+    console.log('🔍 [INVENTORY DEBUG] fetchItems called, forceRefresh:', forceRefresh);
+    
+    // Skip fetch if data already loaded and not forcing refresh
+    if (dataFetchedRef.current && !forceRefresh) {
+      console.log('🔍 [INVENTORY DEBUG] Data already fetched, skipping redundant fetch');
+      return;
+    }
     if (!authReady) {
       setLoading(true); // Indicate loading while auth is resolving
       setRefreshing(true);
@@ -300,6 +311,10 @@ const InventoryPage: React.FC = () => {
       
       setItems(enhancedItems);
       setError(null);
+      
+      // Mark data as fetched to prevent redundant fetches
+      dataFetchedRef.current = true;
+      console.log('🔍 [INVENTORY DEBUG] Data fetch completed successfully, dataFetchedRef set to true');
     } catch (err: any) {
       console.error('Error fetching inventory items:', err);
       // Provide more specific error messages based on error type
@@ -312,7 +327,7 @@ const InventoryPage: React.FC = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [authReady, currentUser, checkConnection, setLoading, setRefreshing, setItems, setError, setSnackbar]);
+  }, [authReady, currentUser, checkConnection]);  // Minimized dependencies to prevent recreation
   
   // Define fetchTags function
   const fetchTags = useCallback(async () => {
@@ -327,10 +342,21 @@ const InventoryPage: React.FC = () => {
     }
   }, [authReady, currentUser, setTags]);
   
+  // Debug render count
+  useEffect(() => {
+    renderCount.current += 1;
+    console.log(`🔍 [INVENTORY DEBUG] Component rendered ${renderCount.current} times`);
+  });
+
   // Fetch items and tags when auth state is ready and user is available
   useEffect(() => {
+    console.log('🔍 [INVENTORY DEBUG] Main data fetch useEffect triggered', { authReady, currentUser: !!currentUser });
     if (authReady && currentUser) {
-      fetchItems();
+      // Only fetch if data hasn't been loaded yet
+      if (!dataFetchedRef.current) {
+        console.log('🔍 [INVENTORY DEBUG] Initial data fetch');
+        fetchItems(false);
+      }
       fetchTags();
     } else if (authReady && !currentUser) {
       // Auth is ready, but no user. Clear data. Redirect is handled by another useEffect.
@@ -358,9 +384,11 @@ const InventoryPage: React.FC = () => {
     if (isConnected && !isCheckingConnection) {
       // If we previously had connection errors but now we're connected
       if (error || connectionError) {
+        console.log('🔍 [INVENTORY DEBUG] Connection restored after error, scheduling refetch');
         // Short delay to ensure the connection is stable
         const timer = setTimeout(() => {
-          fetchItems();
+          // Force refresh since we're recovering from an error
+          fetchItems(true);
         }, 1000);
         
         return () => clearTimeout(timer);
@@ -391,6 +419,7 @@ const InventoryPage: React.FC = () => {
   }, [error, connectionError, isCheckingConnection, snackbar]);
 
   const handleRefresh = async () => {
+    console.log('🔍 [INVENTORY DEBUG] Manual refresh requested');
     if (!currentUser) { // fetchItems will handle authReady internally
       setSnackbar({
         open: true,
@@ -402,6 +431,8 @@ const InventoryPage: React.FC = () => {
     
     setRefreshing(true);
     try {
+      // Force refresh since this is a manual refresh
+      dataFetchedRef.current = false;
       const data = await api.getItems();
       
       // Filter out sold items
