@@ -15,6 +15,8 @@ const API_BASE_URL = 'http://127.0.0.1:5000/api';
  * @returns The full URL for the image, or undefined if no filename provided
  */
 export const getImageUrl = (filename: string | undefined, itemId?: number, userId?: string): string | undefined => {
+  console.log(`🔍 getImageUrl called with:`, { filename, itemId, userId });
+  
   if (!filename) {
     console.log(`❌ No image filename provided${itemId ? ` for item ${itemId}` : ''}`);
     return undefined;
@@ -22,16 +24,30 @@ export const getImageUrl = (filename: string | undefined, itemId?: number, userI
   
   // If the filename already contains a full URL, return it directly
   if (filename.startsWith('http')) {
+    console.log(`🌐 Filename is already a full URL: ${filename}`);
     return filename;
   }
   
+  // Clean the filename to remove any path separators at the beginning
+  const cleanFilename = filename.replace(/^[\/\\]+/, '');
+  console.log(`🧹 Cleaned filename: ${cleanFilename}`);
+  
+  let finalUrl;
   // Include the user ID in the path if provided
   if (userId) {
-    return `${API_BASE_URL}/uploads/${userId}/${filename}`;
+    // Ensure we don't double-add the user ID if it's already in the path
+    if (cleanFilename.startsWith(userId + '/')) {
+      finalUrl = `${API_BASE_URL}/uploads/${cleanFilename}`;
+    } else {
+      finalUrl = `${API_BASE_URL}/uploads/${userId}/${cleanFilename}`;
+    }
+  } else {
+    // Fall back to the original path structure
+    finalUrl = `${API_BASE_URL}/uploads/${cleanFilename}`;
   }
   
-  // Fall back to the original path structure
-  return `${API_BASE_URL}/uploads/${filename}`;
+  console.log(`🔗 Final URL generated: ${finalUrl}`);
+  return finalUrl;
 };
 
 /**
@@ -114,21 +130,27 @@ export const preloadImage = (url: string): Promise<void> => {
  * @returns URL for an appropriate placeholder image
  */
 export const getCategoryPlaceholderImage = (category: string): string => {
+  // Always log for debugging
   console.log(`🖼️ Getting placeholder for category: ${category}`);
   
   // You can create different placeholder images for different categories
-  switch (category.toLowerCase()) {
-    case 'sneakers':
-      return '/placeholder-sneakers.svg';
-    case 'watches':
-      return '/placeholder-watches.svg';
-    case 'handbags':
-      return '/placeholder-handbags.svg';
-    case 'streetwear':
-      return '/placeholder-streetwear.svg';
-    default:
-      return '/placeholder-image-svg.svg';
-  }
+  const placeholder = (() => {
+    switch (category.toLowerCase()) {
+      case 'sneakers':
+        return '/placeholder-sneakers.svg';
+      case 'watches':
+        return '/placeholder-watches.svg';
+      case 'handbags':
+        return '/placeholder-handbags.svg';
+      case 'streetwear':
+        return '/placeholder-streetwear.svg';
+      default:
+        return '/placeholder-image-svg.svg';
+    }
+  })();
+  
+  console.log(`🖼️ Returning placeholder: ${placeholder}`);
+  return placeholder;
 };
 
 /**

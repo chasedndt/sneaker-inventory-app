@@ -8,22 +8,20 @@ import time
 import traceback
 from werkzeug.utils import secure_filename
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from models import db, Item, Size, Image, Tag, Sale, Expense, Coplist, UserSettings
 from config import Config
-from datetime import datetime, timedelta
 from tag_routes import tag_routes
 import re
-from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
-import uuid
 import calendar
 from auth_helpers import require_auth
 from middleware.auth import get_user_id_from_token, get_current_user_info
 from admin.admin_routes import admin_routes
 
 # Unicode console fix
-import sys, os, codecs
+import sys
+import codecs
 if os.name == "nt" and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
 
@@ -91,19 +89,17 @@ def create_app():
                 # print(f"Removed lingering FileHandler for {image_log_path} from root logger.") 
     # --- Logging Refinement End ---
 
-    # Configure a dedicated logger for image requests
-    # Using a distinct name for the logger instance
-    img_req_logger = logging.getLogger('sneaker_app.image_requests') 
-    img_req_logger.setLevel(logging.INFO)
-    # Crucial: Prevents logs from going to parent/root loggers (and thus console if root is configured for that level)
-    img_req_logger.propagate = False 
-    
-    # Ensure handler is only added once even if create_app is called multiple times (though not typical for top-level)
-    # Or if the logger instance persists across calls in some wsgi environments.
-    if not img_req_logger.handlers:
-        img_file_handler = logging.FileHandler('image_requests.log')
-        img_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        img_req_logger.addHandler(img_file_handler)
+    # Configure a dedicated logger for image requests (disabled to reduce memory usage)
+    # Only enable when debugging image issues
+    if app.config.get('DEBUG_IMAGE_REQUESTS', False):
+        img_req_logger = logging.getLogger('sneaker_app.image_requests') 
+        img_req_logger.setLevel(logging.WARNING)  # Only log warnings/errors
+        img_req_logger.propagate = False 
+        
+        if not img_req_logger.handlers:
+            img_file_handler = logging.FileHandler('image_requests.log')
+            img_file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+            img_req_logger.addHandler(img_file_handler)
 
     # Create upload directory if it doesn't exist
     if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -2470,8 +2466,12 @@ def create_app():
         """
         # OPTIONS requests are now handled by the separate route
         
+        # Always get the logger instance to avoid UnboundLocalError
         img_req_logger_instance = logging.getLogger('sneaker_app.image_requests')
-        img_req_logger_instance.info(f"Image request for: {filename}")
+        
+        # Only log image requests when debugging is enabled
+        if current_app.config.get('DEBUG_IMAGE_REQUESTS', False):
+            img_req_logger_instance.info(f"Image request for: {filename}")
         
         # Basic security check: prevent directory traversal
         if '..' in filename or filename.startswith('/'):
@@ -2493,7 +2493,9 @@ def create_app():
             img_req_logger_instance.info(f"Looking for file at: {image_path}")
             
             if os.path.exists(image_path):
-                img_req_logger_instance.info(f"✅ Serving file: {image_path}")
+                # Only log when debugging is enabled
+                if current_app.config.get('DEBUG_IMAGE_REQUESTS', False):
+                    img_req_logger_instance.info(f"✅ Serving file: {image_path}")
                 response = send_from_directory(current_app.config['UPLOAD_FOLDER'], filename, as_attachment=False)
                 
                 # Add CORS headers to the response
@@ -2543,10 +2545,11 @@ def create_app():
             img_req_logger_instance.error(f"Error serving image {filename}: {e}", exc_info=True) # Log full traceback
             return jsonify({"error": "Server error while serving image"}), 500
 
-    @app.before_request
-    def log_request_info():
-        logger.debug('Headers: %s', request.headers)
-        logger.debug('Body: %s', request.get_data())
+    # Removed excessive request logging to reduce memory usage
+    # @app.before_request
+    # def log_request_info():
+    #     logger.debug('Headers: %s', request.headers)
+    #     logger.debug('Body: %s', request.get_data())
 
     return app
 

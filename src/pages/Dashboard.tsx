@@ -516,8 +516,8 @@ const Dashboard: React.FC = () => {
     // regardless of date filters - this is the entire portfolio value
     const activeItems = items.filter(item => item.status !== 'sold');
     
-    // Disable detailed logging in production
-    const enableLogging = process.env.NODE_ENV !== 'production' ? false : false;
+    // Enable detailed logging in development for debugging
+    const enableLogging = process.env.NODE_ENV !== 'production';
     
     // Fix: Handle empty portfolio gracefully
     if (activeItems.length === 0) {

@@ -72,6 +72,13 @@ class Item(db.Model):
             # Get image filenames for this item
             image_files = [img.filename for img in self.images] if self.images else []
             
+            # Create imageUrl for the first image if available
+            # The frontend expects this to work with the user ID path structure
+            imageUrl = None
+            if image_files:
+                # Don't include user_id in the imageUrl since getImageUrl() will add it
+                imageUrl = image_files[0]
+            
             # Get the first size for this item
             size_info = self.sizes[0] if self.sizes else None
             size = size_info.size if size_info else None
@@ -96,6 +103,7 @@ class Item(db.Model):
                 'purchaseLocation': self.purchase_location,
                 'condition': self.condition,
                 'images': image_files,
+                'imageUrl': imageUrl,  # Add imageUrl field for frontend compatibility
                 'size': size,
                 'sizeSystem': size_system,
                 'status': self.status,

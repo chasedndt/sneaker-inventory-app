@@ -1,5 +1,5 @@
 // src/components/EnhancedInventoryDisplay.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Typography, 
@@ -90,11 +90,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   items,
   currentUser
 }) => {
-  // Global debugging flag - TURN OFF for production
-  const { accountTier: currentAccountTier } = useAuth(); // Renamed to avoid conflict if 'accountTier' is used elsewhere in props or state
-
-  const enableDebugLogging = false;
-  
+  const currentAccountTier = 'Free'; // For now, assume all users are on the Free tier
+  const enableDebugLogging = process.env.NODE_ENV !== 'production'; // Control debug logging
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
   const settings = useSettings(); // Get currency settings at component level
@@ -102,6 +99,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [failedImages, setFailedImages] = useState<Set<string>>(new Set()); // Track failed images
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:5000/api';
   const { getAuthToken } = useAuth(); // accountTier is already available as currentAccountTier
   
@@ -112,6 +110,22 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     }
   };
 
+  // Function to handle image errors with cooldown
+  const handleImageError = useCallback((productName: string, imageUrl: string) => {
+    const imageKey = `${productName}-${imageUrl}`;
+    
+    // Only log if we haven't already logged this failure
+    if (!failedImages.has(imageKey)) {
+      setFailedImages(prev => new Set(prev).add(imageKey));
+      // ALWAYS log image failures for debugging
+      console.error(`❌ Image failed to load for ${productName}:`);
+      console.error(`   URL: ${imageUrl}`);
+      console.error(`   Current failed images count: ${failedImages.size + 1}`);
+    } else {
+      console.log(`🔁 Suppressed repeated error for ${productName}`);
+    }
+  }, [failedImages]);
+
   // Check authentication status
   useEffect(() => {
     if (!currentUser) {
@@ -121,6 +135,23 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       setAuthError(null);
     }
   }, [currentUser]);
+
+  // Test backend connectivity
+  useEffect(() => {
+    const testBackend = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/ping`);
+        if (response.ok) {
+          console.log('✅ Backend is reachable');
+        } else {
+          console.error('❌ Backend responded with error:', response.status);
+        }
+      } catch (error) {
+        console.error('❌ Backend is not reachable:', error);
+      }
+    };
+    testBackend();
+  }, [apiBaseUrl]);
 
   // Effect for grouping and sorting items
   useEffect(() => {
@@ -194,17 +225,17 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         if (imageSource) {
           // FIX: Use getImageUrl utility to properly construct the URL with user ID
           imageUrl = getImageUrl(imageSource, item.id, currentUser?.uid);
-          if (enableDebugLogging) {
-            log(`Assigned image URL for ${item.productName}: ${imageUrl}`);
-          }
+          // TEMP DEBUG - Always log to see what's happening
+          console.log(`🔍 DEBUG: Item ${item.productName}`);
+          console.log(`  - Raw imageSource: ${imageSource}`);
+          console.log(`  - Generated imageUrl: ${imageUrl}`);
+          console.log(`  - Current user ID: ${currentUser?.uid}`);
         } else {
           // No image available, use a placeholder
           const placeholder = getCategoryPlaceholderImage(item.category);
           imageUrl = placeholder;
           placeholderMessage = `No image for ${item.category}`;
-          if (enableDebugLogging) {
-            log(`Using placeholder image for ${item.productName}: ${imageUrl}`);
-          }
+          console.log(`🔍 DEBUG: No image source for ${item.productName}, using placeholder: ${imageUrl}`);
         }
         
         return {
@@ -222,7 +253,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       setErrorMessage('Error processing inventory items');
       setIsLoading(false);
     }
-  }, [items, currentUser, getAuthToken, apiBaseUrl, settings]);
+  }, [items, currentUser, getAuthToken, apiBaseUrl, settings, handleImageError]);
 
   const showFreeTierLimitWarning = currentAccountTier === 'Free' && items.length >= 30;
 
@@ -313,10 +344,8 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                         src={item.imageUrl || getCategoryPlaceholderImage(item.category)}
                         alt={item.productName}
                         onError={(e) => {
-                          // Only log in development or when debugging is enabled
-                          if (process.env.NODE_ENV !== 'production' || enableDebugLogging) {
-                            console.log(`Image failed to load for ${item.productName}`);
-                          }
+                          // Use our centralized error handler to prevent spam
+                          handleImageError(item.productName, item.imageUrl || 'unknown');
                           (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category);
                         }}
                         sx={{
