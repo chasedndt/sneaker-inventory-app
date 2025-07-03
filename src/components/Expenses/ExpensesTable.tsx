@@ -126,13 +126,20 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
     {
       id: 'isRecurring',
       label: 'Recurring',
-      minWidth: 100,
+      minWidth: 120,
       align: 'center',
       format: (value, row) => value ? (
-        <Tooltip title={`${row?.recurrencePeriod || 'Recurring'}`}>
-          <RepeatIcon sx={{ color: theme.palette.info.main }} />
+        <Tooltip title={`Repeats: ${row?.recurrencePeriod || 'Recurring'}`}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <RepeatIcon sx={{ color: theme.palette.info.main, fontSize: '1rem' }} />
+            <Typography variant="caption" sx={{ color: theme.palette.info.main, fontWeight: 500 }}>
+              {row?.recurrencePeriod || 'Recurring'}
+            </Typography>
+          </Box>
         </Tooltip>
-      ) : '-',
+      ) : (
+        <Typography variant="caption" color="text.secondary">-</Typography>
+      ),
       sortable: true
     },
     {
@@ -428,6 +435,20 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
                                 </Tooltip>
                               )}
                               
+                              {!expense.receiptFilename && (
+                                <Tooltip title="No receipt uploaded">
+                                  <span>
+                                    <IconButton
+                                      size="small"
+                                      disabled
+                                      sx={{ opacity: 0.3 }}
+                                    >
+                                      <ReceiptIcon fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              )}
+                              
                               <Tooltip title="More Options">
                                 <IconButton
                                   size="small"
@@ -484,6 +505,13 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
           <MenuItem onClick={handleViewReceipt}>
             <ReceiptIcon fontSize="small" sx={{ mr: 1 }} />
             View Receipt
+          </MenuItem>
+        )}
+        
+        {!actionMenuExpense?.receiptFilename && (
+          <MenuItem disabled>
+            <ReceiptIcon fontSize="small" sx={{ mr: 1, opacity: 0.3 }} />
+            No Receipt Available
           </MenuItem>
         )}
         

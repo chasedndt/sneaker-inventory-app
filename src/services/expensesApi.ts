@@ -227,7 +227,40 @@ export const expensesApi = {
       
       const data = await response.json();
       console.log('✅ Receipt URL retrieved successfully:', data);
-      return data.url;
+      
+      // Handle different response formats
+      if (typeof data === 'string') {
+        // If the response is directly a URL string (this is what the backend returns)
+        // Check if it's already a full URL or just a path
+        if (data.startsWith('http')) {
+          return data; // Already a full URL
+        } else if (data.startsWith('/api/')) {
+          // Backend returned a path with /api/, remove the duplicate
+          return `http://127.0.0.1:5000${data}`;
+        } else if (data.startsWith('/')) {
+          // Backend returned a path without /api/
+          return `http://127.0.0.1:5000/api${data}`;
+        } else {
+          // Relative path, append to API base
+          return `${API_BASE_URL}/${data}`;
+        }
+      } else if (data && typeof data === 'object') {
+        // If the response is an object with a url property (fallback)
+        const url = data.url || data.receiptUrl || data.path || '';
+        if (url.startsWith('http')) {
+          return url; // Already a full URL
+        } else if (url.startsWith('/api/')) {
+          // Remove duplicate /api/
+          return `http://127.0.0.1:5000${url}`;
+        } else if (url.startsWith('/')) {
+          return `http://127.0.0.1:5000/api${url}`;
+        } else {
+          return `${API_BASE_URL}/${url}`;
+        }
+      } else {
+        // Fallback
+        return '';
+      }
     } catch (error) {
       console.error('💥 Error getting receipt URL:', error);
       throw error;
@@ -249,14 +282,18 @@ export const expensesApi = {
       console.log(`🔄 Checking if receipt exists at: ${url}`);
       const headers = await getAuthHeaders();
       
-      // Make a HEAD request to check if the file exists
+      // Use GET instead of HEAD to avoid CORS preflight issues
+      // and set range header to get just the first byte
       const response = await fetch(url, {
-        method: 'HEAD',
+        method: 'GET',
         credentials: 'include',
-        headers
+        headers: {
+          ...headers,
+          'Range': 'bytes=0-0' // Request just the first byte to minimize data transfer
+        }
       });
       
-      const exists = response.ok;
+      const exists = response.ok || response.status === 206; // 206 = Partial Content (range request)
       const contentType = response.headers.get('Content-Type');
       console.log(`${exists ? '✅' : '❌'} Receipt exists: ${exists}${contentType ? `, type: ${contentType}` : ''}`);
       
@@ -266,29 +303,19 @@ export const expensesApi = {
         console.log(`- Status: ${response.status} ${response.statusText}`);
         console.log(`- URL attempted: ${url}`);
         console.log(`- Headers sent:`, headers);
-        
-        // Try alternate paths if the receipt wasn't found
-        if (url.includes('/receipts/')) {
-          // If URL contains userId, try without receipts subfolder
-          const matchUserId = url.match(/\/uploads\/([^\/]+)\/receipts\//); 
-          if (matchUserId && matchUserId[1]) {
-            const userId = matchUserId[1];
-            const altUrl = url.replace(`/uploads/${userId}/receipts/`, `/uploads/${userId}/`);
-            console.log(`🔄 Trying alternate path without receipts subfolder: ${altUrl}`);
-            const altResponse = await fetch(altUrl, {
-              method: 'HEAD',
-              credentials: 'include',
-              headers
-            });
-            console.log(`${altResponse.ok ? '✅' : '❌'} Alternate path exists: ${altResponse.ok}`);
-          }
-        }
       }
       
       return { exists, contentType: contentType || undefined };
     } catch (error) {
       console.error('💥 Error checking if receipt exists:', error);
       console.error('💥 Error checking receipt existence:', error);
+      
+      // If there's a CORS error, assume the file exists and let the main viewer handle it
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.log('⚠️ CORS error detected, assuming receipt exists');
+        return { exists: true };
+      }
+      
       return { exists: false };
     }
   },
@@ -402,12 +429,38 @@ export const expensesApi = {
           const recurringEntries = generateRecurringExpenseEntries(createdExpense);
           console.log(`Generated ${recurringEntries.length} recurring entries`);
           
-          // Log the recurring entries but don't create them automatically
-          // This prevents duplicate expenses from being created
-          console.log('Would create recurring entries:', recurringEntries);
-          
-          // If we need to actually create these entries, we should do it through a separate API endpoint
-          // or have the backend handle it automatically
+          // Create each recurring entry
+          for (const entry of recurringEntries) {
+            try {
+              // Remove fields that should not be included in the creation request
+              const { id, created_at, updated_at, ...entryData } = entry;
+              
+              // Create FormData for the recurring entry
+              const recurringFormData = new FormData();
+              recurringFormData.append('data', JSON.stringify({
+                ...entryData,
+                // Don't generate more recurring entries for these generated entries
+                generateRecurringEntries: false,
+                submissionId: `${expenseData.submissionId}_recurring_${entry.expenseDate}`
+              }));
+              
+              const recurringResponse = await fetch(`${API_BASE_URL}/expenses`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+                body: recurringFormData
+              });
+              
+              if (recurringResponse.ok) {
+                const createdRecurringExpense = await recurringResponse.json();
+                console.log(`✅ Created recurring entry for ${entry.expenseDate}:`, createdRecurringExpense);
+              } else {
+                console.error(`❌ Failed to create recurring entry for ${entry.expenseDate}: ${recurringResponse.status}`);
+              }
+            } catch (entryError) {
+              console.error(`💥 Error creating recurring entry for ${entry.expenseDate}:`, entryError);
+            }
+          }
         } catch (err) {
           console.error('Error generating recurring entries:', err);
         }

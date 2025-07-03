@@ -185,8 +185,8 @@ export async function updateItemField(itemId: number, fieldName: string, value: 
       throw new Error('Authentication required. Please log in to update an item.');
     }
     
-    const response = await fetch(`${API_BASE_URL}/items/${itemId}/fields`, {
-      method: 'PUT',
+    const response = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
+      method: 'PATCH',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'

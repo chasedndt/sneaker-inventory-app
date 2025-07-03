@@ -15,6 +15,20 @@ const EXCHANGE_RATES: ExchangeRates = {
   CAD: 1.36,
   AUD: 1.51,
   CNY: 7.24,
+  CHF: 0.89,
+  SEK: 10.12,
+  NOK: 10.45,
+  DKK: 6.85,
+  INR: 83.25,
+  KRW: 1342.50,
+  SGD: 1.35,
+  HKD: 7.82,
+  NZD: 1.62,
+  MXN: 17.45,
+  BRL: 5.23,
+  ZAR: 18.75,
+  RUB: 92.50,
+  THB: 36.25
 };
 
 // Currency symbol mappings
@@ -26,6 +40,20 @@ export const CURRENCY_SYMBOLS: Record<string, string> = {
   CAD: 'C$',
   AUD: 'A$',
   CNY: '¥',
+  CHF: 'CHF',
+  SEK: 'kr',
+  NOK: 'kr',
+  DKK: 'kr',
+  INR: '₹',
+  KRW: '₩',
+  SGD: 'S$',
+  HKD: 'HK$',
+  NZD: 'NZ$',
+  MXN: '$',
+  BRL: 'R$',
+  ZAR: 'R',
+  RUB: '₽',
+  THB: '฿'
 };
 
 // Currency code from symbol
@@ -33,9 +61,20 @@ export const CURRENCY_CODE_FROM_SYMBOL: Record<string, string> = {
   '$': 'USD',
   '€': 'EUR',
   '£': 'GBP',
-  '¥': 'JPY',
+  '¥': 'JPY', // Note: Both JPY and CNY use ¥, defaults to JPY
   'C$': 'CAD',
   'A$': 'AUD',
+  'CHF': 'CHF',
+  'kr': 'SEK', // Note: Multiple currencies use kr, defaults to SEK
+  '₹': 'INR',
+  '₩': 'KRW',
+  'S$': 'SGD',
+  'HK$': 'HKD',
+  'NZ$': 'NZD',
+  'R$': 'BRL',
+  'R': 'ZAR',
+  '₽': 'RUB',
+  '฿': 'THB'
 };
 
 // Simplified display for the calculated exchange rates (for cleaner logging)
@@ -53,8 +92,8 @@ export const normalizeCurrencyCode = (currency: string): string => {
   const normalizedInput = currency.trim().toUpperCase();
   
   // If it's a currency symbol, convert to code
-  if (CURRENCY_CODE_FROM_SYMBOL[normalizedInput]) {
-    return CURRENCY_CODE_FROM_SYMBOL[normalizedInput];
+  if (CURRENCY_CODE_FROM_SYMBOL[currency.trim()]) {
+    return CURRENCY_CODE_FROM_SYMBOL[currency.trim()];
   }
   
   // If it matches one of our known codes, return as is
@@ -65,11 +104,28 @@ export const normalizeCurrencyCode = (currency: string): string => {
   // Special handling for common abbreviations/typos
   const mappings: Record<string, string> = {
     'DOLLAR': 'USD',
+    'DOLLARS': 'USD',
     'US': 'USD',
+    'USA': 'USD',
     'EURO': 'EUR',
+    'EUROS': 'EUR',
     'POUND': 'GBP',
+    'POUNDS': 'GBP',
     'UK': 'GBP',
+    'BRITAIN': 'GBP',
     'YEN': 'JPY',
+    'YUAN': 'CNY',
+    'SWISS': 'CHF',
+    'FRANC': 'CHF',
+    'KRONA': 'SEK',
+    'KRONE': 'NOK',
+    'RUPEE': 'INR',
+    'WON': 'KRW',
+    'BAHT': 'THB',
+    'REAL': 'BRL',
+    'RAND': 'ZAR',
+    'RUBLE': 'RUB',
+    'ROUBLE': 'RUB'
   };
   
   if (mappings[normalizedInput]) {
@@ -77,6 +133,7 @@ export const normalizeCurrencyCode = (currency: string): string => {
   }
   
   // Default to USD if unknown
+  console.warn(`Unknown currency: ${currency}, defaulting to USD`);
   return 'USD';
 };
 
@@ -279,4 +336,38 @@ export const formatCurrency = (amount: number, currencyCode: string = 'USD'): st
       console.error('Error retrieving stored exchange rates:', error);
       return null;
     }
+  };
+
+  /**
+   * Test currency conversion functionality
+   * This function can be called from the console to verify currency conversion is working
+   */
+  export const testCurrencyConversion = (): void => {
+    console.log('🧪 Testing Currency Conversion System');
+    console.log('=====================================');
+    
+    // Test normalization
+    console.log('📋 Testing Currency Normalization:');
+    console.log('$ ->', normalizeCurrencyCode('$'));
+    console.log('€ ->', normalizeCurrencyCode('€'));
+    console.log('£ ->', normalizeCurrencyCode('£'));
+    console.log('usd ->', normalizeCurrencyCode('usd'));
+    console.log('USD ->', normalizeCurrencyCode('USD'));
+    console.log('dollar ->', normalizeCurrencyCode('dollar'));
+    
+    // Test conversions
+    console.log('\n💱 Testing Currency Conversions:');
+    console.log('100 USD to EUR:', currencyConverter(100, 'USD', 'EUR', true));
+    console.log('100 USD to GBP:', currencyConverter(100, 'USD', 'GBP', true));
+    console.log('100 EUR to USD:', currencyConverter(100, 'EUR', 'USD', true));
+    console.log('100 $ to £:', currencyConverter(100, '$', '£', true));
+    
+    // Test formatting
+    console.log('\n💰 Testing Currency Formatting:');
+    console.log('100 USD:', formatCurrencyWithSymbol(100, 'USD'));
+    console.log('100 EUR:', formatCurrencyWithSymbol(100, 'EUR'));
+    console.log('100 GBP:', formatCurrencyWithSymbol(100, 'GBP'));
+    console.log('100 JPY:', formatCurrencyWithSymbol(100, 'JPY'));
+    
+    console.log('\n✅ Currency conversion test completed!');
   };

@@ -1,5 +1,6 @@
 // src/services/tagService.ts
 import { Tag } from '../pages/InventoryPage';
+import { getApiAuthToken } from './api';
 
 const API_BASE_URL = 'http://127.0.0.1:5000/api';
 const TAGS_STORAGE_KEY = 'inventory_tags';
@@ -15,21 +16,27 @@ export const tagService = {
   getTags: async (): Promise<Tag[]> => {
     try {
       console.log('🔄 Fetching tags from API...');
-      const response = await fetch(`${API_BASE_URL}/tags`, {
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to view tags.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/user-tags`, {
         method: 'GET',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
+      
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
       
       if (!response.ok) {
         console.error(`❌ API getTags failed with status: ${response.status}`);
-        
-        // If API not implemented yet, fall back to localStorage
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using localStorage');
-          const storedTags = localStorage.getItem(TAGS_STORAGE_KEY);
-          return storedTags ? JSON.parse(storedTags) : [];
-        }
-        
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
@@ -55,25 +62,31 @@ export const tagService = {
   createTag: async (name: string, color: string): Promise<Tag> => {
     try {
       console.log(`🔄 Creating new tag: ${name} (${color})...`);
-      const response = await fetch(`${API_BASE_URL}/tags`, {
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to create tags.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/user-tags`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({ name, color }),
       });
       
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
       if (!response.ok) {
         console.error(`❌ API createTag failed with status: ${response.status}`);
-        
-        // If API not implemented yet, use localStorage
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using localStorage');
-          return createLocalTag(name, color);
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
       }
       
       const tag = await response.json();
@@ -98,25 +111,31 @@ export const tagService = {
   updateTag: async (id: string, name: string, color: string): Promise<Tag> => {
     try {
       console.log(`🔄 Updating tag ${id}: ${name} (${color})...`);
-      const response = await fetch(`${API_BASE_URL}/tags/${id}`, {
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to update tags.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/user-tags/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         },
-        credentials: 'include',
         body: JSON.stringify({ name, color }),
       });
       
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
       if (!response.ok) {
         console.error(`❌ API updateTag failed with status: ${response.status}`);
-        
-        // If API not implemented yet, use localStorage
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using localStorage');
-          return updateLocalTag(id, name, color);
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
       }
       
       const tag = await response.json();
@@ -139,21 +158,29 @@ export const tagService = {
   deleteTag: async (id: string): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Deleting tag ${id}...`);
-      const response = await fetch(`${API_BASE_URL}/tags/${id}`, {
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to delete tags.');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/user-tags/${id}`, {
         method: 'DELETE',
-        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
+      
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
       
       if (!response.ok) {
         console.error(`❌ API deleteTag failed with status: ${response.status}`);
-        
-        // If API not implemented yet, use localStorage
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using localStorage');
-          return deleteLocalTag(id);
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
       }
       
       console.log(`✅ Tag ${id} deleted successfully`);
@@ -176,40 +203,32 @@ export const tagService = {
   applyTagsToItem: async (itemId: number, tagIds: string[]): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Applying tags to item ${itemId}:`, tagIds);
-      const response = await fetch(`${API_BASE_URL}/items/${itemId}/tags`, {
-        method: 'POST',
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to apply tags.');
+      }
+      
+      // Use the item field update API endpoint directly
+      const response = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
+        method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         },
-        credentials: 'include',
-        body: JSON.stringify({ tagIds }),
+        body: JSON.stringify({ field: 'tags', value: tagIds }),
       });
+      
+      if (response.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
       
       if (!response.ok) {
         console.error(`❌ API applyTagsToItem failed with status: ${response.status}`);
-        
-        // If API not implemented yet, use direct item update
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using direct item update');
-          
-          // Use the item update API endpoint
-          const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({ field: 'tags', value: tagIds }),
-          });
-          
-          if (!itemResponse.ok) {
-            throw new Error(`HTTP error! status: ${itemResponse.status}`);
-          }
-          
-          return { success: true };
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || `HTTP error! status: ${response.status}`);
       }
       
       console.log(`✅ Tags applied successfully to item ${itemId}`);
@@ -229,49 +248,51 @@ export const tagService = {
   removeTagsFromItem: async (itemId: number, tagIds: string[]): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Removing tags from item ${itemId}:`, tagIds);
-      const response = await fetch(`${API_BASE_URL}/items/${itemId}/tags/remove`, {
-        method: 'POST',
+      
+      // Get authentication token
+      const token = await getApiAuthToken();
+      if (!token) {
+        throw new Error('Authentication required. Please log in to remove tags.');
+      }
+      
+      // Get current item tags first
+      const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}`, {
+        method: 'GET',
         headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({ tagIds }),
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
       });
       
-      if (!response.ok) {
-        console.error(`❌ API removeTagsFromItem failed with status: ${response.status}`);
-        
-        // If API not implemented yet, use direct item update
-        if (response.status === 404) {
-          console.warn('⚠️ Tags API not implemented, using direct item update');
-          
-          // Get current item tags
-          const item = await fetch(`${API_BASE_URL}/items/${itemId}`, {
-            method: 'GET',
-            credentials: 'include',
-          }).then(res => res.json());
-          
-          // Filter out the tags to remove
-          const updatedTags = (item.tags || []).filter((tagId: string) => !tagIds.includes(tagId));
-          
-          // Update the item with the filtered tags
-          const itemResponse = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
-            method: 'PATCH',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({ field: 'tags', value: updatedTags }),
-          });
-          
-          if (!itemResponse.ok) {
-            throw new Error(`HTTP error! status: ${itemResponse.status}`);
-          }
-          
-          return { success: true };
-        }
-        
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!itemResponse.ok) {
+        throw new Error(`Failed to get item: ${itemResponse.status}`);
+      }
+      
+      const item = await itemResponse.json();
+      
+      // Filter out the tags to remove
+      const currentTags = Array.isArray(item.tags) ? item.tags : [];
+      const updatedTags = currentTags.filter((tagId: string) => !tagIds.includes(tagId));
+      
+      // Update the item with the filtered tags
+      const updateResponse = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ field: 'tags', value: updatedTags }),
+      });
+      
+      if (updateResponse.status === 401) {
+        throw new Error('Authentication expired. Please log in again.');
+      }
+      
+      if (!updateResponse.ok) {
+        console.error(`❌ API removeTagsFromItem failed with status: ${updateResponse.status}`);
+        const errorData = await updateResponse.json().catch(() => null);
+        throw new Error(errorData?.error || `HTTP error! status: ${updateResponse.status}`);
       }
       
       console.log(`✅ Tags removed successfully from item ${itemId}`);

@@ -9,6 +9,9 @@ import {
 import { formatDate as formatDateUtil } from '../utils/dateUtils';
 import { useAuth } from './AuthContext';
 
+// Module-level variable to track logged missing rates and avoid spam
+const loggedMissingRates = new Set<string>();
+
 // Define the settings structure
 interface Settings {
   darkMode: boolean;
@@ -235,60 +238,67 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   // Convert currency using the latest exchange rates with minimal logging
   const convertCurrency = useCallback((amount: number, fromCurrency: string = 'USD'): number => {
-    // Only log important conversions to reduce noise
-    const isSignificantAmount = amount > 100 || Math.abs(amount) > 100;
-    const isDebugMode = false; // Set to true only when actively debugging currency issues
-    
     // Handle edge cases better
-    if (isNaN(amount)) {
-      console.warn('Invalid amount provided to convertCurrency');
-      return 0;
+    if (isNaN(amount) || amount === 0) {
+      return amount;
     }
     
+    // Normalize currency codes to handle symbols properly
+    const normalizeForConversion = (currency: string): string => {
+      if (!currency) return 'USD';
+      
+      // Handle common currency symbols
+      const symbolMap: Record<string, string> = {
+        '$': 'USD',
+        '€': 'EUR', 
+        '£': 'GBP',
+        '¥': 'JPY',
+        'C$': 'CAD',
+        'A$': 'AUD'
+      };
+      
+      // Check if it's a symbol first
+      if (symbolMap[currency]) {
+        return symbolMap[currency];
+      }
+      
+      // Otherwise normalize as uppercase
+      return currency.toUpperCase();
+    };
+    
+    const normalizedFromCurrency = normalizeForConversion(fromCurrency);
+    const normalizedTargetCurrency = normalizeForConversion(currency);
+    
     // If the currencies are the same, no conversion needed
-    if (fromCurrency === currency) {
+    if (normalizedFromCurrency === normalizedTargetCurrency) {
       return amount;
     }
     
     if (exchangeRates) {
-      // Only log exchange rates in debug mode
-      if (isDebugMode) {
-        console.log(`💱 [CURRENCY CONVERSION] Using exchange rates:`, exchangeRates);
-      }
-      
-      // Normalize currency codes to upper case
-      const normalizedFromCurrency = fromCurrency.toUpperCase();
-      const normalizedTargetCurrency = currency.toUpperCase();
-      
       // Check if we have the necessary rates
       if (exchangeRates[normalizedFromCurrency] && exchangeRates[normalizedTargetCurrency]) {
-        // First convert to USD (our base currency in the rates)
+        // Convert via USD as base currency
         const amountInUSD = normalizedFromCurrency === 'USD' 
           ? amount 
           : amount / exchangeRates[normalizedFromCurrency];
         
-        // Then convert from USD to target currency
-        const result = amountInUSD * exchangeRates[normalizedTargetCurrency];
-        
-        // Only log significant conversions to reduce console noise
-        if (isSignificantAmount && isDebugMode) {
-          console.log(`💱 [CURRENCY CONVERSION] ${amount} ${fromCurrency} = ${result} ${currency}`);
-        }
+        const result = normalizedTargetCurrency === 'USD'
+          ? amountInUSD
+          : amountInUSD * exchangeRates[normalizedTargetCurrency];
         
         return result;
       } else {
-        console.warn(`⚠️ [CURRENCY CONVERSION] Missing exchange rate for ${fromCurrency} or ${currency}, falling back to direct conversion`);
+        // Only log missing rates once per session to avoid spam
+        const missingRateKey = `${normalizedFromCurrency}_${normalizedTargetCurrency}`;
+        if (!loggedMissingRates.has(missingRateKey)) {
+          console.warn(`⚠️ [CURRENCY CONVERSION] Missing exchange rate for ${normalizedFromCurrency} or ${normalizedTargetCurrency}, falling back to direct conversion`);
+          loggedMissingRates.add(missingRateKey);
+        }
       }
-    } else {
-      console.warn(`⚠️ [CURRENCY CONVERSION] No exchange rates available, falling back to direct conversion`);
     }
     
     // Fall back to direct conversion with built-in rates
-    const result = currencyConverter(amount, fromCurrency, currency, isDebugMode);
-    
-    if (isDebugMode) {
-      console.log(`💱 [CURRENCY CONVERSION] Fallback conversion: ${amount} ${fromCurrency} = ${result} ${currency}`);
-    }
+    const result = currencyConverter(amount, normalizedFromCurrency, normalizedTargetCurrency, false);
     return result;
   }, [currency, exchangeRates]);
 

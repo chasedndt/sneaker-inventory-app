@@ -40,8 +40,12 @@ export const generateRecurringExpenseEntries = (
 ): Expense[] => {
   // If not recurring or no recurrence period defined, return empty array
   if (!baseExpense.isRecurring || !baseExpense.recurrencePeriod) {
+    console.log('⚠️ Not generating recurring entries: not recurring or no recurrence period');
     return [];
   }
+  
+  console.log(`🔄 Generating recurring entries from ${baseExpense.expenseDate} to ${currentDate.toISOString()}`);
+  console.log(`📅 Recurrence period: ${baseExpense.recurrencePeriod}`);
   
   const newEntries: Expense[] = [];
   let nextDate = calculateNextRecurrenceDate(
@@ -50,13 +54,17 @@ export const generateRecurringExpenseEntries = (
   );
   const currentDateObj = dayjs(currentDate);
   
+  console.log(`📅 First next date calculated: ${nextDate.toISOString()}`);
+  
   // Keep generating entries until we reach the current date
   while (dayjs(nextDate).isBefore(currentDateObj) || dayjs(nextDate).isSame(currentDateObj, 'day')) {
+    console.log(`📅 Generating entry for date: ${nextDate.toISOString()}`);
+    
     // Create a new entry based on the base expense but with the new date
     const newEntry: Expense = {
       ...baseExpense,
       id: 0, // This will be assigned by the backend
-      expenseDate: dayjs(nextDate).format(),
+      expenseDate: nextDate.toISOString(),
       created_at: undefined,
       updated_at: undefined,
       // Mark this as generated from a recurring expense
@@ -69,8 +77,16 @@ export const generateRecurringExpenseEntries = (
     
     // Calculate the next date
     nextDate = calculateNextRecurrenceDate(nextDate, baseExpense.recurrencePeriod);
+    console.log(`📅 Next calculated date: ${nextDate.toISOString()}`);
+    
+    // Safety check to prevent infinite loops
+    if (newEntries.length > 100) {
+      console.warn('⚠️ Generated more than 100 recurring entries, stopping to prevent infinite loop');
+      break;
+    }
   }
   
+  console.log(`✅ Generated ${newEntries.length} recurring entries`);
   return newEntries;
 };
 

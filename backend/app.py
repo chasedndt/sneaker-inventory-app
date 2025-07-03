@@ -54,7 +54,7 @@ def create_app():
     CORS(app,
          origins=["http://localhost:3000"],
          supports_credentials=True,
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+         methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization", "Accept", "Origin"],
          # Removed the 'resources' dictionary to simplify and rely on route-specific handlers for OPTIONS
          max_age=3600)
@@ -648,6 +648,12 @@ def create_app():
             return jsonify({'error': str(e)}), 500
 
     # Update a specific field of an item
+    @app.route('/api/items/<int:item_id>/field', methods=['OPTIONS'])
+    def update_item_field_options(item_id):
+        """Handle preflight CORS requests for item field updates"""
+        response = current_app.make_default_options_response()
+        return response
+
     @app.route('/api/items/<int:item_id>/field', methods=['PATCH'])
     @require_auth
     def update_item_field(user_id, item_id):
@@ -1121,6 +1127,12 @@ def create_app():
             return jsonify({'error': str(e)}), 500
 
     # Update a specific field of a sale
+    @app.route('/api/sales/<int:sale_id>/field', methods=['OPTIONS'])
+    def update_sale_field_options(sale_id):
+        """Handle preflight CORS requests for sale field updates"""
+        response = current_app.make_default_options_response()
+        return response
+
     @app.route('/api/sales/<int:sale_id>/field', methods=['PATCH'])
     @require_auth
     def update_sale_field(user_id, sale_id):

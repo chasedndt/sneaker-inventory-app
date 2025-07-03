@@ -24,6 +24,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CloseIcon from '@mui/icons-material/Close';
+import ReceiptIcon from '@mui/icons-material/Receipt';
 import dayjs from 'dayjs';
 
 import ExpenseEntryForm from '../components/Expenses/ExpenseEntryForm';
@@ -32,12 +33,14 @@ import ExpenseFilters from '../components/Expenses/ExpenseFilters';
 import ExpenseKPIMetrics from '../components/Expenses/ExpenseKPIMetrics';
 import RecurringExpensesManager from '../components/Expenses/RecurringExpensesManager';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
+import ReceiptViewer from '../components/common/ReceiptViewer';
 
 import { expensesApi, API_BASE_URL } from '../services/expensesApi';
 import { Expense, ExpenseFilters as ExpenseFiltersType } from '../models/expenses';
 import { useAuthReady } from '../hooks/useAuthReady';
 import { useApi } from '../services/api'; // Import useApi for authenticated API calls
 import { useSettings } from '../contexts/SettingsContext'; // Import useSettings
+import { useAuth } from '../contexts/AuthContext'; // Import useAuth for auth token
 
 const ExpensesPage: React.FC = () => {
   const theme = useTheme();
@@ -45,6 +48,7 @@ const ExpensesPage: React.FC = () => {
   const accountTier = currentUser?.accountTier || 'Free'; // Derive accountTier
   const api = useApi(); // Get authenticated API methods
   const { currency: displayCurrency, convertCurrency, formatCurrency } = useSettings(); // Get currency settings
+  const { getAuthToken } = useAuth(); // Get auth token method
   
   // State for expenses
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -207,6 +211,11 @@ const ExpensesPage: React.FC = () => {
             apiUrl = await expensesApi.getReceiptUrl(expense.id, expense.receiptFilename);
             
             console.log(`✅ Received receipt URL from API: ${apiUrl}`);
+            
+            // Check if we got a valid URL from the API
+            if (!apiUrl) {
+              console.warn('⚠️ API returned empty URL, will use direct URL pattern');
+            }
           } else {
             throw new Error('Missing expense ID or receipt filename');
           }
@@ -234,7 +243,11 @@ const ExpensesPage: React.FC = () => {
         }
         
         // Get an authentication token
-        const token = await currentUser.getIdToken();
+        const token = await getAuthToken();
+        
+        if (!token) {
+          throw new Error('Unable to get authentication token');
+        }
         
         // Use the standard receipt URL pattern with a proper subfolder structure
         // This is the pattern we will use for production
@@ -251,7 +264,9 @@ const ExpensesPage: React.FC = () => {
         }));
         
         // Use the URL that will work
-        const finalUrl = apiUrl || directUrl;
+        const finalUrl = apiUrl ? 
+          (apiUrl.startsWith('http') ? apiUrl : `${API_BASE_URL}${apiUrl}`) : 
+          directUrl;
         
         // Check if the receipt exists
         try {
@@ -316,17 +331,21 @@ const ExpensesPage: React.FC = () => {
   ): Expense[] => {
     return allExpenses.filter(expense => {
       let passes = true;
+      
+      // Date range filter
       if (currentFilters.startDate && dayjs(expense.expenseDate).isBefore(currentFilters.startDate, 'day')) {
         passes = false;
       }
       if (currentFilters.endDate && dayjs(expense.expenseDate).isAfter(currentFilters.endDate, 'day')) {
         passes = false;
       }
+      
+      // Expense type filter
       if (currentFilters.expenseType && expense.expenseType !== currentFilters.expenseType) {
         passes = false;
       }
 
-      // Convert expense amount to display currency before comparing with filter amounts
+      // Amount range filter - convert to display currency before comparing
       const expenseAmountInDisplayCurrency = convertCurrencyFunc(expense.amount, expense.currency || 'USD');
 
       if (currentFilters.minAmount && expenseAmountInDisplayCurrency < Number(currentFilters.minAmount)) {
@@ -335,9 +354,18 @@ const ExpensesPage: React.FC = () => {
       if (currentFilters.maxAmount && expenseAmountInDisplayCurrency > Number(currentFilters.maxAmount)) {
         passes = false;
       }
+      
+      // Vendor filter
       if (currentFilters.vendor && expense.vendor && !expense.vendor.toLowerCase().includes(currentFilters.vendor.toLowerCase())) {
         passes = false;
       }
+      
+      // Recurring expense filter
+      if (currentFilters.isRecurring !== undefined && expense.isRecurring !== currentFilters.isRecurring) {
+        passes = false;
+      }
+      
+      // Search query filter
       if (currentFilters.searchQuery && 
           !(
             expense.notes.toLowerCase().includes(currentFilters.searchQuery.toLowerCase()) ||
@@ -347,6 +375,7 @@ const ExpensesPage: React.FC = () => {
       ) {
         passes = false;
       }
+      
       return passes;
     });
   };
@@ -414,13 +443,26 @@ const ExpensesPage: React.FC = () => {
 
   // Handler for when an expense is saved (added or edited)
   const handleExpenseSaved = async (savedExpense: Expense, action: 'added' | 'updated') => {
+    console.log(`✅ Expense ${action}:`, savedExpense);
+    
+    // Close modals
     setIsAddExpenseModalOpen(false);
     setIsEditExpenseModalOpen(false);
     setCurrentExpense(null);
-    await loadExpenses(); // Refresh the list
+    
+    // Refresh the list to show new expense and any recurring entries
+    console.log('🔄 Refreshing expense data to show changes...');
+    await loadExpenses();
+    
+    // Show appropriate success message
+    let message = `Expense ${action} successfully`;
+    if (action === 'added' && savedExpense.isRecurring) {
+      message = `Recurring expense created! Check the list for generated ${savedExpense.recurrencePeriod} entries.`;
+    }
+    
     setSnackbar({
       open: true,
-      message: `Expense ${action} successfully`,
+      message,
       severity: 'success',
     });
   };
@@ -683,77 +725,13 @@ const ExpensesPage: React.FC = () => {
       </Dialog>
       
       {/* View Receipt Modal */}
-      <Dialog 
-        open={isViewReceiptModalOpen} 
-        onClose={() => setIsViewReceiptModalOpen(false)} 
-        maxWidth="md" 
-        fullWidth
-      >
-        <DialogTitle>
-          Receipt Viewer
-          <IconButton 
-            aria-label="close" 
-            onClick={() => setIsViewReceiptModalOpen(false)}
-            sx={{ position: 'absolute', right: 8, top: 8 }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          {receiptLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : receiptError ? (
-            <Box>
-              <Alert severity="error" sx={{ mb: 2 }}>
-                <AlertTitle>Error Loading Receipt</AlertTitle>
-                {receiptError}
-              </Alert>
-              {debugInfo.corsError && (
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  <strong>CORS Hint:</strong> The server needs to allow requests from http://localhost:3000
-                </Typography>
-              )}
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button onClick={handleRetry} variant="outlined" sx={{ mr: 1 }}>
-                  Retry
-                </Button>
-                <Button onClick={() => setIsViewReceiptModalOpen(false)} variant="contained">
-                  Close
-                </Button>
-              </Box>
-            </Box>
-          ) : currentReceiptUrl ? (
-            <Box sx={{ width: '100%', height: '70vh', overflow: 'auto' }}>
-              {currentReceiptUrl.toLowerCase().endsWith('.pdf') ? (
-                <iframe 
-                  src={currentReceiptUrl} 
-                  title="View Receipt PDF"
-                  width="100%" 
-                  height="100%" 
-                  onError={handleReceiptLoadError}
-                  style={{ border: 'none' }}
-                />
-              ) : (
-                <img 
-                  src={currentReceiptUrl} 
-                  alt="Receipt" 
-                  style={{ width: '100%', height: 'auto' }} 
-                  onError={handleReceiptLoadError}
-                />
-              )}
-            </Box>
-          ) : (
-            <Typography>No receipt available</Typography>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIsViewReceiptModalOpen(false)}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ReceiptViewer
+        open={isViewReceiptModalOpen}
+        onClose={() => setIsViewReceiptModalOpen(false)}
+        receiptUrl={currentReceiptUrl}
+        expenseName={currentExpense ? `${currentExpense.expenseType} - $${currentExpense.amount}` : undefined}
+        onRetry={handleRetry}
+      />
       
       {/* Delete Confirmation Dialog */}
       <ConfirmationDialog

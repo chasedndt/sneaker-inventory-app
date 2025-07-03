@@ -570,21 +570,20 @@ export const api = {
         throw new Error('Authentication required. Please log in to update items.');
       }
       
-      // Create form data with the field and value
-      const formData = { 
-        id: itemId,
-        [field]: value
+      // Create the correct payload format expected by backend
+      const payload = { 
+        field: field,
+        value: value
       };
       
-      // Make the authenticated request
-      // CRITICAL FIX: Try POST since PATCH and PUT are not accepted
+      // Make the authenticated request with correct method and URL
       const response = await fetch(`${API_BASE_URL}/items/${itemId}/field`, {
-        method: 'POST', // Trying POST as both PATCH and PUT were rejected
+        method: 'PATCH', // Backend expects PATCH method
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
       
       if (response.status === 401) {

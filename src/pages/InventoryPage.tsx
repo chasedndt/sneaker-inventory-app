@@ -115,6 +115,8 @@ const InventoryPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   // Add a ref to track if data has been fetched to prevent multiple fetches
   const dataFetchedRef = useRef<boolean>(false);
+  // Add a ref to track if fetchItems is currently running to prevent multiple simultaneous calls
+  const fetchingRef = useRef<boolean>(false);
   // Add a render counter for debugging
   const renderCount = useRef<number>(0);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +202,12 @@ const InventoryPage: React.FC = () => {
   const fetchItems = useCallback(async (forceRefresh = false) => {
     console.log('🔍 [INVENTORY DEBUG] fetchItems called, forceRefresh:', forceRefresh);
     
+    // Prevent multiple simultaneous fetch calls
+    if (fetchingRef.current && !forceRefresh) {
+      console.log('🔍 [INVENTORY DEBUG] fetchItems already running, skipping call');
+      return;
+    }
+    
     // Skip fetch if data already loaded and not forcing refresh
     if (dataFetchedRef.current && !forceRefresh) {
       console.log('🔍 [INVENTORY DEBUG] Data already fetched, skipping redundant fetch');
@@ -221,6 +229,9 @@ const InventoryPage: React.FC = () => {
       setRefreshing(false);
       return;
     }
+
+    // Mark as fetching to prevent concurrent calls
+    fetchingRef.current = true;
 
     try {
       setLoading(true);
@@ -326,6 +337,8 @@ const InventoryPage: React.FC = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      // Reset fetching flag
+      fetchingRef.current = false;
     }
   }, [authReady, currentUser, checkConnection]);  // Minimized dependencies to prevent recreation
   
@@ -340,7 +353,7 @@ const InventoryPage: React.FC = () => {
       console.error('Error fetching tags:', err);
       // Don't set the main error state for tags - we can proceed without them
     }
-  }, [authReady, currentUser, setTags]);
+  }, [authReady, currentUser]); // Removed setTags as it's a stable function
   
   // Debug render count
   useEffect(() => {
@@ -377,16 +390,18 @@ const InventoryPage: React.FC = () => {
       resetConnectionState();
       stopRetrying();
     };
-  }, [authReady, currentUser, fetchItems, fetchTags, resetConnectionState, stopRetrying]);
+  }, [authReady, currentUser]); // Removed function dependencies to prevent infinite loops
 
   useEffect(() => {
     // If connection was restored, try fetching items again
-    if (isConnected && !isCheckingConnection) {
+    if (isConnected && !isCheckingConnection && authReady && currentUser) {
       // If we previously had connection errors but now we're connected
       if (error || connectionError) {
         console.log('🔍 [INVENTORY DEBUG] Connection restored after error, scheduling refetch');
         // Short delay to ensure the connection is stable
         const timer = setTimeout(() => {
+          // Reset the data fetched flag to allow refetch
+          dataFetchedRef.current = false;
           // Force refresh since we're recovering from an error
           fetchItems(true);
         }, 1000);
@@ -394,7 +409,7 @@ const InventoryPage: React.FC = () => {
         return () => clearTimeout(timer);
       }
     }
-  }, [isConnected, error, connectionError, fetchItems, isCheckingConnection]);
+  }, [isConnected, error, connectionError, isCheckingConnection, authReady, currentUser]); // Removed fetchItems dependency
 
   useEffect(() => {
     // Only show error if we're not actively checking connection
@@ -407,20 +422,25 @@ const InventoryPage: React.FC = () => {
           message: currentError,
           severity: 'error'
         });
-      } else if (snackbar.open && snackbar.severity === 'error') {
+      } else if (error === null && connectionError === null) {
         // Clear any existing error messages if there's no error
-        setSnackbar({
-          open: false,
-          message: '',
-          severity: 'success'
+        setSnackbar(prev => {
+          if (prev.open && prev.severity === 'error') {
+            return {
+              open: false,
+              message: '',
+              severity: 'success'
+            };
+          }
+          return prev;
         });
       }
     }
-  }, [error, connectionError, isCheckingConnection, snackbar]);
+  }, [error, connectionError, isCheckingConnection]); // Removed snackbar dependency to prevent circular updates
 
   const handleRefresh = async () => {
     console.log('🔍 [INVENTORY DEBUG] Manual refresh requested');
-    if (!currentUser) { // fetchItems will handle authReady internally
+    if (!currentUser) {
       setSnackbar({
         open: true,
         message: 'Please log in to refresh inventory',
@@ -429,42 +449,20 @@ const InventoryPage: React.FC = () => {
       return;
     }
     
-    setRefreshing(true);
+    // Prevent multiple simultaneous refresh calls
+    if (refreshing) {
+      console.log('🔍 [INVENTORY DEBUG] Refresh already in progress, skipping');
+      return;
+    }
+    
     try {
-      // Force refresh since this is a manual refresh
+      // Reset the data fetched flag to allow refresh
       dataFetchedRef.current = false;
-      const data = await api.getItems();
-      
-      // Filter out sold items
-      const filteredItems = data.filter((item: Item) => item.status !== 'sold');
-      
-      // Enhance items with additional calculated fields (similar to useEffect)
-      const enhancedItems = filteredItems.map((item: Item) => {
-        // Use stored values for marketPrice and status if available
-        const marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
-        const estimatedProfit = marketPrice - item.purchasePrice;
-        const roi = (estimatedProfit / item.purchasePrice) * 100;
-        const daysInInventory = calculateDaysInInventory(item.purchaseDate);
-        const status = item.status || 'unlisted';
-        
-        return {
-          ...item,
-          marketPrice: parseFloat(marketPrice.toFixed(2)),
-          estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
-          roi: parseFloat(roi.toFixed(2)),
-          daysInInventory,
-          status: status as 'unlisted' | 'listed' | 'sold',
-          size: item.size,
-          sizeSystem: item.sizeSystem,
-          tags: item.tags || []
-        };
-      });
-      
+      // Use the unified fetchItems function for consistency
+      await fetchItems(true); // Force refresh
       // Also refresh tags
-      const tags = await tagService.getTags();
-      setTags(tags);
+      await fetchTags();
       
-      setItems(enhancedItems);
       setSnackbar({
         open: true,
         message: 'Inventory refreshed successfully',
@@ -477,8 +475,6 @@ const InventoryPage: React.FC = () => {
         message: `Failed to refresh: ${err.message}`,
         severity: 'error'
       });
-    } finally {
-      setRefreshing(false);
     }
   };
 

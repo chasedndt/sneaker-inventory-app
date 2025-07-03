@@ -595,6 +595,7 @@ const ListItemModal: React.FC<ListItemModalProps> = ({
                     }}
                   >
                     <ListItemText
+                      disableTypography
                       primary={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <StorefrontIcon fontSize="small" />

@@ -17,6 +17,7 @@ import {
   InputAdornment,
   SelectChangeEvent,
   IconButton,
+  Chip,
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -227,11 +228,15 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
         submissionId,
         // Add userId to ensure proper permission handling for receipts
         userId: currentUser.uid,
-        // Disable recurring expense generation
-        generateRecurringEntries: false
+        // Enable recurring expense generation when the expense is recurring
+        generateRecurringEntries: formData.isRecurring
       };
       
       console.log(`🧾 Submitting expense with ID ${submissionId} for user ${currentUser.uid}`);
+      console.log(`📅 Recurring expense data:`, {
+        isRecurring: expenseData.isRecurring,
+        recurrencePeriod: expenseData.recurrencePeriod
+      });
       
       let savedExpense: Expense;
       
@@ -380,7 +385,19 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
                     color="primary"
                   />
                 }
-                label="Recurring Expense"
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography>Recurring Expense</Typography>
+                    {formData.isRecurring && (
+                      <Chip 
+                        label={formData.recurrencePeriod} 
+                        size="small" 
+                        color="primary" 
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+                }
               />
             </Grid>
             
@@ -401,6 +418,18 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
                     <MenuItem value="annually">Annually</MenuItem>
                   </Select>
                 </FormControl>
+              </Grid>
+            )}
+            
+            {/* Recurring Expense Info */}
+            {formData.isRecurring && (
+              <Grid item xs={12}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    This expense will be marked as recurring. The system will track this as a repeating expense 
+                    starting from {formData.expenseDate?.format('MMM DD, YYYY')} and repeating {formData.recurrencePeriod}.
+                  </Typography>
+                </Alert>
               </Grid>
             )}
             
