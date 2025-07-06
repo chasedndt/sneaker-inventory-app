@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -13,12 +13,17 @@ import {
   ListItemIcon,
   ListItemText,
   alpha,
-  Tooltip
+  Tooltip,
+  CircularProgress,
+  Alert,
+  Snackbar
 } from '@mui/material';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import SettingsIcon from '@mui/icons-material/Settings';
 import { useAuth } from '../../contexts/AuthContext';
+import stripeService, { StripeProducts, SubscriptionStatus } from '../../services/stripeService';
 
 // Plan feature types
 interface PlanFeature {
@@ -51,6 +56,55 @@ const BillingSettings: React.FC = () => {
   const { currentUser } = useAuth();
   const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
   const [currentPlan, setCurrentPlan] = useState<string>('free');
+  const [stripeProducts, setStripeProducts] = useState<StripeProducts>({});
+  const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+
+  // Load Stripe products and subscription status
+  useEffect(() => {
+    const loadStripeData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Load Stripe products and subscription status in parallel
+        const [products, status] = await Promise.all([
+          stripeService.getProducts(),
+          stripeService.getSubscriptionStatus()
+        ]);
+
+        setStripeProducts(products);
+        setSubscriptionStatus(status);
+        setCurrentPlan(status.tier);
+
+        // Check URL parameters for success/cancel messages
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success') === 'true') {
+          setSnackbarMessage('Payment successful! Your subscription has been activated.');
+          setSnackbarOpen(true);
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (urlParams.get('canceled') === 'true') {
+          setSnackbarMessage('Payment was canceled. You can try again anytime.');
+          setSnackbarOpen(true);
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } catch (err) {
+        console.error('Failed to load Stripe data:', err);
+        setError('Failed to load billing information. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (currentUser) {
+      loadStripeData();
+    }
+  }, [currentUser]);
 
   // Define plans
   const plans: Plan[] = [
@@ -81,68 +135,94 @@ const BillingSettings: React.FC = () => {
     {
       id: 'starter',
       name: 'Starter',
-      price: billing === 'monthly' ? 19 : 190,
-      billing: billing,
+      price: stripeProducts.starter?.monthly_price || 9.99,
+      billing: 'monthly',
       description: 'Support your small-scale reselling needs.',
-      buttonText: 'Upgrade now',
+      buttonText: currentPlan === 'starter' ? 'Current plan' : 'Upgrade now',
       highlight: true,
       limits: {
-        items: '500 items / month',
+        items: '100 items',
         storage: '5 GB storage',
         users: '1 user',
-        events: 'Priority scans'
+        events: 'Basic analytics'
       },
-      features: [
+      features: stripeProducts.starter?.features.map(feature => ({ name: feature, included: true })) || [
         { name: 'Everything in Free', included: true },
-        { name: 'Advanced inventory tracking', included: true },
+        { name: 'Up to 100 items', included: true },
         { name: 'Basic analytics', included: true },
-        { name: 'Email support', included: true },
-        { name: 'Bulk import/export', included: true },
-        { name: 'Advanced analytics', included: false },
-        { name: 'Priority support', included: false },
-        { name: 'API access', included: false },
+        { name: 'Standard support', included: true },
       ]
     },
     {
       id: 'professional',
       name: 'Professional',
-      price: billing === 'monthly' ? 49 : 490,
-      billing: billing,
+      price: stripeProducts.professional?.monthly_price || 19.99,
+      billing: 'monthly',
       description: 'For serious resellers looking for more capacity, efficiency, and automation.',
-      buttonText: 'Upgrade now',
+      buttonText: currentPlan === 'professional' ? 'Current plan' : 'Upgrade now',
       limits: {
-        items: '2000 items / month',
+        items: 'Unlimited items',
         storage: '20 GB storage',
         users: '3 users',
-        events: 'Priority scans'
+        events: 'Advanced analytics'
       },
-      features: [
+      features: stripeProducts.professional?.features.map(feature => ({ name: feature, included: true })) || [
         { name: 'Everything in Starter', included: true },
+        { name: 'Unlimited items', included: true },
         { name: 'Advanced analytics', included: true },
+        { name: 'ROI tracking', included: true },
         { name: 'Priority support', included: true },
-        { name: 'Bulk operations', included: true },
-        { name: 'API access', included: true },
-        
-        { name: 'White-label exports', included: true },
-                { name: 'Advanced integrations', included: true },
+        { name: 'Export capabilities', included: true },
       ]
     }
   ];
 
   // Handle plan change
-  const handlePlanChange = (planId: string) => {
-    // For now, show an alert about the plan change
-    // In the next phase, this will integrate with Stripe payment processing
-    if (planId === 'free') {
-      alert('You are already on the free plan.');
-      return;
+  const handlePlanChange = async (planId: string) => {
+    try {
+      if (planId === 'free') {
+        setSnackbarMessage('You are already on the free plan.');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      if (planId === currentPlan) {
+        setSnackbarMessage('You are already on this plan.');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      // Get the Stripe product info
+      const productInfo = stripeProducts[planId];
+      if (!productInfo) {
+        setSnackbarMessage('Plan not available. Please try again.');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      // Redirect to Stripe Checkout
+      await stripeService.redirectToCheckout(productInfo.price_id);
+    } catch (error) {
+      console.error('Failed to initiate plan change:', error);
+      setSnackbarMessage('Failed to process payment. Please try again.');
+      setSnackbarOpen(true);
     }
-    
-    const selectedPlan = plans.find(p => p.id === planId);
-    if (selectedPlan) {
-      const message = `Plan upgrade to ${selectedPlan.name} ($${selectedPlan.price}/${selectedPlan.billing}) will be implemented in the next phase with Stripe payment processing.`;
-      alert(message);
-      console.log(`Plan change requested: ${planId}`, selectedPlan);
+  };
+
+  // Handle billing portal
+  const handleBillingPortal = async () => {
+    try {
+      if (!subscriptionStatus?.has_subscription) {
+        setSnackbarMessage('No active subscription found.');
+        setSnackbarOpen(true);
+        return;
+      }
+
+      await stripeService.redirectToBillingPortal();
+    } catch (error) {
+      console.error('Failed to open billing portal:', error);
+      setSnackbarMessage('Failed to open billing portal. Please try again.');
+      setSnackbarOpen(true);
     }
   };
 
@@ -151,8 +231,48 @@ const BillingSettings: React.FC = () => {
     setBilling(billing === 'monthly' ? 'yearly' : 'monthly');
   };
 
+  // Handle snackbar close
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <Box sx={{ width: '100%' }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+        <Button onClick={() => window.location.reload()}>
+          Try Again
+        </Button>
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ width: '100%' }}>
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity="info" sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+
       {/* Header */}
       <Paper
         elevation={0}
@@ -166,6 +286,31 @@ const BillingSettings: React.FC = () => {
         <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
           Choose the right plan for your business
         </Typography>
+        
+        {/* Current subscription info */}
+        {subscriptionStatus?.has_subscription && (
+          <Box sx={{ mb: 2, p: 2, backgroundColor: alpha(theme.palette.success.main, 0.1), borderRadius: 1 }}>
+            <Typography variant="body2" color="success.main" sx={{ fontWeight: 'bold' }}>
+              Active Subscription: {stripeService.getTierDisplayName(subscriptionStatus.tier)}
+            </Typography>
+            {subscriptionStatus.subscription && (
+              <Typography variant="body2" color="text.secondary">
+                {subscriptionStatus.subscription.cancel_at_period_end ? 
+                  `Cancels on ${stripeService.formatPeriodEndDate(subscriptionStatus.subscription.current_period_end)}` :
+                  `Renews on ${stripeService.formatPeriodEndDate(subscriptionStatus.subscription.current_period_end)}`
+                }
+              </Typography>
+            )}
+            <Button
+              startIcon={<SettingsIcon />}
+              onClick={handleBillingPortal}
+              sx={{ mt: 1 }}
+              size="small"
+            >
+              Manage Subscription
+            </Button>
+          </Box>
+        )}
         
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Typography variant="body2" color="text.secondary">

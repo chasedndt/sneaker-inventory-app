@@ -114,6 +114,10 @@ def create_app():
     # Register the admin routes blueprint (add this line)
     app.register_blueprint(admin_routes, url_prefix='/api')
 
+    # Register the Stripe routes blueprint
+    from stripe_routes import stripe_bp
+    app.register_blueprint(stripe_bp)
+
     # Add security headers
     @app.after_request
     def add_security_headers(response):
