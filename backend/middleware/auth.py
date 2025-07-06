@@ -7,6 +7,47 @@ import os
 import json
 import time
 
+def initialize_firebase():
+    """Initialize Firebase Admin SDK if not already initialized"""
+    if firebase_admin._apps:
+        return True  # Already initialized
+    
+    try:
+        BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Try multiple credential sources in order of preference
+        cred_sources = [
+            os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY_PATH'),
+            os.getenv('GOOGLE_APPLICATION_CREDENTIALS'), 
+            os.path.join(BASE_DIR, "firebase-credentials.json")
+        ]
+        
+        cred = None
+        for cred_path in cred_sources:
+            if cred_path and os.path.exists(cred_path):
+                try:
+                    cred = credentials.Certificate(cred_path)
+                    break
+                except Exception as e:
+                    print(f"Failed to load Firebase credentials from {cred_path}: {e}")
+                    continue
+        
+        if not cred:
+            print("Firebase credentials not found. Please check your configuration.")
+            return False
+        
+        # Initialize with storage bucket
+        firebase_admin.initialize_app(cred, {
+            'storageBucket': os.getenv('FIREBASE_STORAGE_BUCKET', 'your-project-id.appspot.com')
+        })
+        
+        print("Firebase Admin SDK initialized successfully")
+        return True
+        
+    except Exception as e:
+        print(f"Failed to initialize Firebase Admin SDK: {e}")
+        return False
+
 
 
 # Decorator for routes that require admin privileges

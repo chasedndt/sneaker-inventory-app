@@ -122,41 +122,28 @@ const BillingSettings: React.FC = () => {
         { name: 'Priority support', included: true },
         { name: 'Bulk operations', included: true },
         { name: 'API access', included: true },
-        { name: 'Custom reports', included: true },
+        
         { name: 'White-label exports', included: true },
-        { name: 'Advanced integrations', included: true },
-      ]
-    },
-    {
-      id: 'enterprise',
-      name: 'Enterprise',
-      price: billing === 'monthly' ? 249 : 2490,
-      billing: billing,
-      description: 'Built for large operations, warehouses, and multi-user teams.',
-      buttonText: 'Contact sales',
-      limits: {
-        items: 'Unlimited items / month',
-        storage: 'Unlimited storage',
-        users: 'Unlimited users',
-        events: 'Priority scans'
-      },
-      features: [
-        { name: 'Everything in Professional', included: true },
-        { name: 'Dedicated account manager', included: true },
-        { name: 'Custom feature development', included: true },
-        { name: 'SLA guarantees', included: true },
-        { name: 'Advanced security', included: true },
-        { name: 'Custom integrations', included: true },
-        { name: 'On-premise deployment', included: true, tooltip: 'Available for enterprise customers only' },
-        { name: 'White-label solution', included: true },
+                { name: 'Advanced integrations', included: true },
       ]
     }
   ];
 
   // Handle plan change
   const handlePlanChange = (planId: string) => {
-    // In a real app, this would trigger a payment flow
-    console.log(`Changing plan to ${planId}`);
+    // For now, show an alert about the plan change
+    // In the next phase, this will integrate with Stripe payment processing
+    if (planId === 'free') {
+      alert('You are already on the free plan.');
+      return;
+    }
+    
+    const selectedPlan = plans.find(p => p.id === planId);
+    if (selectedPlan) {
+      const message = `Plan upgrade to ${selectedPlan.name} ($${selectedPlan.price}/${selectedPlan.billing}) will be implemented in the next phase with Stripe payment processing.`;
+      alert(message);
+      console.log(`Plan change requested: ${planId}`, selectedPlan);
+    }
   };
 
   // Toggle billing period

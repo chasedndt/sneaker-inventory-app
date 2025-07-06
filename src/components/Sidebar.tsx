@@ -16,10 +16,8 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import SellIcon from '@mui/icons-material/Sell';
 import ReceiptIcon from '@mui/icons-material/Receipt';
-import FormatListBulletedIcon from '@mui/icons-material/FormatListBulleted';
+
 import SettingsIcon from '@mui/icons-material/Settings';
-import LockIcon from '@mui/icons-material/Lock';
-import AssessmentIcon from '@mui/icons-material/Assessment'; // For Reports
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'; // For Admin
 import { useAuthReady } from '../hooks/useAuthReady';
 
@@ -38,16 +36,14 @@ type MenuItemType = {
 const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
   const theme = useTheme();
   const { currentUser, authReady } = useAuthReady();
-  const accountTier = currentUser?.accountTier || 'Free';
+  const accountTier = currentUser?.accountTier || 'free';
 
   // Define menu items
   let menuItems: MenuItemType[] = [ // Changed to let to allow modification
     { label: 'Dashboard', icon: <DashboardIcon />, value: 'dashboard' },
     { label: 'Inventory', icon: <InventoryIcon />, value: 'inventory' },
     { label: 'Sales', icon: <SellIcon />, value: 'sales' },
-    { label: 'Expenses', icon: <ReceiptIcon />, value: 'expenses' },
-    { label: 'Coplists', icon: <FormatListBulletedIcon />, value: 'coplists' },
-    { label: 'Reports', icon: <AssessmentIcon />, value: 'reports', dividerAfter: true },
+    { label: 'Expenses', icon: <ReceiptIcon />, value: 'expenses', dividerAfter: true },
     { label: 'Settings', icon: <SettingsIcon />, value: 'settings' },
   ];
 
@@ -147,9 +143,6 @@ const Sidebar: React.FC<SidebarProps> = ({ onNavigate, currentPage }) => {
                   }}
                 >
                   {item.icon}
-                  {item.value === 'reports' && accountTier === 'Free' && 
-                    <LockIcon sx={{ fontSize: '1rem', ml: 0.5, color: theme.palette.text.disabled }} />
-                  }
                 </ListItemIcon>
                 <ListItemText 
                   primary={item.label} 

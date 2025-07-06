@@ -1,8 +1,11 @@
 # backend/admin/admin_routes.py
 from flask import Blueprint, request, jsonify, current_app
-from models import db, Item, Size, Image, Tag, Sale, Expense, Coplist, UserSettings
+from models import db, Item, Size, Image, Tag, Sale, Expense, UserSettings
 from middleware.auth import require_admin, is_admin, set_user_admin_status, get_all_users, create_user, delete_user, update_user, get_user_by_id
+from firebase_admin import auth
 import logging
+import random
+from datetime import datetime, timedelta
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -22,6 +25,14 @@ def get_users(user_id):
         users = get_all_users()
         if users is None:
             return jsonify({'error': 'Failed to retrieve users'}), 500
+        
+        # Add plan tier information to each user
+        for user in users:
+            plan_tier = (user.get('custom_claims') or {}).get('planTier', 'free')
+            user['planTier'] = plan_tier
+            # Format creation date for display
+            if user.get('created_at'):
+                user['signup_date'] = user['created_at']
         
         return jsonify(users), 200
     except Exception as e:
@@ -152,6 +163,193 @@ def set_admin_status_route(user_id, email):
         return jsonify({'message': message}), 200
     except Exception as e:
         logger.error(f"Error in set_admin_status_route: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@admin_routes.route('/admin/users/<string:target_uid>/plan-tier', methods=['PUT'])
+@require_admin
+def update_user_plan_tier(user_id, target_uid):
+    """
+    Update a user's plan tier (admin only)
+    """
+    try:
+        data = request.json
+        if not data or 'planTier' not in data:
+            return jsonify({'error': 'planTier is required'}), 400
+        
+        plan_tier = data['planTier']
+        valid_tiers = ['free', 'starter', 'professional']
+        
+        if plan_tier not in valid_tiers:
+            return jsonify({'error': f'Invalid plan tier. Must be one of: {valid_tiers}'}), 400
+        
+        # Get the user to update their custom claims
+        try:
+            user_record = auth.get_user(target_uid)
+        except auth.UserNotFoundError:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Update custom claims with new plan tier
+        current_claims = user_record.custom_claims or {}
+        current_claims['planTier'] = plan_tier
+        current_claims['planTierSet'] = True  # Flag to indicate tier was set by admin
+        
+        auth.set_custom_user_claims(target_uid, current_claims)
+        
+        logger.info(f"Admin {user_id} updated user {target_uid} plan tier to {plan_tier}")
+        
+        return jsonify({
+            'message': f'User plan tier updated to {plan_tier}',
+            'uid': target_uid,
+            'planTier': plan_tier
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in update_user_plan_tier: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+# Admin Item Management Routes
+
+@admin_routes.route('/admin/grant-items', methods=['POST'])
+@require_admin
+def grant_items(user_id):
+    """
+    Grant items to a user (admin only)
+    """
+    try:
+        data = request.json
+        if not data or 'userId' not in data or 'itemCount' not in data:
+            return jsonify({'error': 'userId and itemCount are required'}), 400
+        
+        target_user_id = data['userId']
+        item_count = int(data['itemCount'])
+        
+        if item_count <= 0:
+            return jsonify({'error': 'itemCount must be positive'}), 400
+        
+        # Check if user exists
+        try:
+            user_record = auth.get_user(target_user_id)
+        except auth.UserNotFoundError:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get or create user settings
+        user_settings = UserSettings.query.filter_by(user_id=target_user_id).first()
+        if not user_settings:
+            user_settings = UserSettings(user_id=target_user_id)
+            db.session.add(user_settings)
+        
+        # Grant items (add to their quota)
+        if not hasattr(user_settings, 'items_quota'):
+            user_settings.items_quota = 0
+        user_settings.items_quota += item_count
+        
+        db.session.commit()
+        
+        logger.info(f"Admin {user_id} granted {item_count} items to user {target_user_id}")
+        
+        return jsonify({
+            'message': f'Successfully granted {item_count} items to user {target_user_id}',
+            'userId': target_user_id,
+            'itemsGranted': item_count,
+            'newQuota': user_settings.items_quota
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in grant_items: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@admin_routes.route('/admin/seed-data', methods=['POST'])
+@require_admin
+def seed_data(user_id):
+    """
+    Seed dummy data for testing (admin only)
+    """
+    try:
+        data = request.json
+        if not data or 'dataType' not in data or 'count' not in data:
+            return jsonify({'error': 'dataType and count are required'}), 400
+        
+        data_type = data['dataType']
+        count = int(data['count'])
+        
+        if count <= 0:
+            return jsonify({'error': 'count must be positive'}), 400
+        
+        if count > 100:
+            return jsonify({'error': 'count cannot exceed 100 for safety'}), 400
+        
+        created_items = []
+        
+        if data_type == 'items':
+            # Create dummy items
+            brands = ['Nike', 'Adidas', 'Jordan', 'Yeezy', 'New Balance', 'Converse']
+            categories = ['Sneakers', 'Boots', 'Sandals', 'Dress Shoes']
+            
+            for i in range(count):
+                item = Item(
+                    user_id=user_id,  # Assign to the admin user
+                    brand=random.choice(brands),
+                    model=f'Test Model {i+1}',
+                    colorway=f'Test Colorway {i+1}',
+                    category=random.choice(categories),
+                    purchase_price=round(random.uniform(50, 300), 2),
+                    retail_price=round(random.uniform(100, 500), 2),
+                    condition='New',
+                    date_acquired=datetime.now() - timedelta(days=random.randint(1, 365))
+                )
+                db.session.add(item)
+                created_items.append(f'{item.brand} {item.model}')
+        
+        elif data_type == 'sales':
+            # Create dummy sales (need existing items)
+            existing_items = Item.query.filter_by(user_id=user_id).limit(count).all()
+            if not existing_items:
+                return jsonify({'error': 'No items found to create sales for. Create items first.'}), 400
+            
+            for i in range(min(count, len(existing_items))):
+                item = existing_items[i]
+                sale = Sale(
+                    user_id=user_id,
+                    item_id=item.id,
+                    sale_price=round(random.uniform(item.purchase_price, item.retail_price * 1.2), 2),
+                    date_sold=datetime.now() - timedelta(days=random.randint(1, 180)),
+                    platform=random.choice(['StockX', 'GOAT', 'eBay', 'Local']),
+                    fees=round(random.uniform(5, 25), 2)
+                )
+                db.session.add(sale)
+                created_items.append(f'Sale of {item.brand} {item.model}')
+        
+        elif data_type == 'expenses':
+            # Create dummy expenses
+            categories = ['Shipping', 'Storage', 'Cleaning', 'Authentication', 'Marketing']
+            
+            for i in range(count):
+                expense = Expense(
+                    user_id=user_id,
+                    description=f'Test Expense {i+1}',
+                    amount=round(random.uniform(5, 100), 2),
+                    category=random.choice(categories),
+                    date=datetime.now() - timedelta(days=random.randint(1, 365))
+                )
+                db.session.add(expense)
+                created_items.append(f'{expense.category}: {expense.description}')
+        
+        else:
+            return jsonify({'error': 'Invalid dataType. Must be items, sales, or expenses'}), 400
+        
+        db.session.commit()
+        
+        logger.info(f"Admin {user_id} seeded {count} dummy {data_type}")
+        
+        return jsonify({
+            'message': f'Successfully created {count} dummy {data_type}',
+            'dataType': data_type,
+            'count': count,
+            'items': created_items
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in seed_data: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 # Admin Data Management Routes

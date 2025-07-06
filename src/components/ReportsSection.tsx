@@ -7,7 +7,8 @@ import {
   Button,
   useTheme,
   CircularProgress,
-  ClickAwayListener
+  ClickAwayListener,
+  Alert
 } from '@mui/material';
 import { Dayjs } from 'dayjs';
 import UpgradeOverlay from './common/UpgradeOverlay';
@@ -78,6 +79,22 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   // Hooks are all at the top
   const currentUser = propCurrentUser ?? authCurrentUserFromHook;
   const accountTier = currentUser?.accountTier || 'Free';
+  
+  // DEBUG: Log the user's account tier for debugging tier restrictions
+  useEffect(() => {
+    console.log('🔍 [ReportsSection] User account tier:', accountTier);
+    console.log('🔍 [ReportsSection] User custom claims:', currentUser?.customClaims);
+    console.log('🔍 [ReportsSection] isFeatureLocked:', {
+      isROIPercentageLocked: accountTier?.toLowerCase() === 'free',
+      isRealizedProfitExpensesLocked: accountTier?.toLowerCase() === 'free',
+      tierComparison: `"${accountTier?.toLowerCase()}" === "free" = ${accountTier?.toLowerCase() === 'free'}`
+    });
+    
+    // Visual alert for debugging
+    if (accountTier?.toLowerCase() === 'free') {
+      console.log('🚨 FREE TIER DETECTED - ROI and Realized Profit should be LOCKED! 🚨');
+    }
+  }, [accountTier, currentUser?.customClaims]);
 
   const [metricsData, setMetricsData] = useState<MetricsData | null>(null);
   const [isFetching, setIsFetching] = useState(false); 
@@ -298,9 +315,9 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   }), [memoizedMetrics]);
 
   const isFeatureLocked = useMemo(() => ({
-    isROIPercentageLocked: accountTier === 'Free',
+    isROIPercentageLocked: accountTier?.toLowerCase() === 'free',
     isItemsSoldLocked: false, // Items Sold should not be locked for any tier
-    isRealizedProfitExpensesLocked: accountTier === 'Free',
+    isRealizedProfitExpensesLocked: accountTier?.toLowerCase() === 'free',
   }), [accountTier]);
   
   const metricsCardProps = useMemo(() => ({
@@ -786,6 +803,11 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   
   return (
     <Box sx={{ width: '100%', p: 0, m: 0, overflow: 'visible' }}>
+      {/* DEBUG: Temporary tier indicator */}
+      <Alert severity="info" sx={{ mb: 2 }}>
+        DEBUG: Account Tier = "{accountTier}" | ROI Locked = {isFeatureLocked.isROIPercentageLocked ? 'YES' : 'NO'} | Realized Profit Locked = {isFeatureLocked.isRealizedProfitExpensesLocked ? 'YES' : 'NO'}
+      </Alert>
+      
       {showSpinner && (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
           <CircularProgress />

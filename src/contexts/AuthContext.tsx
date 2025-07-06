@@ -15,6 +15,7 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { initializeApi, setAuthTokenGetter as setAuthTokenGetterForApi } from '../services/api'; // Import initializeApi and setAuthTokenGetter
+import { safeLog } from '../utils/logger';
 
 // Create the auth context with a default undefined value first
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,10 +27,11 @@ export const authReadyPromise: Promise<void> = new Promise(res => {
 
 // Define AppUser interface extending Firebase User
 export interface AppUser extends User {
-  accountTier: 'Free' | 'Starter' | 'Professional' | 'admin';
+  accountTier: 'free' | 'starter' | 'professional' | 'admin';
   customClaims?: {
     accountTierSet?: boolean; // Flag to indicate if tier was set via admin tool
-    accountTier?: 'Free' | 'Starter' | 'Professional' | 'admin';
+    planTier?: 'free' | 'starter' | 'professional' | 'admin';
+    accountTier?: 'free' | 'starter' | 'professional' | 'admin';
     admin?: boolean;
     [key: string]: any; // For any other custom claims
   };
@@ -41,7 +43,7 @@ export interface AuthContextType {
   loading: boolean;
   token: string | null;
   tokenExpiration: Date | null;
-  accountTier: 'Free' | 'Starter' | 'Professional' | 'admin' | undefined;
+  accountTier: 'free' | 'starter' | 'professional' | 'admin' | undefined;
   signup: (email: string, password: string) => Promise<AppUser>;
   login: (email: string, password: string) => Promise<AppUser>;
   logout: () => Promise<void>;
@@ -93,8 +95,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             photoURL: userCredential.user.photoURL,
             phoneNumber: userCredential.user.phoneNumber,
             providerId: userCredential.user.providerId,
-            accountTier: 'Free', // Default tier on signup
-            customClaims: { accountTier: 'Free', accountTierSet: false } // Initialize customClaims
+            accountTier: 'free', // Default tier on signup
+            customClaims: { accountTier: 'free', accountTierSet: false } // Initialize customClaims
           };
           resolve(appUser);
         })
@@ -172,12 +174,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       // Check if we have a valid token already
       if (token && tokenExpiration && new Date() < tokenExpiration) {
-        console.log('Using cached token, still valid');
+        safeLog.debug('Using cached token, still valid');
         return token;
       }
 
       // Get a fresh token
-      console.log('Getting fresh token from Firebase');
+      safeLog.debug('Getting fresh token from Firebase');
       const newToken = await getIdToken(currentUser, true); // force refresh
       const tokenResult = await getIdTokenResult(currentUser);
       
@@ -189,7 +191,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       return newToken;
     } catch (error) {
-      console.error('Error getting auth token:', error);
+      safeLog.error('Error getting auth token:', error);
       return null;
     }
   }, [currentUser, token, tokenExpiration]);
@@ -231,14 +233,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const tokenResult = await getIdTokenResult(user); // Fetch token result once
-        const tier = (tokenResult.claims.accountTier as AppUser['accountTier']) || 'Free';
+        // Check for planTier first (new system), then fallback to accountTier, then default to 'free'
+        const planTier = tokenResult.claims.planTier as AppUser['accountTier'];
+        const accountTier = tokenResult.claims.accountTier as AppUser['accountTier'];
+        const isAdmin = tokenResult.claims.admin as boolean;
+        
+        // Determine final tier: admin takes precedence, then planTier, then accountTier, then default
+        const tier = isAdmin ? 'admin' : (planTier || accountTier || 'free');
+        
         const appUser: AppUser = {
           ...user,
           accountTier: tier,
           customClaims: {
+            planTier: planTier || tier,
             accountTier: tier,
             accountTierSet: tokenResult.claims.accountTierSet as boolean || false,
-            admin: tokenResult.claims.admin as boolean || false,
+            admin: isAdmin || false,
             ...tokenResult.claims
           }
         };

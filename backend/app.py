@@ -9,7 +9,7 @@ import traceback
 from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime, timedelta
-from models import db, Item, Size, Image, Tag, Sale, Expense, Coplist, UserSettings
+from models import db, Item, Size, Image, Tag, Sale, Expense, UserSettings
 from config import Config
 from tag_routes import tag_routes
 import re
@@ -29,13 +29,40 @@ if os.name == "nt" and sys.stdout.encoding.lower() != "utf-8":
 import firebase_admin
 from firebase_admin import credentials
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-cred_path = os.path.join(BASE_DIR, "firebase-credentials.json")
+def initialize_firebase_admin():
+    """Initialize Firebase Admin SDK with secure credential handling"""
+    if firebase_admin._apps:
+        return  # Already initialized
+    
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    
+    # Try multiple credential sources in order of preference
+    cred_sources = [
+        os.getenv('FIREBASE_SERVICE_ACCOUNT_KEY_PATH'),
+        os.getenv('GOOGLE_APPLICATION_CREDENTIALS'), 
+        os.path.join(BASE_DIR, "firebase-credentials.json")
+    ]
+    
+    cred = None
+    for cred_path in cred_sources:
+        if cred_path and os.path.exists(cred_path):
+            try:
+                cred = credentials.Certificate(cred_path)
+                break
+            except Exception as e:
+                logger.warning(f"Failed to load Firebase credentials from {cred_path}: {e}")
+                continue
+    
+    if not cred:
+        raise ValueError("Firebase credentials not found. Please check your configuration.")
+    
+    # Initialize with storage bucket
+    firebase_admin.initialize_app(cred, {
+        'storageBucket': os.getenv('FIREBASE_STORAGE_BUCKET', 'your-project-id.appspot.com')
+    })
 
-# Only initialise once per process
-if not firebase_admin._apps:
-    cred = credentials.Certificate(cred_path)
-    firebase_admin.initialize_app(cred)
+# Initialize Firebase Admin SDK
+initialize_firebase_admin()
 # ────────────────────────────────────────────────────────────────────
 
 # Define a module-level logger
@@ -45,6 +72,25 @@ def convert_to_snake_case(name):
     """Convert a string from camelCase to snake_case."""
     pattern = re.compile(r'(?<!^)(?=[A-Z])')
     return pattern.sub('_', name).lower()
+
+def safe_error_response(error, message="An error occurred", status_code=500):
+    """Return a safe error response that doesn't leak sensitive information"""
+    # Log the full error for debugging
+    logger.error(f"Error occurred: {str(error)}")
+    
+    # In development, return detailed error info
+    if current_app.config.get('DEBUG'):
+        return jsonify({
+            'error': str(error),
+            'message': message,
+            'debug': True
+        }), status_code
+    else:
+        # In production, return generic error message
+        return jsonify({
+            'error': message,
+            'debug': False
+        }), status_code
 
 def create_app():
     app = Flask(__name__)
@@ -67,6 +113,32 @@ def create_app():
 
     # Register the admin routes blueprint (add this line)
     app.register_blueprint(admin_routes, url_prefix='/api')
+
+    # Add security headers
+    @app.after_request
+    def add_security_headers(response):
+        """Add security headers to all responses"""
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
+        
+        # Add CSP header for additional XSS protection
+        # Include localhost and development URLs for local development
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self'; "
+            "connect-src 'self' http://127.0.0.1:5000 http://localhost:5000 https://api.exchangerate-api.com https://open.er-api.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebase.googleapis.com; "
+            "object-src 'none'; "
+            "base-uri 'self'"
+        )
+        response.headers['Content-Security-Policy'] = csp
+        
+        return response
 
     # Set up standard application logging
     # Reduced log level from DEBUG to INFO to prevent excessive log spamming in production
@@ -125,6 +197,11 @@ def create_app():
     def health_check():
         return jsonify({'status': 'ok'}), 200
     
+    # Alternative health check endpoint
+    @app.route('/api/health', methods=['GET'])
+    def health_check_alt():
+        return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()}), 200
+    
     # Get user info endpoint
     @app.route('/api/user', methods=['GET'])
     @require_auth
@@ -157,7 +234,7 @@ def create_app():
             return jsonify(response), 200
         except Exception as e:
             logger.error(f"💥 Error fetching user info: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to fetch user information")
     
     # Update user settings endpoint
     @app.route('/api/settings', methods=['PUT'])
@@ -194,7 +271,7 @@ def create_app():
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error updating settings: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to update settings")
 
     # Modified to include user_id from authentication
     @app.route('/api/items', methods=['GET'])
@@ -217,7 +294,7 @@ def create_app():
             return jsonify(items_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to fetch items")
 
     # Get a single item by ID - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['GET'])
@@ -252,7 +329,7 @@ def create_app():
             return jsonify(item_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to fetch item")
 
     # Add a new item with current user_id
     @app.route('/api/items', methods=['POST'])
@@ -374,7 +451,7 @@ def create_app():
         except Exception as e:
             db.session.rollback()
             logger.error(f"💥 Error creating item for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to create item")
 
     # Update an existing item - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['PUT'])
@@ -645,7 +722,7 @@ def create_app():
             logger.error(f"💥 Error updating item {item_id} for user {user_id}: {str(e)}")
             # Include traceback for better debugging
             logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to update item")
 
     # Update a specific field of an item
     @app.route('/api/items/<int:item_id>/field', methods=['OPTIONS'])
@@ -811,7 +888,7 @@ def create_app():
             db.session.rollback()
             logger.error(f"💥 Error updating field for item {item_id}: {str(e)}")
             logger.error(traceback.format_exc())
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to update item field")
 
     # Delete an item - verify ownership
     @app.route('/api/items/<int:item_id>', methods=['DELETE'])
@@ -1758,283 +1835,7 @@ def create_app():
             logger.error(f"💥 Error generating expense summary for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
-    # COPLISTS API ENDPOINTS
-    @app.route('/api/coplists', methods=['GET'])
-    @require_auth
-    def get_coplists(user_id):
-        """
-        Get all coplists for the current user.
-        """
-        try:
-            logger.info(f"📋 Fetching coplists for user {user_id}")
-            coplists = Coplist.query.filter_by(user_id=user_id).all()
-            return jsonify([coplist.to_dict() for coplist in coplists]), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching coplists for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
 
-    @app.route('/api/coplists', methods=['POST'])
-    @require_auth
-    def create_coplist(user_id):
-        """
-        Create a new coplist for the current user.
-        """
-        try:
-            logger.info(f"📝 Creating new coplist for user {user_id}")
-            data = request.json
-            
-            # Validate required fields
-            if not data or 'name' not in data:
-                logger.error("❌ Missing required field: name")
-                return jsonify({'error': 'Missing required field: name'}), 400
-            
-            # Create new coplist
-            new_coplist = Coplist(
-                user_id=user_id,
-                name=data['name'],
-                description=data.get('description', ''),
-                is_private=data.get('is_private', True)
-            )
-            
-            db.session.add(new_coplist)
-            db.session.commit()
-            
-            logger.info(f"✅ Created coplist with ID {new_coplist.id} for user {user_id}")
-            return jsonify(new_coplist.to_dict()), 201
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error creating coplist for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/coplists/<int:coplist_id>', methods=['GET'])
-    @require_auth
-    def get_coplist(user_id, coplist_id):
-        """
-        Get a single coplist by ID with ownership verification.
-        """
-        try:
-            logger.info(f"🔍 Fetching coplist {coplist_id} for user {user_id}")
-            
-            coplist = Coplist.query.get(coplist_id)
-            if not coplist:
-                logger.warning(f"❌ Coplist with ID {coplist_id} not found")
-                return jsonify({'error': 'Coplist not found'}), 404
-            
-            # Verify ownership or public access
-            if coplist.user_id != user_id and coplist.is_private:
-                logger.warning(f"🚫 User {user_id} attempted to access private coplist {coplist_id} belonging to user {coplist.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Get detailed coplist with items
-            coplist_data = coplist.to_dict()
-            
-            # Add items details
-            items_data = []
-            for item in coplist.items:
-                # Only include basic item details
-                item_data = {
-                    'id': item.id,
-                    'productName': item.product_name,
-                    'brand': item.brand,
-                    'category': item.category,
-                    'status': item.status
-                }
-                
-                # Include image if available
-                images = Image.query.filter_by(item_id=item.id).all()
-                if images:
-                    item_data['imageUrl'] = images[0].filename
-                    
-                items_data.append(item_data)
-                
-            coplist_data['items'] = items_data
-            
-            logger.info(f"✅ Retrieved coplist {coplist_id} with {len(items_data)} items")
-            return jsonify(coplist_data), 200
-        except Exception as e:
-            logger.error(f"💥 Error fetching coplist {coplist_id} for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/coplists/<int:coplist_id>', methods=['PUT'])
-    @require_auth
-    def update_coplist(user_id, coplist_id):
-        """
-        Update an existing coplist with ownership verification.
-        """
-        try:
-            logger.info(f"🔄 Updating coplist {coplist_id} for user {user_id}")
-            data = request.json
-            
-            # Validate request
-            if not data:
-                logger.error("❌ No data provided")
-                return jsonify({'error': 'No data provided'}), 400
-            
-            # Check if coplist exists
-            coplist = Coplist.query.get(coplist_id)
-            if not coplist:
-                logger.error(f"❌ Coplist with ID {coplist_id} not found")
-                return jsonify({'error': 'Coplist not found'}), 404
-            
-            # Verify ownership
-            if coplist.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to update coplist {coplist_id} belonging to user {coplist.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Update coplist fields
-            if 'name' in data:
-                coplist.name = data['name']
-            
-            if 'description' in data:
-                coplist.description = data['description']
-            
-            if 'is_private' in data:
-                coplist.is_private = data['is_private']
-            
-            # Update items if provided
-            if 'items' in data and isinstance(data['items'], list):
-                # Clear existing items
-                coplist.items = []
-                
-                # Add each item, verifying ownership
-                for item_id in data['items']:
-                    item = Item.query.get(item_id)
-                    if item and item.user_id == user_id:
-                        coplist.items.append(item)
-                    else:
-                        logger.warning(f"⚠️ Item {item_id} not found or not owned by user {user_id}, skipping")
-            
-            # Update timestamps
-            coplist.updated_at = datetime.utcnow()
-            
-            db.session.commit()
-            
-            logger.info(f"✅ Updated coplist {coplist_id} for user {user_id}")
-            return jsonify(coplist.to_dict()), 200
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error updating coplist {coplist_id} for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/coplists/<int:coplist_id>/items/<int:item_id>', methods=['POST'])
-    @require_auth
-    def add_item_to_coplist(user_id, coplist_id, item_id):
-        """
-        Add an item to a coplist with ownership verification for both.
-        """
-        try:
-            logger.info(f"🔄 Adding item {item_id} to coplist {coplist_id} for user {user_id}")
-            
-            # Check if coplist exists
-            coplist = Coplist.query.get(coplist_id)
-            if not coplist:
-                logger.error(f"❌ Coplist with ID {coplist_id} not found")
-                return jsonify({'error': 'Coplist not found'}), 404
-            
-            # Verify coplist ownership
-            if coplist.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to modify coplist {coplist_id} belonging to user {coplist.user_id}")
-                return jsonify({'error': 'Unauthorized access to coplist'}), 403
-            
-            # Check if item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': 'Item not found'}), 404
-            
-            # Verify item ownership
-            if item.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to add item {item_id} belonging to user {item.user_id}")
-                return jsonify({'error': 'Unauthorized access to item'}), 403
-            
-            # Check if item is already in the coplist
-            if item in coplist.items:
-                logger.info(f"⚠️ Item {item_id} is already in coplist {coplist_id}")
-                return jsonify({'message': 'Item is already in the coplist'}), 200
-            
-            # Add item to coplist
-            coplist.items.append(item)
-            db.session.commit()
-            
-            logger.info(f"✅ Added item {item_id} to coplist {coplist_id}")
-            return jsonify({'message': f'Item {item_id} added to coplist {coplist_id}'}), 200
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error adding item to coplist: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/coplists/<int:coplist_id>/items/<int:item_id>', methods=['DELETE'])
-    @require_auth
-    def remove_item_from_coplist(user_id, coplist_id, item_id):
-        """
-        Remove an item from a coplist with ownership verification.
-        """
-        try:
-            logger.info(f"🔄 Removing item {item_id} from coplist {coplist_id} for user {user_id}")
-            
-            # Check if coplist exists
-            coplist = Coplist.query.get(coplist_id)
-            if not coplist:
-                logger.error(f"❌ Coplist with ID {coplist_id} not found")
-                return jsonify({'error': 'Coplist not found'}), 404
-            
-            # Verify coplist ownership
-            if coplist.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to modify coplist {coplist_id} belonging to user {coplist.user_id}")
-                return jsonify({'error': 'Unauthorized access to coplist'}), 403
-            
-            # Check if item exists
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': 'Item not found'}), 404
-            
-            # Check if item is in the coplist
-            if item not in coplist.items:
-                logger.info(f"⚠️ Item {item_id} is not in coplist {coplist_id}")
-                return jsonify({'message': 'Item is not in the coplist'}), 200
-            
-            # Remove item from coplist
-            coplist.items.remove(item)
-            db.session.commit()
-            
-            logger.info(f"✅ Removed item {item_id} from coplist {coplist_id}")
-            return jsonify({'message': f'Item {item_id} removed from coplist {coplist_id}'}), 200
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error removing item from coplist: {str(e)}")
-            return jsonify({'error': str(e)}), 500
-
-    @app.route('/api/coplists/<int:coplist_id>', methods=['DELETE'])
-    @require_auth
-    def delete_coplist(user_id, coplist_id):
-        """
-        Delete a coplist with ownership verification.
-        """
-        try:
-            logger.info(f"🗑️ Deleting coplist {coplist_id} for user {user_id}")
-            
-            # Check if coplist exists
-            coplist = Coplist.query.get(coplist_id)
-            if not coplist:
-                logger.error(f"❌ Coplist with ID {coplist_id} not found")
-                return jsonify({'error': 'Coplist not found'}), 404
-            
-            # Verify ownership
-            if coplist.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to delete coplist {coplist_id} belonging to user {coplist.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Delete the coplist (association table entries are deleted automatically)
-            db.session.delete(coplist)
-            db.session.commit()
-            
-            logger.info(f"✅ Deleted coplist {coplist_id}")
-            return jsonify({'message': f'Coplist {coplist_id} deleted successfully'}), 200
-        except Exception as e:
-            db.session.rollback()
-            logger.error(f"💥 Error deleting coplist {coplist_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
 
     # TAGS API WITH USER OWNERSHIP
     @app.route('/api/user-tags', methods=['GET'])
@@ -2578,7 +2379,6 @@ def make_shell_context():
         'Tag': Tag, 
         'Sale': Sale, 
         'Expense': Expense,
-        'Coplist': Coplist,
         'UserSettings': UserSettings
     }
 

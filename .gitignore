@@ -53,3 +53,25 @@ backend/admin/.cache/
 # User data exports
 *.users.json
 *.users.csv
+
+# Admin Tools - Additional Security
+backend/admin/user_exports/
+backend/admin/backups/
+backend/admin/reports/
+backend/admin/audit_logs/
+backend/firebase-service-account-key.json
+backend/service-account-key.json
+backend/google-credentials.json
+backend/firebase-admin-sdk-*.json
+
+# Admin Tool Generated Files
+user_export_*.json
+user_export_*.csv
+admin_audit_*.log
+firebase_errors.log
+admin_session_*.log
+
+# Sensitive Configuration
+backend/admin_config.json
+backend/admin/.env
+backend/admin/.secrets

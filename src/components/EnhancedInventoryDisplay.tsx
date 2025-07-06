@@ -90,7 +90,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   items,
   currentUser
 }) => {
-  const currentAccountTier = 'Free'; // For now, assume all users are on the Free tier
+  const { accountTier: currentAccountTier } = useAuth(); // Get actual account tier from auth context
   const enableDebugLogging = process.env.NODE_ENV !== 'production'; // Control debug logging
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
@@ -255,7 +255,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
     }
   }, [items, currentUser, getAuthToken, apiBaseUrl, settings, handleImageError]);
 
-  const showFreeTierLimitWarning = currentAccountTier === 'Free' && items.length >= 30;
+  const showFreeTierLimitWarning = currentAccountTier === 'free' && items.length >= 30;
 
   return (
     <Box sx={{ width: '100%', p: 2 }}>

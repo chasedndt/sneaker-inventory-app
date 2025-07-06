@@ -16,9 +16,9 @@ import Dashboard from './pages/Dashboard';
 import InventoryPage from './pages/InventoryPage';
 import SalesPage from './pages/SalesPage';
 import ExpensesPage from './pages/ExpensesPage';
-import SettingsPage from './pages/SettingsPage';
-import CoplistsPage from './pages/CoplistsPage';
+
 import AdminPage from './pages/AdminPage'; // Import AdminPage
+import AdminUsersPage from './pages/AdminUsersPage';
 
 // Settings Pages
 import SettingsLayout from './pages/Settings/SettingsLayout';
@@ -130,20 +130,20 @@ const AppContent: React.FC = () => {
           <Route path="/inventory" element={<InventoryPage />} />
           <Route path="/sales" element={<SalesPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
-          <Route path="/coplists" element={<CoplistsPage />} />
           
           {/* Settings Routes */}
           <Route path="/settings" element={<SettingsLayout />}>
             <Route index element={<Navigate to="/settings/profile" replace />} />
             <Route path="profile" element={<ProfileSettings />} />
             <Route path="billing" element={<BillingSettings />} />
-            <Route path="inventory-settings" element={<InventorySettings />} />
+            <Route path="inventory" element={<InventorySettings />} />
             <Route path="notifications" element={<NotificationSettings />} />
             <Route path="security" element={<SecuritySettings />} />
           </Route>
           
-          {/* Admin Route */}
+          {/* Admin Routes */}
           <Route path="/admin" element={<ProtectedRoute><AdminPage /></ProtectedRoute>} />
+          <Route path="/admin/users" element={<ProtectedRoute><AdminUsersPage /></ProtectedRoute>} />
           
           <Route path="/profile" element={<Profile />} />
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

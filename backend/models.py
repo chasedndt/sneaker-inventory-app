@@ -277,46 +277,7 @@ class Expense(db.Model):
                 'error': f"Failed to serialize expense: {str(e)}"
             }
 
-# Add a Coplist model for saving item collections
-class Coplist(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
-    # User ID field
-    user_id = db.Column(db.String(100), nullable=False, index=True)
-    
-    # Coplist details
-    name = db.Column(db.String(100), nullable=False)
-    description = db.Column(db.Text)
-    is_private = db.Column(db.Boolean, default=True)
-    
-    # Relationship with items via join table
-    items = db.relationship('Item', 
-                           secondary='coplist_items',
-                           backref=db.backref('coplists', lazy='dynamic'))
-    
-    def to_dict(self):
-        """
-        Create a dictionary representation of the coplist for API responses.
-        """
-        try:
-            return {
-                'id': self.id,
-                'user_id': self.user_id,
-                'name': self.name,
-                'description': self.description,
-                'is_private': self.is_private,
-                'item_count': len(self.items),
-                'created_at': self.created_at.isoformat() if self.created_at else None,
-                'updated_at': self.updated_at.isoformat() if self.updated_at else None
-            }
-        except Exception as e:
-            print(f"📋 Error in Coplist.to_dict(): {str(e)}")
-            return {
-                'id': self.id if hasattr(self, 'id') else None,
-                'error': f"Failed to serialize coplist: {str(e)}"
-            }
+
 
 # User Settings model to store user preferences
 class UserSettings(db.Model):
@@ -325,6 +286,7 @@ class UserSettings(db.Model):
     dark_mode = db.Column(db.Boolean, default=False)
     currency = db.Column(db.String(10), default='USD')
     date_format = db.Column(db.String(20), default='MM/DD/YYYY')
+    items_quota = db.Column(db.Integer, default=0)  # For admin-granted item quotas
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -338,6 +300,7 @@ class UserSettings(db.Model):
                 'dark_mode': self.dark_mode,
                 'currency': self.currency,
                 'date_format': self.date_format,
+                'items_quota': self.items_quota,
                 'created_at': self.created_at.isoformat() if self.created_at else None,
                 'updated_at': self.updated_at.isoformat() if self.updated_at else None
             }
@@ -354,8 +317,3 @@ item_tags = db.Table('item_tags',
     db.Column('tag_id', db.Integer, db.ForeignKey('tag.id'), primary_key=True)
 )
 
-# Association table for Coplists and Items
-coplist_items = db.Table('coplist_items',
-    db.Column('coplist_id', db.Integer, db.ForeignKey('coplist.id'), primary_key=True),
-    db.Column('item_id', db.Integer, db.ForeignKey('item.id'), primary_key=True)
-)
