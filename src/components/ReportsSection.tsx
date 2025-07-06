@@ -286,7 +286,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
       netProfit: metricsData?.profitMetrics?.netProfitSold || 0,
       salesIncome: metricsData?.salesMetrics?.totalSalesRevenue || 0,
       itemSpend: metricsData?.inventoryMetrics?.totalInventoryCost || 0,
-      roiPercentage: metricsData?.profitMetrics?.roiSold || 0,
+      roiPercentage: Number((metricsData?.profitMetrics?.roiSold || 0).toFixed(2)),
       expenseSpend: metricsData?.expenseMetrics?.totalExpenses || 0,
       itemsPurchased: metricsData?.inventoryMetrics?.totalInventory || 0,
       itemsSold: metricsData?.salesMetrics?.totalSales || 0,
@@ -803,11 +803,6 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   
   return (
     <Box sx={{ width: '100%', p: 0, m: 0, overflow: 'visible' }}>
-      {/* DEBUG: Temporary tier indicator */}
-      <Alert severity="info" sx={{ mb: 2 }}>
-        DEBUG: Account Tier = "{accountTier}" | ROI Locked = {isFeatureLocked.isROIPercentageLocked ? 'YES' : 'NO'} | Realized Profit Locked = {isFeatureLocked.isRealizedProfitExpensesLocked ? 'YES' : 'NO'}
-      </Alert>
-      
       {showSpinner && (
         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px' }}>
           <CircularProgress />
