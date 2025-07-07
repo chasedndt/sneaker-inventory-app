@@ -1,8 +1,14 @@
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { api } from './api';
 
+// Debug: Log the environment variable
+console.log('STRIPE_PUBLISHABLE_KEY from env:', process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
+
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY!);
+
+// API Base URL
+const API_BASE_URL = 'http://127.0.0.1:5000/api';
 
 export interface StripeProduct {
   name: string;
@@ -49,8 +55,9 @@ class StripeService {
    */
   async getProducts(): Promise<StripeProducts> {
     try {
-      const response = await api.get('/stripe/products');
-      return response.data.products;
+      const response = await api.authenticatedFetch(`${API_BASE_URL}/stripe/products`);
+      const data = await response.json();
+      return data.products;
     } catch (error) {
       console.error('Failed to get Stripe products:', error);
       throw error;
@@ -66,12 +73,19 @@ class StripeService {
     cancelUrl: string
   ): Promise<CheckoutSessionResponse> {
     try {
-      const response = await api.post('/stripe/create-checkout-session', {
-        price_id: priceId,
-        success_url: successUrl,
-        cancel_url: cancelUrl
+      const response = await api.authenticatedFetch(`${API_BASE_URL}/stripe/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          price_id: priceId,
+          success_url: successUrl,
+          cancel_url: cancelUrl
+        })
       });
-      return response.data;
+      const data = await response.json();
+      return data;
     } catch (error) {
       console.error('Failed to create checkout session:', error);
       throw error;
@@ -83,10 +97,17 @@ class StripeService {
    */
   async createBillingPortalSession(returnUrl: string): Promise<BillingPortalResponse> {
     try {
-      const response = await api.post('/stripe/create-billing-portal-session', {
-        return_url: returnUrl
+      const response = await api.authenticatedFetch(`${API_BASE_URL}/stripe/create-billing-portal-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          return_url: returnUrl
+        })
       });
-      return response.data;
+      const data = await response.json();
+      return data;
     } catch (error) {
       console.error('Failed to create billing portal session:', error);
       throw error;
@@ -98,8 +119,9 @@ class StripeService {
    */
   async getSubscriptionStatus(): Promise<SubscriptionStatus> {
     try {
-      const response = await api.get('/stripe/subscription-status');
-      return response.data;
+      const response = await api.authenticatedFetch(`${API_BASE_URL}/stripe/subscription-status`);
+      const data = await response.json();
+      return data;
     } catch (error) {
       console.error('Failed to get subscription status:', error);
       throw error;
@@ -150,8 +172,9 @@ class StripeService {
    */
   async testConnection(): Promise<boolean> {
     try {
-      const response = await api.get('/stripe/test-connection');
-      return response.data.success;
+      const response = await api.authenticatedFetch(`${API_BASE_URL}/stripe/test-connection`);
+      const data = await response.json();
+      return data.success;
     } catch (error) {
       console.error('Stripe connection test failed:', error);
       return false;

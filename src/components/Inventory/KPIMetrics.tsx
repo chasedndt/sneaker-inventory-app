@@ -17,8 +17,10 @@ import ReceiptIcon from '@mui/icons-material/Receipt';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import useFormat from '../../hooks/useFormat'; // Import as default export
 import { useSettings } from '../../contexts/SettingsContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 
 interface KPIMetricsProps {
   metrics: {
@@ -37,6 +39,8 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
   const settings = useSettings(); // Get settings context
+  const { authReady, currentUser } = useAuthReady();
+  const accountTier = currentUser?.accountTier || 'Free';
   
   // Use the totalEstimatedProfit directly from the metrics object
   // This should already be converted to the correct currency by the parent component
@@ -46,6 +50,9 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
   const averageROI = metrics.totalItems > 0
     ? (calculatedProfit / metrics.totalPurchaseValue) * 100
     : 0;
+  
+  // Check if ROI features are locked for free tier
+  const isROILocked = accountTier?.toLowerCase() === 'free';
   
   return (
     <Paper 
@@ -177,27 +184,46 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 justifyContent: 'center',
                 p: 1.5,
                 borderRadius: 2,
-                backgroundColor: 'success.main',
+                backgroundColor: isROILocked ? 'grey.400' : 'success.main',
                 color: 'white',
                 mr: 2
               }}
             >
-              <TrendingUpIcon />
+              {isROILocked ? <LockOutlinedIcon /> : <TrendingUpIcon />}
             </Box>
             <Box>
               <Typography variant="subtitle2" color="textSecondary">
                 Estimated Profit (ROI)
               </Typography>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                {money(calculatedProfit)}
-              </Typography>
-              <Typography 
-                variant="caption" 
-                color={averageROI >= 0 ? 'success.main' : 'error.main'}
-                sx={{ fontWeight: 'bold' }}
-              >
-                {averageROI.toFixed(1)}% ROI
-              </Typography>
+              {isROILocked ? (
+                <>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.disabled' }}>
+                    ••••••
+                  </Typography>
+                  <Tooltip title="Upgrade to Starter or Professional plan to see ROI analysis">
+                    <Typography 
+                      variant="caption" 
+                      color="text.disabled"
+                      sx={{ fontWeight: 'bold', cursor: 'help' }}
+                    >
+                      Locked - Upgrade required
+                    </Typography>
+                  </Tooltip>
+                </>
+              ) : (
+                <>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {money(calculatedProfit)}
+                  </Typography>
+                  <Typography 
+                    variant="caption" 
+                    color={averageROI >= 0 ? 'success.main' : 'error.main'}
+                    sx={{ fontWeight: 'bold' }}
+                  >
+                    {averageROI.toFixed(1)}% ROI
+                  </Typography>
+                </>
+              )}
             </Box>
           </Box>
         </Grid>

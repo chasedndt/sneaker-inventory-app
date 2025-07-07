@@ -105,6 +105,7 @@ const InventoryTable = ({
   const { money, date } = useFormat();
   const { getCurrentCurrency } = useSettings();
   const { currentUser, getAuthToken, authReady } = useAuthReady();
+  const accountTier = currentUser?.accountTier || 'Free';
   
   const [editingMarketPrice, setEditingMarketPrice] = useState<number | null>(null);
   const [marketPriceValue, setMarketPriceValue] = useState<string>('');
@@ -1149,17 +1150,32 @@ const InventoryTable = ({
                   mt: 0.5
                 }}>
                   <Typography variant="caption" color="text.secondary">ROI</Typography>
-                  <Typography 
-                    variant="caption" 
-                    sx={{ 
-                      fontWeight: 'medium',
-                      color: selectedProfitItem.roi >= 0 
-                        ? theme.palette.success.main 
-                        : theme.palette.error.main
-                    }}
-                  >
-                    {selectedProfitItem.roi.toFixed(1)}%
-                  </Typography>
+                  {accountTier?.toLowerCase() === 'free' ? (
+                    <Tooltip title="Upgrade to Starter or Professional plan to see ROI analysis">
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          fontWeight: 'medium',
+                          color: 'text.disabled',
+                          cursor: 'help'
+                        }}
+                      >
+                        •••••
+                      </Typography>
+                    </Tooltip>
+                  ) : (
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        fontWeight: 'medium',
+                        color: selectedProfitItem.roi >= 0 
+                          ? theme.palette.success.main 
+                          : theme.palette.error.main
+                      }}
+                    >
+                      {selectedProfitItem.roi.toFixed(1)}%
+                    </Typography>
+                  )}
                 </Box>
               </Box>
               

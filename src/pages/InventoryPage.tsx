@@ -102,6 +102,7 @@ const InventoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, authReady } = useAuthReady();
   const { currency: defaultCurrency } = useSettings();
+  const accountTier = currentUser?.accountTier || 'Free';
   const { 
     isConnected, 
     connectionError, 
@@ -1416,32 +1417,47 @@ const InventoryPage: React.FC = () => {
           
           <Grid item xs={12} md={6}>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-              <Button 
-                variant="outlined" 
-                startIcon={<FileDownloadIcon />}
-                size="small"
-                onClick={handleExportCSV}
-              >
-                Export CSV
-              </Button>
+              <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span>
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<FileDownloadIcon />}
+                    size="small"
+                    onClick={handleExportCSV}
+                    disabled={accountTier?.toLowerCase() === 'free'}
+                  >
+                    Export CSV
+                  </Button>
+                </span>
+              </Tooltip>
               
-              <Button 
-                variant="outlined" 
-                startIcon={<InsertDriveFileIcon />}
-                size="small"
-                onClick={handleExportExcel}
-              >
-                Export Excel
-              </Button>
+              <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span>
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<InsertDriveFileIcon />}
+                    size="small"
+                    onClick={handleExportExcel}
+                    disabled={accountTier?.toLowerCase() === 'free'}
+                  >
+                    Export Excel
+                  </Button>
+                </span>
+              </Tooltip>
               
-              <Button 
-                variant="outlined" 
-                startIcon={<PictureAsPdfIcon />}
-                size="small"
-                onClick={handleExportPDF}
-              >
-                Export PDF
-              </Button>
+              <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
+                <span>
+                  <Button 
+                    variant="outlined" 
+                    startIcon={<PictureAsPdfIcon />}
+                    size="small"
+                    onClick={handleExportPDF}
+                    disabled={accountTier?.toLowerCase() === 'free'}
+                  >
+                    Export PDF
+                  </Button>
+                </span>
+              </Tooltip>
               
               <Tooltip title="Customize columns">
                 <IconButton onClick={handleColumnMenuOpen}>
@@ -1559,14 +1575,19 @@ const InventoryPage: React.FC = () => {
               </Grid>
               
               <Grid item>
-                <Button 
-                  variant="contained" 
-                  color="success"
-                  size="small"
-                  onClick={() => handleUpdateStatus(selectedItems, 'sold')}
-                >
-                  Mark as Sold
-                </Button>
+                <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Sales recording available on Starter and Professional plans." : ""}>
+                  <span>
+                    <Button 
+                      variant="contained" 
+                      color="success"
+                      size="small"
+                      onClick={() => handleUpdateStatus(selectedItems, 'sold')}
+                      disabled={accountTier?.toLowerCase() === 'free'}
+                    >
+                      Mark as Sold
+                    </Button>
+                  </span>
+                </Tooltip>
               </Grid>
               
               {selectedItems.length === 1 && (

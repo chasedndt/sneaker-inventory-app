@@ -38,8 +38,7 @@ import {
 } from '@mui/material';
 import { alpha, styled } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
-import { User } from 'firebase/auth';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, AppUser } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
 
 // Icons
@@ -64,7 +63,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 // Styled components removed - search functionality moved to individual pages
 
 interface NavbarProps {
-  currentUser?: User | null;
+  currentUser?: AppUser | null;
   toggleSidebar?: () => void;
   isMobile?: boolean;
   sidebarOpen?: boolean;
@@ -80,6 +79,7 @@ const Navbar: React.FC<NavbarProps> = ({
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { darkMode, toggleDarkMode } = useSettings();
+  const accountTier = currentUser?.accountTier || 'Free';
   
   // State for various menus
   const [profileAnchorEl, setProfileAnchorEl] = useState<null | HTMLElement>(null);
@@ -535,11 +535,32 @@ const Navbar: React.FC<NavbarProps> = ({
           </ListItemIcon>
           View Inventory
         </MenuItem>
-        <MenuItem onClick={() => { handleCloseQuickActions(); handleNavigate('sales'); }}>
+        <MenuItem 
+          onClick={() => { 
+            handleCloseQuickActions(); 
+            if (accountTier?.toLowerCase() === 'free') {
+              navigate('/settings?section=billing');
+            } else {
+              handleNavigate('sales');
+            }
+          }}
+          disabled={accountTier?.toLowerCase() === 'free'}
+          sx={{ 
+            opacity: accountTier?.toLowerCase() === 'free' ? 0.6 : 1,
+            '&.Mui-disabled': {
+              opacity: 0.6
+            }
+          }}
+        >
           <ListItemIcon>
             <ExitToAppIcon fontSize="small" />
           </ListItemIcon>
           Record Sale
+          {accountTier?.toLowerCase() === 'free' && (
+            <Typography variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+              (Upgrade required)
+            </Typography>
+          )}
         </MenuItem>
         <Divider />
         <MenuItem onClick={() => { handleCloseQuickActions(); handleNavigate('settings'); }}>

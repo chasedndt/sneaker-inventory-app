@@ -136,9 +136,9 @@ const BillingSettings: React.FC = () => {
       },
       features: [
         { name: 'Basic inventory tracking', included: true },
-        { name: 'Record sales', included: true },
         { name: 'Basic expenses tracking', included: true },
         { name: 'Community support', included: true },
+        { name: 'Record sales', included: false, tooltip: 'Upgrade to track sales and revenue' },
         { name: 'ROI metrics & profit analysis', included: false, tooltip: 'Upgrade to see detailed profit calculations and ROI percentages' },
         { name: 'Advanced analytics', included: false },
         { name: 'Export capabilities', included: false },
@@ -154,14 +154,15 @@ const BillingSettings: React.FC = () => {
       buttonText: currentPlan === 'starter' ? 'Current plan' : 'Upgrade now',
       highlight: true,
       limits: {
-        items: '100 items',
+        items: '250 items',
         storage: '5 GB storage',
         users: '1 user',
         events: 'Basic analytics'
       },
       features: [
         { name: 'Everything in Free', included: true },
-        { name: 'Up to 100 items', included: true },
+        { name: 'Record sales & track revenue', included: true },
+        { name: 'Up to 250 items', included: true },
         { name: 'ROI metrics & profit analysis', included: true },
         { name: 'Basic analytics dashboard', included: true },
         { name: 'Standard email support', included: true },

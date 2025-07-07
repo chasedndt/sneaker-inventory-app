@@ -16,7 +16,7 @@ STRIPE_PRODUCTS = {
         'name': 'Hypelist Starter',
         'price_id': os.getenv('STRIPE_STARTER_PRICE_ID', 'price_starter_placeholder'),
         'features': [
-            'Up to 100 items',
+            'Up to 250 items',
             'Basic analytics',
             'Standard support'
         ],

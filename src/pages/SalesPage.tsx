@@ -35,6 +35,7 @@ import ColumnCustomizationMenu from '../components/Inventory/ColumnCustomization
 import RecordSaleModal from '../components/Sales/RecordSaleModal';
 import BulkSaleModal from '../components/Sales/BulkSaleModal';
 import ConfirmationDialog from '../components/common/ConfirmationDialog';
+import LockedFeature from '../components/common/LockedFeature';
 
 import { Item, api } from '../services/api';
 import { salesApi, Sale } from '../services/salesApi';
@@ -705,6 +706,20 @@ const SalesPage: React.FC = () => {
     return (
       <Box sx={{ p: 3 }}>
         <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
+  // Check if user is on free tier - show locked feature instead
+  if (accountTier?.toLowerCase() === 'free') {
+    return (
+      <Box sx={{ py: 3, px: 2, backgroundColor: theme.palette.background.default }}>
+        <LockedFeature
+          title="Sales Tracking Locked"
+          description="Record sales, track revenue, and analyze your profit margins with our sales management tools. Available on Starter and Professional plans."
+          ctaText="Upgrade to Starter"
+          ctaLink="/settings?section=billing"
+        />
       </Box>
     );
   }
