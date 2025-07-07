@@ -19,6 +19,15 @@ from auth_helpers import require_auth
 from middleware.auth import get_user_id_from_token, get_current_user_info
 from admin.admin_routes import admin_routes
 
+# Import hybrid router for SQLite + Firebase operations
+try:
+    from hybrid_router import hybrid_router
+    HYBRID_ROUTER_AVAILABLE = True
+    logger.info("Hybrid router imported successfully")
+except ImportError as e:
+    HYBRID_ROUTER_AVAILABLE = False
+    logger.warning(f"Hybrid router not available: {e}. Using SQLite only.")
+
 # Unicode console fix
 import sys
 import codecs
@@ -196,6 +205,44 @@ def create_app():
             
         return jsonify({"status": "success", "message": "API connection successful"})
 
+    @app.route('/api/migration/status', methods=['GET'])
+    @require_auth
+    def get_migration_status(user_id):
+        """Get current hybrid migration status and data distribution"""
+        try:
+            if HYBRID_ROUTER_AVAILABLE:
+                # Get migration info from hybrid config
+                from hybrid_config import get_migration_info, get_routing_summary
+                migration_info = get_migration_info()
+                routing_summary = get_routing_summary()
+                
+                # Get data distribution info
+                data_sources_info = hybrid_router.get_data_sources_info(user_id)
+                
+                status = {
+                    "migration_active": True,
+                    "phase": migration_info['phase'],
+                    "mode": migration_info['mode'],
+                    "description": migration_info['description'],
+                    "routing": routing_summary,
+                    "data_distribution": data_sources_info,
+                    "firebase_enabled": migration_info['firebase_enabled']
+                }
+            else:
+                status = {
+                    "migration_active": False,
+                    "mode": "sqlite_only",
+                    "description": "Using SQLite only - hybrid router not available",
+                    "firebase_enabled": False
+                }
+            
+            logger.info(f"Migration status requested for user {user_id}")
+            return jsonify(status), 200
+            
+        except Exception as e:
+            logger.error(f"Error getting migration status: {str(e)}")
+            return safe_error_response(e, "Failed to get migration status")
+
     # Health check endpoint
     @app.route('/api/ping', methods=['GET'])
     def health_check():
@@ -240,12 +287,12 @@ def create_app():
             logger.error(f"💥 Error fetching user info: {str(e)}")
             return safe_error_response(e, "Failed to fetch user information")
     
-    # Update user settings endpoint
+    # Update user settings endpoint - now uses hybrid router
     @app.route('/api/settings', methods=['PUT'])
     @require_auth
     def update_settings(user_id):
         """
-        Update user settings.
+        Update user settings - uses hybrid router for data routing.
         """
         try:
             logger.info(f"🔄 Updating settings for user_id: {user_id}")
@@ -254,47 +301,58 @@ def create_app():
             if not data:
                 return jsonify({'error': 'No data provided'}), 400
             
-            # Get existing settings or create new
-            settings = UserSettings.query.filter_by(user_id=user_id).first()
-            if not settings:
-                settings = UserSettings(user_id=user_id)
-                db.session.add(settings)
-            
-            # Update settings
-            if 'dark_mode' in data:
-                settings.dark_mode = data['dark_mode']
-            if 'currency' in data:
-                settings.currency = data['currency']
-            if 'date_format' in data:
-                settings.date_format = data['date_format']
-            
-            db.session.commit()
-            
-            logger.info(f"✅ Settings updated for user_id: {user_id}")
-            return jsonify(settings.to_dict()), 200
+            if HYBRID_ROUTER_AVAILABLE:
+                # Use hybrid router to update settings
+                updated_settings = hybrid_router.update_user_settings(user_id, data)
+                logger.info(f"✅ Settings updated via hybrid router for user_id: {user_id}")
+                return jsonify(updated_settings), 200
+            else:
+                # Fallback to SQLite logic
+                # Get existing settings or create new
+                settings = UserSettings.query.filter_by(user_id=user_id).first()
+                if not settings:
+                    settings = UserSettings(user_id=user_id)
+                    db.session.add(settings)
+                
+                # Update settings
+                if 'dark_mode' in data:
+                    settings.dark_mode = data['dark_mode']
+                if 'currency' in data:
+                    settings.currency = data['currency']
+                if 'date_format' in data:
+                    settings.date_format = data['date_format']
+                
+                db.session.commit()
+                
+                logger.info(f"✅ Settings updated for user_id: {user_id}")
+                return jsonify(settings.to_dict()), 200
         except Exception as e:
-            db.session.rollback()
+            if not HYBRID_ROUTER_AVAILABLE:
+                db.session.rollback()
             logger.error(f"💥 Error updating settings: {str(e)}")
             return safe_error_response(e, "Failed to update settings")
 
-    # Modified to include user_id from authentication
+    # Modified to include user_id from authentication - now uses hybrid router
     @app.route('/api/items', methods=['GET'])
     @require_auth
     def get_items(user_id):
         """
         Get all items with their images for current user.
+        Uses hybrid router to fetch from appropriate data source.
         """
         try:
             logger.debug(f"📊 Fetching items for user_id: {user_id}")
-            items = Item.query.filter_by(user_id=user_id).all()
             
-            # Convert items to dictionary format with image URLs
-            items_data = []
-            for item in items:
-                item_dict = item.to_dict()
-                items_data.append(item_dict)
+            if HYBRID_ROUTER_AVAILABLE:
+                # Use hybrid router to get items from appropriate source
+                items_data = hybrid_router.get_items(user_id)
+                logger.debug(f"✅ Retrieved {len(items_data)} items via hybrid router for user_id: {user_id}")
+            else:
+                # Fallback to SQLite only
+                items = Item.query.filter_by(user_id=user_id).all()
+                items_data = [item.to_dict() for item in items]
+                logger.debug(f"✅ Retrieved {len(items_data)} items from SQLite for user_id: {user_id}")
             
-            logger.debug(f"✅ Retrieved {len(items_data)} items for user_id: {user_id}")
             return jsonify(items_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")
@@ -335,7 +393,7 @@ def create_app():
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return safe_error_response(e, "Failed to fetch item")
 
-    # Add a new item with current user_id
+    # Add a new item with current user_id - now uses hybrid router
     @app.route('/api/items', methods=['POST'])
     @require_auth
     def add_item(user_id):
@@ -355,8 +413,73 @@ def create_app():
             sizes_quantity = form_data.get('sizesQuantity', {})
             purchase_details = form_data.get('purchaseDetails', {})
             
-            # Create a new item with user_id
-            new_item = Item(
+            # Prepare item data for hybrid router
+            item_data = {
+                'category': product_details.get('category', ''),
+                'productName': product_details.get('productName', ''),
+                'reference': product_details.get('reference', ''),
+                'colorway': product_details.get('colorway', ''),
+                'brand': product_details.get('brand', ''),
+                'purchasePrice': float(purchase_details.get('purchasePrice', 0)),
+                'purchaseCurrency': purchase_details.get('purchaseCurrency', '$'),
+                'shippingPrice': float(purchase_details.get('shippingPrice', 0) or 0),
+                'shippingCurrency': purchase_details.get('shippingCurrency', '$'),
+                'marketPrice': float(purchase_details.get('marketPrice', 0) or 0),
+                'purchaseDate': purchase_details.get('purchaseDate'),
+                'purchaseLocation': purchase_details.get('purchaseLocation', ''),
+                'condition': purchase_details.get('condition', ''),
+                'notes': purchase_details.get('notes', ''),
+                'orderID': purchase_details.get('orderID', ''),
+                'taxType': purchase_details.get('taxType', 'none'),
+                'vatPercentage': float(purchase_details.get('vatPercentage', 0) or 0),
+                'salesTaxPercentage': float(purchase_details.get('salesTaxPercentage', 0) or 0),
+                'status': 'unlisted',
+                'sizes': sizes_quantity.get('selectedSizes', []),
+                'tags': purchase_details.get('tags', [])
+            }
+            
+            # Handle images
+            files = request.files.getlist('images')
+            image_filenames = []
+            
+            for file in files:
+                if file and allowed_file(file.filename):
+                    # Generate a secure filename with timestamp to avoid duplicates
+                    filename = secure_filename(file.filename)
+                    filename_parts = filename.rsplit('.', 1)
+                    timestamped_filename = f"{filename_parts[0]}_{int(time.time())}_{user_id}.{filename_parts[1]}"
+                    
+                    # Create user-specific subfolder
+                    user_upload_folder = os.path.join(app.config['UPLOAD_FOLDER'], user_id)
+                    if not os.path.exists(user_upload_folder):
+                        os.makedirs(user_upload_folder)
+                    
+                    # Save the file
+                    file_path = os.path.join(user_upload_folder, timestamped_filename)
+                    file.save(file_path)
+                    image_filenames.append(timestamped_filename)
+            
+            item_data['images'] = image_filenames
+            
+            if HYBRID_ROUTER_AVAILABLE:
+                # Use hybrid router to create item
+                created_item = hybrid_router.create_item(user_id, item_data)
+                logger.info(f"✅ Item created via hybrid router with ID: {created_item.get('id')} for user_id: {user_id}")
+                
+                return jsonify({
+                    'message': 'Item created successfully',
+                    'item': {
+                        'id': created_item.get('id'),
+                        'productName': created_item.get('productName'),
+                        'category': created_item.get('category'),
+                        'brand': created_item.get('brand'),
+                        'images': image_filenames
+                    }
+                }), 201
+            else:
+                # Fallback to original SQLite logic
+                # Create a new item with user_id
+                new_item = Item(
                 user_id=user_id,  # Set the user_id from auth
                 category=product_details.get('category', ''),
                 product_name=product_details.get('productName', ''),

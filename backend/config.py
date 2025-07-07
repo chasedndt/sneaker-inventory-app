@@ -17,3 +17,6 @@ class Config:
     UPLOAD_FOLDER = os.path.join(BASEDIR, 'uploads')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+    
+    # Database configuration - simple switch between SQLite and Firebase
+    USE_FIREBASE = os.getenv('USE_FIREBASE', 'false').lower() == 'true'
