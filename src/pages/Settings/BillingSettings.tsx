@@ -11,7 +11,7 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText,
+    ListItemText,
   alpha,
   Tooltip,
   CircularProgress,
@@ -23,6 +23,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { useAuth } from '../../contexts/AuthContext';
+import { useAuthReady } from '../../hooks/useAuthReady';
 import stripeService, { StripeProducts, SubscriptionStatus } from '../../services/stripeService';
 
 // Plan feature types
@@ -54,7 +55,8 @@ interface Plan {
 const BillingSettings: React.FC = () => {
   const theme = useTheme();
   const { currentUser } = useAuth();
-  const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
+  const { authReady } = useAuthReady();
+
   const [currentPlan, setCurrentPlan] = useState<string>('free');
   const [stripeProducts, setStripeProducts] = useState<StripeProducts>({});
   const [subscriptionStatus, setSubscriptionStatus] = useState<SubscriptionStatus | null>(null);
@@ -65,7 +67,7 @@ const BillingSettings: React.FC = () => {
 
   // Load Stripe products and subscription status
   useEffect(() => {
-    const loadStripeData = async () => {
+    const loadStripeData = async (retryCount = 0) => {
       try {
         setLoading(true);
         setError(null);
@@ -76,6 +78,9 @@ const BillingSettings: React.FC = () => {
           stripeService.getSubscriptionStatus()
         ]);
 
+        console.log('Loaded Stripe products:', products);
+        console.log('Loaded subscription status:', status);
+        
         setStripeProducts(products);
         setSubscriptionStatus(status);
         setCurrentPlan(status.tier);
@@ -95,16 +100,24 @@ const BillingSettings: React.FC = () => {
         }
       } catch (err) {
         console.error('Failed to load Stripe data:', err);
+        
+        // Handle specific auth initialization error with retry
+        if (err instanceof Error && err.message.includes('Auth getter not initialised') && retryCount < 3) {
+          console.log(`Auth not ready, retrying in ${1000 * (retryCount + 1)}ms... (attempt ${retryCount + 1}/3)`);
+          setTimeout(() => loadStripeData(retryCount + 1), 1000 * (retryCount + 1));
+          return;
+        }
+        
         setError('Failed to load billing information. Please try again.');
       } finally {
         setLoading(false);
       }
     };
 
-    if (currentUser) {
+    if (authReady && currentUser) {
       loadStripeData();
     }
-  }, [currentUser]);
+  }, [authReady, currentUser]);
 
   // Define plans
   const plans: Plan[] = [
@@ -116,26 +129,26 @@ const BillingSettings: React.FC = () => {
       description: 'Basic inventory tracking for individuals.',
       buttonText: 'Current plan',
       limits: {
-        items: '50 items / month',
+        items: '30 items max',
         storage: '1 GB storage',
         users: '1 user',
-        events: 'Economy scans'
+        events: 'Basic metrics'
       },
       features: [
-        { name: 'Access to all basic features', included: true },
         { name: 'Basic inventory tracking', included: true },
-        { name: 'Limited analytics', included: true },
+        { name: 'Record sales', included: true },
+        { name: 'Basic expenses tracking', included: true },
         { name: 'Community support', included: true },
+        { name: 'ROI metrics & profit analysis', included: false, tooltip: 'Upgrade to see detailed profit calculations and ROI percentages' },
         { name: 'Advanced analytics', included: false },
+        { name: 'Export capabilities', included: false },
         { name: 'Priority support', included: false },
-        { name: 'Bulk operations', included: false },
-        { name: 'API access', included: false },
       ]
     },
     {
       id: 'starter',
       name: 'Starter',
-      price: stripeProducts.starter?.monthly_price || 9.99,
+      price: stripeProducts?.starter?.monthly_price || 19.00,
       billing: 'monthly',
       description: 'Support your small-scale reselling needs.',
       buttonText: currentPlan === 'starter' ? 'Current plan' : 'Upgrade now',
@@ -146,17 +159,21 @@ const BillingSettings: React.FC = () => {
         users: '1 user',
         events: 'Basic analytics'
       },
-      features: stripeProducts.starter?.features.map(feature => ({ name: feature, included: true })) || [
+      features: [
         { name: 'Everything in Free', included: true },
         { name: 'Up to 100 items', included: true },
-        { name: 'Basic analytics', included: true },
-        { name: 'Standard support', included: true },
+        { name: 'ROI metrics & profit analysis', included: true },
+        { name: 'Basic analytics dashboard', included: true },
+        { name: 'Standard email support', included: true },
+        { name: 'Advanced analytics', included: false },
+        { name: 'Export capabilities', included: false },
+        { name: 'Priority support', included: false },
       ]
     },
     {
       id: 'professional',
       name: 'Professional',
-      price: stripeProducts.professional?.monthly_price || 19.99,
+      price: stripeProducts?.professional?.monthly_price || 49.00,
       billing: 'monthly',
       description: 'For serious resellers looking for more capacity, efficiency, and automation.',
       buttonText: currentPlan === 'professional' ? 'Current plan' : 'Upgrade now',
@@ -166,13 +183,15 @@ const BillingSettings: React.FC = () => {
         users: '3 users',
         events: 'Advanced analytics'
       },
-      features: stripeProducts.professional?.features.map(feature => ({ name: feature, included: true })) || [
+      features: [
         { name: 'Everything in Starter', included: true },
         { name: 'Unlimited items', included: true },
-        { name: 'Advanced analytics', included: true },
-        { name: 'ROI tracking', included: true },
-        { name: 'Priority support', included: true },
-        { name: 'Export capabilities', included: true },
+        { name: 'Advanced analytics dashboard', included: true },
+        { name: 'Detailed ROI tracking', included: true },
+        { name: 'Export to CSV/PDF', included: true },
+        { name: 'Priority email support', included: true },
+        { name: 'Bulk operations', included: true },
+        { name: 'Advanced reporting', included: true },
       ]
     }
   ];
@@ -180,6 +199,9 @@ const BillingSettings: React.FC = () => {
   // Handle plan change
   const handlePlanChange = async (planId: string) => {
     try {
+      console.log('🔵 BillingSettings - Plan change requested:', planId, stripeProducts[planId]);
+      console.log('🔵 BillingSettings - Available products:', stripeProducts);
+      
       if (planId === 'free') {
         setSnackbarMessage('You are already on the free plan.');
         setSnackbarOpen(true);
@@ -195,11 +217,13 @@ const BillingSettings: React.FC = () => {
       // Get the Stripe product info
       const productInfo = stripeProducts[planId];
       if (!productInfo) {
+        console.error('Product info not found for plan:', planId, 'Available products:', stripeProducts);
         setSnackbarMessage('Plan not available. Please try again.');
         setSnackbarOpen(true);
         return;
       }
 
+      console.log('Initiating Stripe checkout for price ID:', productInfo.price_id);
       // Redirect to Stripe Checkout
       await stripeService.redirectToCheckout(productInfo.price_id);
     } catch (error) {
@@ -226,10 +250,7 @@ const BillingSettings: React.FC = () => {
     }
   };
 
-  // Toggle billing period
-  const toggleBilling = () => {
-    setBilling(billing === 'monthly' ? 'yearly' : 'monthly');
-  };
+
 
   // Handle snackbar close
   const handleSnackbarClose = () => {
@@ -314,70 +335,8 @@ const BillingSettings: React.FC = () => {
         
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
           <Typography variant="body2" color="text.secondary">
-            You are currently on the <strong>{currentPlan.toUpperCase()}</strong> plan.
-            {billing === 'yearly' && ' Save 15% with yearly billing.'}
+            You are currently on the <strong>{currentPlan?.toUpperCase() || 'FREE'}</strong> plan.
           </Typography>
-          
-          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
-            <Typography 
-              variant="body2" 
-              color={billing === 'monthly' ? 'primary' : 'text.secondary'}
-              sx={{ fontWeight: billing === 'monthly' ? 'bold' : 'normal' }}
-            >
-              Monthly
-            </Typography>
-            
-            <Button 
-              variant="outlined"
-              size="small"
-              onClick={toggleBilling}
-              sx={{ 
-                mx: 1,
-                minWidth: 0,
-                borderRadius: 4,
-                px: 1,
-                borderColor: theme.palette.primary.main,
-                '&:hover': {
-                  borderColor: theme.palette.primary.dark,
-                }
-              }}
-            >
-              <Box 
-                sx={{ 
-                  width: 40,
-                  height: 20,
-                  borderRadius: 10,
-                  position: 'relative',
-                  bgcolor: billing === 'yearly' ? theme.palette.primary.main : alpha(theme.palette.primary.main, 0.2),
-                  transition: 'background-color 0.3s',
-                  display: 'flex',
-                  alignItems: 'center',
-                  px: 0.5
-                }}
-              >
-                <Box 
-                  sx={{ 
-                    width: 16,
-                    height: 16,
-                    borderRadius: '50%',
-                    bgcolor: 'white',
-                    position: 'absolute',
-                    left: billing === 'yearly' ? 'calc(100% - 18px)' : '2px',
-                    transition: 'left 0.3s',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
-                  }}
-                />
-              </Box>
-            </Button>
-            
-            <Typography 
-              variant="body2" 
-              color={billing === 'yearly' ? 'primary' : 'text.secondary'}
-              sx={{ fontWeight: billing === 'yearly' ? 'bold' : 'normal' }}
-            >
-              Yearly (Save 15%)
-            </Typography>
-          </Box>
         </Box>
       </Paper>
 
@@ -427,7 +386,7 @@ const BillingSettings: React.FC = () => {
                   ${plan.price}
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                  /{billing}
+                  /month
                 </Typography>
               </Box>
               

@@ -20,7 +20,7 @@ STRIPE_PRODUCTS = {
             'Basic analytics',
             'Standard support'
         ],
-        'monthly_price': 9.99
+        'monthly_price': 19.00
     },
     'professional': {
         'name': 'Hypelist Professional',
@@ -32,7 +32,7 @@ STRIPE_PRODUCTS = {
             'Priority support',
             'Export capabilities'
         ],
-        'monthly_price': 19.99
+        'monthly_price': 49.00
     }
 }
 

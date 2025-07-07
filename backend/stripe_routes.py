@@ -3,9 +3,43 @@ import stripe
 import logging
 from stripe_service import StripeService
 from stripe_config import validate_stripe_config, STRIPE_PRODUCTS
-from middleware.auth import firebase_auth_required
+from middleware.auth import get_user_id_from_token, get_current_user_info
+from functools import wraps
 
 logger = logging.getLogger(__name__)
+
+def firebase_auth_required(f):
+    """Decorator that requires Firebase authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        logger.info(f"🔵 [AUTH] Checking authentication for {f.__name__}")
+        try:
+            # Get user info from Firebase token
+            user_info = get_current_user_info()
+            logger.info(f"🔵 [AUTH] User info: {user_info}")
+            if not user_info:
+                logger.warning("❌ [AUTH] No user info found")
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            user_id = user_info.get('uid')
+            if not user_id:
+                logger.warning("❌ [AUTH] No user ID found in user info")
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            # Add user_info to request object
+            request.user_info = user_info
+            
+            # Pass user_id to the route handler
+            kwargs['user_id'] = user_id
+            logger.info(f"🔵 [AUTH] Authentication successful, calling {f.__name__}")
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"❌ [AUTH] Authentication error: {str(e)}")
+            import traceback
+            logger.error(f"❌ [AUTH] Traceback: {traceback.format_exc()}")
+            return jsonify({'error': 'Authentication error'}), 500
+    
+    return decorated_function
 
 # Create blueprint for Stripe routes
 stripe_bp = Blueprint('stripe', __name__, url_prefix='/api/stripe')
@@ -20,21 +54,25 @@ def validate_config():
 
 @stripe_bp.route('/products', methods=['GET'])
 @firebase_auth_required
-def get_products():
+def get_products(user_id):
     """Get available subscription products"""
     try:
+        logger.info(f"🔵 [STRIPE] /products route called for user: {user_id}")
         products = StripeService.get_products_info()
+        logger.info(f"🔵 [STRIPE] Products retrieved: {products}")
         return jsonify({
             'success': True,
             'products': products
         })
     except Exception as e:
-        logger.error(f"Failed to get products: {str(e)}")
+        logger.error(f"❌ [STRIPE] Failed to get products: {str(e)}")
+        import traceback
+        logger.error(f"❌ [STRIPE] Traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Failed to retrieve products'}), 500
 
 @stripe_bp.route('/create-checkout-session', methods=['POST'])
 @firebase_auth_required
-def create_checkout_session():
+def create_checkout_session(user_id):
     """Create a Stripe Checkout session for subscription"""
     try:
         data = request.get_json()
@@ -91,7 +129,7 @@ def create_checkout_session():
 
 @stripe_bp.route('/create-billing-portal-session', methods=['POST'])
 @firebase_auth_required
-def create_billing_portal_session():
+def create_billing_portal_session(user_id):
     """Create a Stripe billing portal session"""
     try:
         data = request.get_json()
@@ -132,7 +170,7 @@ def create_billing_portal_session():
 
 @stripe_bp.route('/subscription-status', methods=['GET'])
 @firebase_auth_required
-def get_subscription_status():
+def get_subscription_status(user_id):
     """Get user's subscription status"""
     try:
         # Get user info from Firebase token
@@ -246,7 +284,7 @@ def stripe_webhook():
 
 @stripe_bp.route('/test-connection', methods=['GET'])
 @firebase_auth_required
-def test_stripe_connection():
+def test_stripe_connection(user_id):
     """Test Stripe API connection"""
     try:
         # Simple API call to test connection

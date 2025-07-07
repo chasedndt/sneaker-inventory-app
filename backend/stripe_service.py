@@ -185,8 +185,42 @@ class StripeService:
     
     @staticmethod
     def get_products_info():
-        """Get information about all available products"""
-        return STRIPE_PRODUCTS
+        """Get real-time product information from Stripe API"""
+        try:
+            products_info = {}
+            
+            # Get each product's real pricing from Stripe
+            for tier, product_config in STRIPE_PRODUCTS.items():
+                price_id = product_config['price_id']
+                
+                # Fetch the actual price from Stripe API
+                try:
+                    price_obj = stripe.Price.retrieve(price_id)
+                    product_obj = stripe.Product.retrieve(price_obj.product)
+                    
+                    # Convert price from cents to dollars
+                    monthly_price = price_obj.unit_amount / 100 if price_obj.unit_amount else 0
+                    
+                    products_info[tier] = {
+                        'name': product_obj.name,
+                        'price_id': price_id,
+                        'features': product_config['features'],  # Keep our configured features
+                        'monthly_price': monthly_price
+                    }
+                    
+                    logger.info(f"Retrieved Stripe pricing for {tier}: ${monthly_price}")
+                    
+                except stripe.error.StripeError as e:
+                    logger.warning(f"Failed to fetch Stripe pricing for {tier}: {str(e)}")
+                    # Fallback to configured values if Stripe API fails
+                    products_info[tier] = product_config
+            
+            return products_info
+            
+        except Exception as e:
+            logger.error(f"Failed to get products info from Stripe: {str(e)}")
+            # Fallback to hardcoded config if everything fails
+            return STRIPE_PRODUCTS
     
     @staticmethod
     def validate_price_id(price_id):

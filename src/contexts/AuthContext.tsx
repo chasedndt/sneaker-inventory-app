@@ -9,9 +9,7 @@ import {
   updateEmail,
   updatePassword,
   reauthenticateWithCredential,
-  EmailAuthProvider,
-  getIdToken,
-  getIdTokenResult
+  EmailAuthProvider
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import { initializeApi, setAuthTokenGetter as setAuthTokenGetterForApi } from '../services/api'; // Import initializeApi and setAuthTokenGetter
@@ -111,7 +109,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return new Promise((resolve, reject) => {
       signInWithEmailAndPassword(auth, email, password)
         .then(async (userCredential) => {
-          const tokenResult = await getIdTokenResult(userCredential.user);
+          const tokenResult = await userCredential.user.getIdTokenResult();
           const tier = (tokenResult.claims.accountTier as AppUser['accountTier']) || 'Free';
           const appUser: AppUser = {
             ...userCredential.user,
@@ -178,10 +176,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return token;
       }
 
-      // Get a fresh token
+      // Get a fresh token using the user method
       safeLog.debug('Getting fresh token from Firebase');
-      const newToken = await getIdToken(currentUser, true); // force refresh
-      const tokenResult = await getIdTokenResult(currentUser);
+      const newToken = await currentUser.getIdToken(true); // force refresh
+      const tokenResult = await currentUser.getIdTokenResult();
       
       // Set token and its expiration
       setToken(newToken);
@@ -201,8 +199,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!currentUser) return null;
     
     try {
-      const newToken = await getIdToken(currentUser, true); // force refresh
-      const tokenResult = await getIdTokenResult(currentUser);
+      const newToken = await currentUser.getIdToken(true); // force refresh
+      const tokenResult = await currentUser.getIdTokenResult();
       
       // Update token state
       setToken(newToken);
@@ -232,7 +230,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Subscribe to auth state changes
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const tokenResult = await getIdTokenResult(user); // Fetch token result once
+        const tokenResult = await user.getIdTokenResult(); // Fetch token result once
         // Check for planTier first (new system), then fallback to accountTier, then default to 'free'
         const planTier = tokenResult.claims.planTier as AppUser['accountTier'];
         const accountTier = tokenResult.claims.accountTier as AppUser['accountTier'];
@@ -256,7 +254,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Set token and expiration from the fetched tokenResult
         try {
-          const newToken = await getIdToken(user); // This ensures we get the raw token string
+          const newToken = await user.getIdToken(); // This ensures we get the raw token string
           setToken(newToken);
           if (tokenResult.expirationTime) {
             setTokenExpiration(new Date(tokenResult.expirationTime));
