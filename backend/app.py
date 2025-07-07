@@ -19,14 +19,14 @@ from auth_helpers import require_auth
 from middleware.auth import get_user_id_from_token, get_current_user_info
 from admin.admin_routes import admin_routes
 
-# Import hybrid router for SQLite + Firebase operations
+# Import database service for SQLite/Firebase routing
 try:
-    from hybrid_router import hybrid_router
-    HYBRID_ROUTER_AVAILABLE = True
-    logger.info("Hybrid router imported successfully")
+    from database_service import DatabaseService
+    DATABASE_SERVICE_AVAILABLE = True
+    logger.info("Database service imported successfully")
 except ImportError as e:
-    HYBRID_ROUTER_AVAILABLE = False
-    logger.warning(f"Hybrid router not available: {e}. Using SQLite only.")
+    DATABASE_SERVICE_AVAILABLE = False
+    logger.warning(f"Database service not available: {e}. Using SQLite only.")
 
 # Unicode console fix
 import sys
@@ -117,6 +117,16 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
 
+    # Initialize database service
+    database_service = None
+    if DATABASE_SERVICE_AVAILABLE:
+        try:
+            database_service = DatabaseService()
+            logger.info("Database service initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database service: {e}")
+            database_service = None
+
     # Register the tag routes blueprint
     app.register_blueprint(tag_routes, url_prefix='/api')
 
@@ -205,43 +215,32 @@ def create_app():
             
         return jsonify({"status": "success", "message": "API connection successful"})
 
-    @app.route('/api/migration/status', methods=['GET'])
+    @app.route('/api/database/status', methods=['GET'])
     @require_auth
-    def get_migration_status(user_id):
-        """Get current hybrid migration status and data distribution"""
+    def get_database_status(user_id):
+        """Get current database configuration status"""
         try:
-            if HYBRID_ROUTER_AVAILABLE:
-                # Get migration info from hybrid config
-                from hybrid_config import get_migration_info, get_routing_summary
-                migration_info = get_migration_info()
-                routing_summary = get_routing_summary()
-                
-                # Get data distribution info
-                data_sources_info = hybrid_router.get_data_sources_info(user_id)
-                
+            if database_service and database_service.is_using_firebase():
                 status = {
-                    "migration_active": True,
-                    "phase": migration_info['phase'],
-                    "mode": migration_info['mode'],
-                    "description": migration_info['description'],
-                    "routing": routing_summary,
-                    "data_distribution": data_sources_info,
-                    "firebase_enabled": migration_info['firebase_enabled']
+                    "database_type": "firebase",
+                    "status": "active",
+                    "description": "Using Firebase Firestore for all data operations",
+                    "firebase_enabled": True
                 }
             else:
                 status = {
-                    "migration_active": False,
-                    "mode": "sqlite_only",
-                    "description": "Using SQLite only - hybrid router not available",
+                    "database_type": "sqlite",
+                    "status": "active", 
+                    "description": "Using local SQLite database for all data operations",
                     "firebase_enabled": False
                 }
             
-            logger.info(f"Migration status requested for user {user_id}")
+            logger.info(f"Database status requested for user {user_id}")
             return jsonify(status), 200
             
         except Exception as e:
-            logger.error(f"Error getting migration status: {str(e)}")
-            return safe_error_response(e, "Failed to get migration status")
+            logger.error(f"Error getting database status: {str(e)}")
+            return safe_error_response(e, "Failed to get database status")
 
     # Health check endpoint
     @app.route('/api/ping', methods=['GET'])
@@ -287,12 +286,12 @@ def create_app():
             logger.error(f"💥 Error fetching user info: {str(e)}")
             return safe_error_response(e, "Failed to fetch user information")
     
-    # Update user settings endpoint - now uses hybrid router
+    # Update user settings endpoint - uses database service
     @app.route('/api/settings', methods=['PUT'])
     @require_auth
     def update_settings(user_id):
         """
-        Update user settings - uses hybrid router for data routing.
+        Update user settings - uses database service for data routing.
         """
         try:
             logger.info(f"🔄 Updating settings for user_id: {user_id}")
@@ -301,10 +300,10 @@ def create_app():
             if not data:
                 return jsonify({'error': 'No data provided'}), 400
             
-            if HYBRID_ROUTER_AVAILABLE:
-                # Use hybrid router to update settings
-                updated_settings = hybrid_router.update_user_settings(user_id, data)
-                logger.info(f"✅ Settings updated via hybrid router for user_id: {user_id}")
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                updated_settings = database_service.update_user_settings(user_id, data)
+                logger.info(f"✅ Settings updated via Firebase for user_id: {user_id}")
                 return jsonify(updated_settings), 200
             else:
                 # Fallback to SQLite logic
@@ -327,7 +326,7 @@ def create_app():
                 logger.info(f"✅ Settings updated for user_id: {user_id}")
                 return jsonify(settings.to_dict()), 200
         except Exception as e:
-            if not HYBRID_ROUTER_AVAILABLE:
+            if not database_service or not database_service.is_using_firebase():
                 db.session.rollback()
             logger.error(f"💥 Error updating settings: {str(e)}")
             return safe_error_response(e, "Failed to update settings")
@@ -338,15 +337,15 @@ def create_app():
     def get_items(user_id):
         """
         Get all items with their images for current user.
-        Uses hybrid router to fetch from appropriate data source.
+        Uses database service to fetch from appropriate data source (SQLite or Firebase).
         """
         try:
             logger.debug(f"📊 Fetching items for user_id: {user_id}")
             
-            if HYBRID_ROUTER_AVAILABLE:
-                # Use hybrid router to get items from appropriate source
-                items_data = hybrid_router.get_items(user_id)
-                logger.debug(f"✅ Retrieved {len(items_data)} items via hybrid router for user_id: {user_id}")
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                items_data = database_service.get_items(user_id)
+                logger.debug(f"✅ Retrieved {len(items_data)} items via Firebase for user_id: {user_id}")
             else:
                 # Fallback to SQLite only
                 items = Item.query.filter_by(user_id=user_id).all()
@@ -359,41 +358,53 @@ def create_app():
             return safe_error_response(e, "Failed to fetch items")
 
     # Get a single item by ID - verify ownership
-    @app.route('/api/items/<int:item_id>', methods=['GET'])
+    @app.route('/api/items/<item_id>', methods=['GET'])
     @require_auth
     def get_item(user_id, item_id):
         """
         Get a single item by ID with its images.
+        Uses database service to fetch from appropriate data source (SQLite or Firebase).
         """
         try:
-            item = Item.query.get(item_id)
-            if not item:
-                logger.warning(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': 'Item not found'}), 404
-            
-            # Check if item belongs to the requesting user
-            if item.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to access item {item_id} belonging to user {item.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            logger.info(f"✅ Retrieved item {item_id} from database for user_id: {user_id}")
-            
-            # Get the item's images
-            images = Image.query.filter_by(item_id=item.id).all()
-            image_filenames = [img.filename for img in images]
-            
-            # Create a detailed response with images
-            item_data = item.to_dict()
-            item_data['images'] = image_filenames
-            
-            logger.info(f"📸 Item {item_id} has {len(image_filenames)} images: {image_filenames}")
-            
-            return jsonify(item_data), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                item_data = database_service.get_item(user_id, item_id)
+                if not item_data:
+                    logger.warning(f"❌ Item with ID {item_id} not found in Firebase")
+                    return jsonify({'error': 'Item not found'}), 404
+                
+                logger.info(f"✅ Retrieved item {item_id} from Firebase for user_id: {user_id}")
+                return jsonify(item_data), 200
+            else:
+                # Fallback to SQLite only
+                item = Item.query.get(int(item_id))
+                if not item:
+                    logger.warning(f"❌ Item with ID {item_id} not found")
+                    return jsonify({'error': 'Item not found'}), 404
+                
+                # Check if item belongs to the requesting user
+                if item.user_id != user_id:
+                    logger.warning(f"🚫 User {user_id} attempted to access item {item_id} belonging to user {item.user_id}")
+                    return jsonify({'error': 'Unauthorized access'}), 403
+                
+                logger.info(f"✅ Retrieved item {item_id} from SQLite for user_id: {user_id}")
+                
+                # Get the item's images
+                images = Image.query.filter_by(item_id=item.id).all()
+                image_filenames = [img.filename for img in images]
+                
+                # Create a detailed response with images
+                item_data = item.to_dict()
+                item_data['images'] = image_filenames
+                
+                logger.info(f"📸 Item {item_id} has {len(image_filenames)} images: {image_filenames}")
+                
+                return jsonify(item_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return safe_error_response(e, "Failed to fetch item")
 
-    # Add a new item with current user_id - now uses hybrid router
+    # Add a new item with current user_id - uses database service
     @app.route('/api/items', methods=['POST'])
     @require_auth
     def add_item(user_id):
@@ -461,10 +472,10 @@ def create_app():
             
             item_data['images'] = image_filenames
             
-            if HYBRID_ROUTER_AVAILABLE:
-                # Use hybrid router to create item
-                created_item = hybrid_router.create_item(user_id, item_data)
-                logger.info(f"✅ Item created via hybrid router with ID: {created_item.get('id')} for user_id: {user_id}")
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                created_item = database_service.create_item(user_id, item_data)
+                logger.info(f"✅ Item created via Firebase with ID: {created_item.get('id')} for user_id: {user_id}")
                 
                 return jsonify({
                     'message': 'Item created successfully',
@@ -1080,64 +1091,72 @@ def create_app():
     @require_auth
     def get_sales(user_id):
         """
-        Get all sales for the current user.
+        Get all sales for the current user using database service.
         """
         try:
             logger.debug(f"📊 Fetching sales for user_id: {user_id}")
-            sales = Sale.query.filter_by(user_id=user_id).all()
             
-            # Convert sales to dictionary format with item details
-            sales_data = []
-            for sale in sales:
-                sale_dict = sale.to_dict()
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                sales_data = database_service.get_sales(user_id)
+                logger.debug(f"✅ Retrieved {len(sales_data)} sales via Firebase for user_id: {user_id}")
+                return jsonify(sales_data), 200
+            else:
+                # Fallback to SQLite logic
+                sales = Sale.query.filter_by(user_id=user_id).all()
                 
-                # Get associated item for additional info
-                item = Item.query.get(sale.item_id)
-                if item and item.user_id == user_id:  # Additional ownership check
-                    # Add item details to sale data
-                    images = Image.query.filter_by(item_id=item.id).all()
-                    image_filenames = [img.filename for img in images]
+                # Convert sales to dictionary format with item details
+                sales_data = []
+                for sale in sales:
+                    sale_dict = sale.to_dict()
                     
-                    # Get size information
-                    size_info = Size.query.filter_by(item_id=item.id).first()
-                    size = size_info.size if size_info else None
-                    size_system = size_info.system if size_info else None
+                    # Get associated item for additional info
+                    item = Item.query.get(sale.item_id)
+                    if item and item.user_id == user_id:  # Additional ownership check
+                        # Add item details to sale data
+                        images = Image.query.filter_by(item_id=item.id).all()
+                        image_filenames = [img.filename for img in images]
+                        
+                        # Get size information
+                        size_info = Size.query.filter_by(item_id=item.id).first()
+                        size = size_info.size if size_info else None
+                        size_system = size_info.system if size_info else None
+                        
+                        # Add item details to sale dict
+                        sale_dict.update({
+                            'itemName': item.product_name,
+                            'brand': item.brand,
+                            'category': item.category,
+                            'purchasePrice': item.purchase_price,
+                            'purchaseDate': item.purchase_date.isoformat() if item.purchase_date else None,
+                            'images': image_filenames,
+                            'size': size,
+                            'sizeSystem': size_system
+                        })
+                    else:
+                        # Item not found or not owned by user - add minimal info
+                        sale_dict.update({
+                            'itemName': 'Unknown Item',
+                            'brand': 'Unknown',
+                            'category': 'Unknown',
+                            'purchasePrice': 0,
+                            'images': []
+                        })
                     
-                    # Add item details to sale dict
-                    sale_dict.update({
-                        'itemName': item.product_name,
-                        'brand': item.brand,
-                        'category': item.category,
-                        'purchasePrice': item.purchase_price,
-                        'purchaseDate': item.purchase_date.isoformat() if item.purchase_date else None,
-                        'images': image_filenames,
-                        'size': size,
-                        'sizeSystem': size_system
-                    })
-                else:
-                    # Item not found or not owned by user - add minimal info
-                    sale_dict.update({
-                        'itemName': 'Unknown Item',
-                        'brand': 'Unknown',
-                        'category': 'Unknown',
-                        'purchasePrice': 0,
-                        'images': []
-                    })
+                    sales_data.append(sale_dict)
                 
-                sales_data.append(sale_dict)
-            
-            logger.debug(f"✅ Retrieved {len(sales_data)} sales for user_id: {user_id}")
-            return jsonify(sales_data), 200
+                logger.debug(f"✅ Retrieved {len(sales_data)} sales from SQLite for user_id: {user_id}")
+                return jsonify(sales_data), 200
         except Exception as e:
             logger.error(f"💥 Error fetching sales: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to fetch sales")
 
     # Create a new sale record
     @app.route('/api/sales', methods=['POST'])
     @require_auth
     def create_sale(user_id):
         """
-        Create a new sale record and update item status to 'sold'.
+        Create a new sale record and update item status to 'sold' using database service.
         """
         try:
             logger.info(f"📝 Creating new sale record for user_id: {user_id}")
@@ -1148,6 +1167,15 @@ def create_app():
                 return jsonify({'error': 'Missing sale data'}), 400
             
             data = request.json
+            
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                created_sale = database_service.create_sale(user_id, data)
+                logger.info(f"✅ Sale created via Firebase with ID: {created_sale.get('id')} for user_id: {user_id}")
+                return jsonify(created_sale), 201
+            else:
+                # Fallback to SQLite logic
+                data = request.json
             
             # Validate required fields
             required_fields = ['itemId', 'platform', 'saleDate', 'salePrice', 'status']
@@ -1567,22 +1595,30 @@ def create_app():
     @require_auth
     def get_expenses(user_id):
         """
-        Get all expenses for the current user.
+        Get all expenses for the current user using database service.
         """
         try:
             logger.info(f"📋 Fetching expenses for user {user_id}")
-            expenses = Expense.query.filter_by(user_id=user_id).order_by(Expense.expense_date.desc()).all()
-            logger.info(f"[EXPENSES] user_id: {user_id}, expenses found: {len(expenses)}")
-            return jsonify([expense.to_dict() for expense in expenses])
+            
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                expenses_data = database_service.get_expenses(user_id)
+                logger.info(f"✅ Retrieved {len(expenses_data)} expenses via Firebase for user_id: {user_id}")
+                return jsonify(expenses_data)
+            else:
+                # Fallback to SQLite logic
+                expenses = Expense.query.filter_by(user_id=user_id).order_by(Expense.expense_date.desc()).all()
+                logger.info(f"[EXPENSES] user_id: {user_id}, expenses found: {len(expenses)}")
+                return jsonify([expense.to_dict() for expense in expenses])
         except Exception as e:
             logger.error(f"💥 Error fetching expenses for user {user_id}: {str(e)}")
-            return jsonify({'error': str(e)}), 500
+            return safe_error_response(e, "Failed to fetch expenses")
 
     @app.route('/api/expenses', methods=['POST'])
     @require_auth
     def create_expense(user_id):
         """
-        Create a new expense record for the current user.
+        Create a new expense record for the current user using database service.
         """
         try:
             logger.info(f"📝 Creating new expense record for user {user_id}")
@@ -1597,6 +1633,15 @@ def create_app():
             
             # Parse the JSON data
             expense_data = json.loads(request.form.get('data'))
+            
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                created_expense = database_service.create_expense(user_id, expense_data)
+                logger.info(f"✅ Expense created via Firebase with ID: {created_expense.get('id')} for user_id: {user_id}")
+                return jsonify(created_expense), 201
+            else:
+                # Fallback to SQLite logic
+                expense_data = json.loads(request.form.get('data'))
             
             # Validate required fields
             required_fields = ['expenseType', 'amount', 'expenseDate']
