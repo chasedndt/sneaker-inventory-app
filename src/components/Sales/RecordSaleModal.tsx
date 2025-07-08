@@ -183,6 +183,8 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
     
     if (!formData.itemId || formData.itemId === '') {
       newErrors.itemId = 'Please select an item';
+    } else if (typeof formData.itemId === 'string' && isNaN(parseInt(formData.itemId, 10))) {
+      newErrors.itemId = 'Invalid item selected';
     }
     
     if (!formData.platform) {
@@ -224,7 +226,16 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
     
     try {
       // Prepare sale data for submission
-      const itemId = typeof formData.itemId === 'string' ? parseInt(formData.itemId, 10) : formData.itemId;
+      let itemId: number;
+      if (typeof formData.itemId === 'string') {
+        itemId = parseInt(formData.itemId, 10);
+        if (isNaN(itemId)) {
+          throw new Error('Invalid item ID selected');
+        }
+      } else {
+        itemId = formData.itemId;
+      }
+      
       const saleData = {
         itemId: itemId,
         platform: formData.platform,
