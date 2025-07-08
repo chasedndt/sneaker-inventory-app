@@ -15,8 +15,6 @@ const API_BASE_URL = 'http://127.0.0.1:5000/api';
  * @returns The full URL for the image, or undefined if no filename provided
  */
 export const getImageUrl = (filename: string | undefined, itemId?: number, userId?: string): string | undefined => {
-  console.log(`🔍 getImageUrl called with:`, { filename, itemId, userId });
-  
   if (!filename) {
     console.log(`❌ No image filename provided${itemId ? ` for item ${itemId}` : ''}`);
     return undefined;
@@ -24,13 +22,11 @@ export const getImageUrl = (filename: string | undefined, itemId?: number, userI
   
   // If the filename already contains a full URL, return it directly
   if (filename.startsWith('http')) {
-    console.log(`🌐 Filename is already a full URL: ${filename}`);
     return filename;
   }
   
   // Clean the filename to remove any path separators at the beginning
   const cleanFilename = filename.replace(/^[\/\\]+/, '');
-  console.log(`🧹 Cleaned filename: ${cleanFilename}`);
   
   let finalUrl;
   // Include the user ID in the path if provided
@@ -46,7 +42,6 @@ export const getImageUrl = (filename: string | undefined, itemId?: number, userI
     finalUrl = `${API_BASE_URL}/uploads/${cleanFilename}`;
   }
   
-  console.log(`🔗 Final URL generated: ${finalUrl}`);
   return finalUrl;
 };
 
@@ -130,9 +125,6 @@ export const preloadImage = (url: string): Promise<void> => {
  * @returns URL for an appropriate placeholder image
  */
 export const getCategoryPlaceholderImage = (category: string): string => {
-  // Always log for debugging
-  console.log(`🖼️ Getting placeholder for category: ${category}`);
-  
   // You can create different placeholder images for different categories
   const placeholder = (() => {
     switch (category.toLowerCase()) {
@@ -149,7 +141,6 @@ export const getCategoryPlaceholderImage = (category: string): string => {
     }
   })();
   
-  console.log(`🖼️ Returning placeholder: ${placeholder}`);
   return placeholder;
 };
 

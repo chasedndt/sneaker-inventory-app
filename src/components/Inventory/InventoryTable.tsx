@@ -1164,17 +1164,17 @@ const InventoryTable = ({
                       </Typography>
                     </Tooltip>
                   ) : (
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        fontWeight: 'medium',
-                        color: selectedProfitItem.roi >= 0 
-                          ? theme.palette.success.main 
-                          : theme.palette.error.main
-                      }}
-                    >
-                      {selectedProfitItem.roi.toFixed(1)}%
-                    </Typography>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      fontWeight: 'medium',
+                      color: selectedProfitItem.roi >= 0 
+                        ? theme.palette.success.main 
+                        : theme.palette.error.main
+                    }}
+                  >
+                    {selectedProfitItem.roi.toFixed(1)}%
+                  </Typography>
                   )}
                 </Box>
               </Box>

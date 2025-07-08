@@ -11,7 +11,7 @@ import {
   List,
   ListItem,
   ListItemIcon,
-    ListItemText,
+  ListItemText,
   alpha,
   Tooltip,
   CircularProgress,
@@ -323,7 +323,7 @@ const BillingSettings: React.FC = () => {
                 }
               </Typography>
             )}
-            <Button
+            <Button 
               startIcon={<SettingsIcon />}
               onClick={handleBillingPortal}
               sx={{ mt: 1 }}

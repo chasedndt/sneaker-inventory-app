@@ -74,12 +74,28 @@ npm start
 - ✅ `config.py` - Updated with USE_FIREBASE option
 - ⚠️ `firebase-credentials.json` - You need to create this
 
+## Testing the Conversion
+
+Before switching to Firebase, test that everything works:
+
+```bash
+cd backend
+python test_firebase_conversion.py
+```
+
+This will verify:
+- ✅ All imports work correctly
+- ✅ Configuration switching works
+- ✅ Database service initializes properly
+- ✅ App starts without errors
+
 ## Next Steps
 
-1. **Get Firebase credentials** from your Firebase project
-2. **Set USE_FIREBASE=true** when ready to switch
-3. **Test with empty Firebase database**
-4. **Optionally migrate your SQLite data** (separate process)
+1. **Run the test script** to verify conversion
+2. **Get Firebase credentials** from your Firebase project
+3. **Set USE_FIREBASE=true** when ready to switch
+4. **Test with empty Firebase database**
+5. **Optionally migrate your SQLite data** (separate process)
 
 ## Rollback
 

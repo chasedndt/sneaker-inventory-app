@@ -23,10 +23,10 @@ from admin.admin_routes import admin_routes
 try:
     from database_service import DatabaseService
     DATABASE_SERVICE_AVAILABLE = True
-    logger.info("Database service imported successfully")
+    print("Database service imported successfully")
 except ImportError as e:
     DATABASE_SERVICE_AVAILABLE = False
-    logger.warning(f"Database service not available: {e}. Using SQLite only.")
+    print(f"Database service not available: {e}. Using SQLite only.")
 
 # Unicode console fix
 import sys
@@ -257,31 +257,57 @@ def create_app():
     @require_auth
     def get_user(user_id):
         """
-        Get current user information.
+        Get current user information using database service.
         """
         try:
             logger.info(f"🔍 Fetching user info for user_id: {user_id}")
             
-            # Get user settings
-            settings = UserSettings.query.filter_by(user_id=user_id).first()
-            
-            # If settings don't exist, create default settings
-            if not settings:
-                settings = UserSettings(user_id=user_id)
-                db.session.add(settings)
-                db.session.commit()
-                logger.info(f"✅ Created default settings for user_id: {user_id}")
-            
-            # Get user details from Firebase (optional)
-            user_info = get_current_user_info() or {'uid': user_id}
-            
-            # Combine settings with user info
-            response = {
-                **user_info,
-                'settings': settings.to_dict()
-            }
-            
-            return jsonify(response), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                settings_data = database_service.get_user_settings(user_id)
+                
+                # If settings don't exist, create default settings
+                if not settings_data:
+                    default_settings = {
+                        'dark_mode': False,
+                        'currency': '$',
+                        'date_format': 'MM/DD/YYYY'
+                    }
+                    settings_data = database_service.update_user_settings(user_id, default_settings)
+                    logger.info(f"✅ Created default settings via Firebase for user_id: {user_id}")
+                
+                # Get user details from Firebase (optional)
+                user_info = get_current_user_info() or {'uid': user_id}
+                
+                # Combine settings with user info
+                response = {
+                    **user_info,
+                    'settings': settings_data
+                }
+                
+                return jsonify(response), 200
+            else:
+                # Fallback to SQLite logic
+                # Get user settings
+                settings = UserSettings.query.filter_by(user_id=user_id).first()
+                
+                # If settings don't exist, create default settings
+                if not settings:
+                    settings = UserSettings(user_id=user_id)
+                    db.session.add(settings)
+                    db.session.commit()
+                    logger.info(f"✅ Created default settings for user_id: {user_id}")
+                
+                # Get user details from Firebase (optional)
+                user_info = get_current_user_info() or {'uid': user_id}
+                
+                # Combine settings with user info
+                response = {
+                    **user_info,
+                    'settings': settings.to_dict()
+                }
+                
+                return jsonify(response), 200
         except Exception as e:
             logger.error(f"💥 Error fetching user info: {str(e)}")
             return safe_error_response(e, "Failed to fetch user information")
@@ -597,20 +623,29 @@ def create_app():
     def update_item(user_id, item_id):
         """
         Update an existing item, ensuring it belongs to the current user.
+        Note: Complex file uploads and image processing are only supported in SQLite mode.
         """
         try:
             logger.info(f"🔄 Updating item {item_id} for user {user_id}")
             
             # Check if item exists and belongs to user
-            item = Item.query.get(item_id)
-            if not item:
+            item_data = database_service.get_item(user_id, item_id)
+            if not item_data:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
-            # Verify ownership
-            if item.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to update item {item_id} belonging to user {item.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
+            # For Firebase mode, complex item updates with file uploads are not supported
+            if database_service and database_service.is_using_firebase():
+                logger.warning(f"⚠️ Complex item update attempted in Firebase mode for item {item_id}")
+                return jsonify({
+                    'error': 'Complex item updates with file uploads are not supported in Firebase mode. Please use individual field update endpoints (PATCH /api/items/<id>/field) instead.'
+                }), 501
+            
+            # Get SQLite item for complex operations
+            item = Item.query.get(item_id)
+            if not item or item.user_id != user_id:
+                logger.error(f"❌ Item with ID {item_id} not found in SQLite")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
             # Check if the request has data
             if 'data' not in request.form:
@@ -879,18 +914,17 @@ def create_app():
             logger.info(f"🔄 Updating field for item {item_id}, user {user_id}")
             
             # Check if item exists and belongs to user
-            item = Item.query.get(item_id)
-            if not item:
-                logger.error(f"❌ Item with ID {item_id} not found")
-                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
-            
-            # Verify ownership
-            if item.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to update item {item_id} belonging to user {item.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Log request data for debugging
-            logger.info(f"Request data: {request.data}")
+            if database_service and database_service.is_using_firebase():
+                item_data = database_service.get_item(user_id, item_id)
+                if not item_data:
+                    logger.error(f"❌ Item with ID {item_id} not found")
+                    return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            else:
+                # For SQLite mode, check using SQLAlchemy
+                item = Item.query.filter_by(id=item_id, user_id=user_id).first()
+                if not item:
+                    logger.error(f"❌ Item with ID {item_id} not found")
+                    return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
             # Parse request data and handle potential JSON errors
             try:
@@ -911,6 +945,27 @@ def create_app():
             value = data['value']
             
             logger.info(f"Field: {field}, Value: {value}")
+            
+            # For Firebase mode, use database service for field updates
+            if database_service.is_using_firebase():
+                try:
+                    updated_item = database_service.update_item_field(user_id, item_id, field, value)
+                    logger.info(f"✅ Updated field {field} for item {item_id} via Firebase")
+                    return jsonify({
+                        'message': f'Field {field} updated successfully',
+                        'id': item_id,
+                        'field': field,
+                        'value': value
+                    }), 200
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase field update failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to update field: {str(firebase_err)}'}), 500
+            
+            # Get SQLite item for complex operations
+            item = Item.query.get(item_id)
+            if not item or item.user_id != user_id:
+                logger.error(f"❌ Item with ID {item_id} not found in SQLite")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
             # Special handling for tags field
             if field == 'tags':
@@ -1038,16 +1093,31 @@ def create_app():
         try:
             logger.info(f"🗑️ Deleting item {item_id} for user {user_id}")
             
-            # Check if item exists
-            item = Item.query.get(item_id)
-            if not item:
+            # Check if item exists and belongs to user
+            item_data = database_service.get_item(user_id, item_id)
+            if not item_data:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
-            # Verify ownership
-            if item.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to delete item {item_id} belonging to user {item.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
+            # For Firebase mode, use database service for deletions
+            if database_service.is_using_firebase():
+                try:
+                    success = database_service.delete_item(user_id, item_id)
+                    if success:
+                        logger.info(f"✅ Deleted item {item_id} via Firebase for user {user_id}")
+                        return jsonify({'message': f'Item {item_id} deleted successfully'}), 200
+                    else:
+                        logger.error(f"❌ Failed to delete item {item_id} via Firebase")
+                        return jsonify({'error': 'Failed to delete item'}), 500
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase delete failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to delete item: {str(firebase_err)}'}), 500
+            
+            # Get SQLite item for complex operations
+            item = Item.query.get(item_id)
+            if not item or item.user_id != user_id:
+                logger.error(f"❌ Item with ID {item_id} not found in SQLite")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
             
             # Delete associated sales records
             sales = Sale.query.filter_by(item_id=item_id, user_id=user_id).all()
@@ -1251,15 +1321,22 @@ def create_app():
         try:
             logger.info(f"🔍 Fetching sale {sale_id} for user {user_id}")
             
-            sale = Sale.query.get(sale_id)
-            if not sale:
+            # Check if sale exists and belongs to user
+            sale_data = database_service.get_sale(user_id, sale_id)
+            if not sale_data:
                 logger.warning(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': 'Sale not found'}), 404
             
-            # Verify ownership
-            if sale.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to access sale {sale_id} belonging to user {sale.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
+            # For Firebase mode, return the sale data directly
+            if database_service.is_using_firebase():
+                logger.info(f"✅ Retrieved sale {sale_id} from Firebase for user {user_id}")
+                return jsonify(sale_data), 200
+            
+            # For SQLite mode, get the sale object for additional processing
+            sale = Sale.query.get(sale_id)
+            if not sale or sale.user_id != user_id:
+                logger.warning(f"❌ Sale with ID {sale_id} not found in SQLite")
+                return jsonify({'error': 'Sale not found'}), 404
             
             # Convert sale to dictionary
             sale_dict = sale.to_dict()
@@ -1305,16 +1382,46 @@ def create_app():
             logger.info(f"📝 Updating sale {sale_id} for user {user_id}")
             data = request.json
             
-            # Check if sale exists
-            sale = Sale.query.get(sale_id)
-            if not sale:
+            # Check if sale exists and belongs to user
+            sale_data = database_service.get_sale(user_id, sale_id)
+            if not sale_data:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
                 return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
             
-            # Verify ownership
-            if sale.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to update sale {sale_id} belonging to user {sale.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
+            # For Firebase mode, use database service for updates
+            if database_service.is_using_firebase():
+                try:
+                    # Prepare update data
+                    update_data = {}
+                    if 'platform' in data:
+                        update_data['platform'] = data['platform']
+                    if 'saleDate' in data:
+                        update_data['saleDate'] = data['saleDate']
+                    if 'salePrice' in data:
+                        update_data['salePrice'] = float(data['salePrice'])
+                    if 'currency' in data:
+                        update_data['currency'] = data['currency']
+                    if 'salesTax' in data:
+                        update_data['salesTax'] = float(data['salesTax'] or 0)
+                    if 'platformFees' in data:
+                        update_data['platformFees'] = float(data['platformFees'] or 0)
+                    if 'status' in data:
+                        update_data['status'] = data['status']
+                    if 'saleId' in data:
+                        update_data['saleId'] = data['saleId']
+                    
+                    updated_sale = database_service.update_sale(user_id, sale_id, update_data)
+                    logger.info(f"✅ Updated sale {sale_id} via Firebase for user {user_id}")
+                    return jsonify(updated_sale), 200
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase sale update failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to update sale: {str(firebase_err)}'}), 500
+            
+            # Get SQLite sale for complex operations
+            sale = Sale.query.get(sale_id)
+            if not sale or sale.user_id != user_id:
+                logger.error(f"❌ Sale with ID {sale_id} not found in SQLite")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
             
             # Update sale fields if provided
             if 'platform' in data:
@@ -1383,7 +1490,28 @@ def create_app():
             field = data['field']
             value = data['value']
             
-            # Check if sale exists
+            # Check if sale exists and belongs to user
+            sale_data = database_service.get_sale(user_id, sale_id)
+            if not sale_data:
+                logger.error(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # For Firebase mode, use database service for field updates
+            if database_service.is_using_firebase():
+                try:
+                    updated_sale = database_service.update_sale_field(user_id, sale_id, field, value)
+                    logger.info(f"✅ Updated field {field} for sale {sale_id} via Firebase")
+                    return jsonify({
+                        'message': f'Field {field} updated successfully',
+                        'id': sale_id,
+                        'field': field,
+                        'value': value
+                    }), 200
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase field update failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to update field: {str(firebase_err)}'}), 500
+            
+            # Get SQLite sale for complex operations
             sale = Sale.query.get(sale_id)
             if not sale:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
@@ -1460,7 +1588,30 @@ def create_app():
         try:
             logger.info(f"🗑️ Deleting sale {sale_id} for user {user_id}")
             
-            # Check if sale exists
+            # Check if sale exists and belongs to user
+            sale_data = database_service.get_sale(user_id, sale_id)
+            if not sale_data:
+                logger.error(f"❌ Sale with ID {sale_id} not found")
+                return jsonify({'error': f'Sale with ID {sale_id} not found'}), 404
+            
+            # For Firebase mode, use database service for deletions
+            if database_service.is_using_firebase():
+                try:
+                    success = database_service.delete_sale(user_id, sale_id)
+                    if success:
+                        logger.info(f"✅ Deleted sale {sale_id} via Firebase for user {user_id}")
+                        return jsonify({
+                            'message': f'Sale {sale_id} deleted successfully',
+                            'item_id': sale_data.get('itemId')
+                        }), 200
+                    else:
+                        logger.error(f"❌ Failed to delete sale {sale_id} via Firebase")
+                        return jsonify({'error': 'Failed to delete sale'}), 500
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase delete failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to delete sale: {str(firebase_err)}'}), 500
+            
+            # Get SQLite sale for complex operations
             sale = Sale.query.get(sale_id)
             if not sale:
                 logger.error(f"❌ Sale with ID {sale_id} not found")
@@ -1510,7 +1661,23 @@ def create_app():
         try:
             logger.info(f"📊 Fetching sales for item {item_id}, user {user_id}")
             
-            # Check if the item exists
+            # Check if the item exists and belongs to user
+            item_data = database_service.get_item(user_id, item_id)
+            if not item_data:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f'Item with ID {item_id} not found'}), 404
+            
+            # For Firebase mode, use database service
+            if database_service.is_using_firebase():
+                try:
+                    sales = database_service.get_sales_by_item(user_id, item_id)
+                    logger.info(f"✅ Fetched {len(sales)} sales for item {item_id} via Firebase")
+                    return jsonify(sales), 200
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase sales fetch failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to fetch sales: {str(firebase_err)}'}), 500
+            
+            # Get SQLite item for complex operations
             item = Item.query.get(item_id)
             if not item:
                 logger.error(f"❌ Item with ID {item_id} not found")
@@ -1715,15 +1882,22 @@ def create_app():
         try:
             logger.info(f"🔍 Fetching expense {expense_id} for user {user_id}")
             
-            expense = Expense.query.get(expense_id)
-            if not expense:
+            # Check if expense exists and belongs to user
+            expense_data = database_service.get_expense(user_id, expense_id)
+            if not expense_data:
                 logger.warning(f"❌ Expense with ID {expense_id} not found")
                 return jsonify({'error': 'Expense not found'}), 404
             
-            # Verify ownership
-            if expense.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to access expense {expense_id} belonging to user {expense.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
+            # For Firebase mode, return the expense data directly
+            if database_service.is_using_firebase():
+                logger.info(f"✅ Retrieved expense {expense_id} from Firebase for user {user_id}")
+                return jsonify(expense_data), 200
+            
+            # For SQLite mode, get the expense object
+            expense = Expense.query.get(expense_id)
+            if not expense or expense.user_id != user_id:
+                logger.warning(f"❌ Expense with ID {expense_id} not found in SQLite")
+                return jsonify({'error': 'Expense not found'}), 404
             
             logger.info(f"✅ Retrieved expense {expense_id} for user {user_id}")
             return jsonify(expense.to_dict()), 200
@@ -1740,7 +1914,54 @@ def create_app():
         try:
             logger.info(f"🔄 Updating expense {expense_id} for user {user_id}")
             
-            # Check if expense exists
+            # Check if expense exists and belongs to user
+            expense_data = database_service.get_expense(user_id, expense_id)
+            if not expense_data:
+                logger.error(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # For Firebase mode, use database service for updates  
+            if database_service.is_using_firebase():
+                # Note: File uploads for Firebase are complex, return error for now
+                if 'receipt' in request.files:
+                    logger.warning(f"⚠️ Receipt uploads not yet supported in Firebase mode for expense {expense_id}")
+                    return jsonify({'error': 'Receipt uploads not yet supported in Firebase mode'}), 501
+                
+                if 'data' not in request.form:
+                    logger.error("❌ No expense data provided")
+                    return jsonify({'error': 'Missing expense data'}), 400
+                
+                try:
+                    # Parse the JSON data
+                    form_data = json.loads(request.form.get('data'))
+                    
+                    # Prepare update data
+                    update_data = {}
+                    if 'expenseType' in form_data:
+                        update_data['expenseType'] = form_data['expenseType']
+                    if 'amount' in form_data:
+                        update_data['amount'] = float(form_data['amount'])
+                    if 'currency' in form_data:
+                        update_data['currency'] = form_data['currency']
+                    if 'expenseDate' in form_data:
+                        update_data['expenseDate'] = form_data['expenseDate']
+                    if 'vendor' in form_data:
+                        update_data['vendor'] = form_data['vendor']
+                    if 'notes' in form_data:
+                        update_data['notes'] = form_data['notes']
+                    if 'isRecurring' in form_data:
+                        update_data['isRecurring'] = form_data['isRecurring']
+                    if 'recurrencePeriod' in form_data:
+                        update_data['recurrencePeriod'] = form_data['recurrencePeriod']
+                    
+                    updated_expense = database_service.update_expense(user_id, expense_id, update_data)
+                    logger.info(f"✅ Updated expense {expense_id} via Firebase for user {user_id}")
+                    return jsonify(updated_expense), 200
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase expense update failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to update expense: {str(firebase_err)}'}), 500
+            
+            # Get SQLite expense for complex operations
             expense = Expense.query.get(expense_id)
             if not expense:
                 logger.error(f"❌ Expense with ID {expense_id} not found")
@@ -1841,32 +2062,44 @@ def create_app():
     @require_auth
     def get_expense_receipt_url(user_id, expense_id):
         """
-        Get the URL for a receipt associated with an expense.
+        Get the URL for a receipt associated with an expense using database service.
         """
         try:
             logger.info(f"🔍 Getting receipt URL for expense {expense_id} by user {user_id}")
             
-            # Find the expense
-            expense = Expense.query.get(expense_id)
-            if not expense:
-                logger.error(f"❌ Expense with ID {expense_id} not found")
-                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
-            
-            # Verify ownership
-            if expense.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to access receipt for expense {expense_id} belonging to user {expense.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Check if receipt exists
-            if not expense.receipt_filename:
-                logger.error(f"❌ No receipt attached to expense {expense_id}")
-                return jsonify({'error': 'No receipt attached to this expense'}), 404
-            
-            # Generate the URL path to the receipt in the receipts subfolder
-            receipt_url = f"/api/uploads/{user_id}/receipts/{expense.receipt_filename}"
-            
-            logger.info(f"✅ Generated receipt URL for expense {expense_id}: {receipt_url}")
-            return jsonify(receipt_url), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                receipt_url = database_service.get_expense_receipt_url(user_id, str(expense_id))
+                
+                if not receipt_url:
+                    logger.error(f"❌ No receipt found for expense {expense_id}")
+                    return jsonify({'error': 'No receipt attached to this expense'}), 404
+                
+                logger.info(f"✅ Generated receipt URL via Firebase for expense {expense_id}: {receipt_url}")
+                return jsonify(receipt_url), 200
+            else:
+                # Fallback to SQLite logic
+                # Find the expense
+                expense = Expense.query.get(expense_id)
+                if not expense:
+                    logger.error(f"❌ Expense with ID {expense_id} not found")
+                    return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+                
+                # Verify ownership
+                if expense.user_id != user_id:
+                    logger.warning(f"🚫 User {user_id} attempted to access receipt for expense {expense_id} belonging to user {expense.user_id}")
+                    return jsonify({'error': 'Unauthorized access'}), 403
+                
+                # Check if receipt exists
+                if not expense.receipt_filename:
+                    logger.error(f"❌ No receipt attached to expense {expense_id}")
+                    return jsonify({'error': 'No receipt attached to this expense'}), 404
+                
+                # Generate the URL path to the receipt in the receipts subfolder
+                receipt_url = f"/api/uploads/{user_id}/receipts/{expense.receipt_filename}"
+                
+                logger.info(f"✅ Generated receipt URL for expense {expense_id}: {receipt_url}")
+                return jsonify(receipt_url), 200
             
         except Exception as e:
             logger.error(f"💥 Error getting receipt URL for expense {expense_id}: {str(e)}")
@@ -1881,7 +2114,27 @@ def create_app():
         try:
             logger.info(f"🗑️ Deleting expense {expense_id} for user {user_id}")
             
-            # Check if expense exists
+            # Check if expense exists and belongs to user
+            expense_data = database_service.get_expense(user_id, expense_id)
+            if not expense_data:
+                logger.error(f"❌ Expense with ID {expense_id} not found")
+                return jsonify({'error': f'Expense with ID {expense_id} not found'}), 404
+            
+            # For Firebase mode, use database service for deletions
+            if database_service.is_using_firebase():
+                try:
+                    success = database_service.delete_expense(user_id, expense_id)
+                    if success:
+                        logger.info(f"✅ Deleted expense {expense_id} via Firebase for user {user_id}")
+                        return jsonify({'message': f'Expense {expense_id} deleted successfully'}), 200
+                    else:
+                        logger.error(f"❌ Failed to delete expense {expense_id} via Firebase")
+                        return jsonify({'error': 'Failed to delete expense'}), 500
+                except Exception as firebase_err:
+                    logger.error(f"❌ Firebase delete failed: {str(firebase_err)}")
+                    return jsonify({'error': f'Failed to delete expense: {str(firebase_err)}'}), 500
+            
+            # Get SQLite expense for complex operations
             expense = Expense.query.get(expense_id)
             if not expense:
                 logger.error(f"❌ Expense with ID {expense_id} not found")
@@ -1923,38 +2176,54 @@ def create_app():
             start_date_str = request.args.get('start_date')
             end_date_str = request.args.get('end_date')
             
-            # Base query for user's expenses
-            query = Expense.query.filter_by(user_id=user_id)
+            # Get all expenses for user
+            all_expenses = database_service.get_expenses(user_id)
             
             # Apply date filters if provided
+            expenses = []
+            start_date = None
+            end_date = None
+            
             if start_date_str:
                 try:
                     start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date >= start_date)
                 except ValueError:
                     logger.warning(f"❌ Invalid start date format: {start_date_str}")
             
             if end_date_str:
                 try:
                     end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
-                    query = query.filter(Expense.expense_date <= end_date)
                 except ValueError:
                     logger.warning(f"❌ Invalid end date format: {end_date_str}")
             
-            # Get all expenses matching the query
-            expenses = query.all()
+            # Filter expenses by date
+            for expense in all_expenses:
+                expense_date = None
+                if expense.get('expense_date'):
+                    try:
+                        expense_date = datetime.fromisoformat(str(expense['expense_date']).replace('Z', '+00:00'))
+                    except (ValueError, TypeError):
+                        continue
+                
+                # Apply date filters
+                if start_date and expense_date and expense_date < start_date:
+                    continue
+                if end_date and expense_date and expense_date > end_date:
+                    continue
+                
+                expenses.append(expense)
             
             # Calculate summary statistics
-            total_amount = sum(expense.amount for expense in expenses)
+            total_amount = sum(expense.get('amount', 0) for expense in expenses)
             expense_count = len(expenses)
             
             # Group expenses by type
             expense_by_type = {}
             for expense in expenses:
-                expense_type = expense.expense_type
+                expense_type = expense.get('expense_type', 'other')
                 if expense_type not in expense_by_type:
                     expense_by_type[expense_type] = 0
-                expense_by_type[expense_type] += expense.amount
+                expense_by_type[expense_type] += expense.get('amount', 0)
             
             # Calculate month-over-month change if possible
             current_month_total = 0
@@ -1965,13 +2234,8 @@ def create_app():
                     end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
                     start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
                     
-                    # Calculate current period expenses
-                    current_month_expenses = Expense.query.filter(
-                        Expense.user_id == user_id,
-                        Expense.expense_date >= start_date,
-                        Expense.expense_date <= end_date
-                    ).all()
-                    current_month_total = sum(expense.amount for expense in current_month_expenses)
+                    # Calculate current period expenses (already done above)
+                    current_month_total = total_amount
                     
                     # Calculate previous period range
                     month_diff = (end_date - start_date).days
@@ -1979,12 +2243,20 @@ def create_app():
                     prev_start_date = prev_end_date - timedelta(days=month_diff)
                     
                     # Calculate previous period expenses
-                    previous_month_expenses = Expense.query.filter(
-                        Expense.user_id == user_id,
-                        Expense.expense_date >= prev_start_date,
-                        Expense.expense_date < prev_end_date
-                    ).all()
-                    previous_month_total = sum(expense.amount for expense in previous_month_expenses)
+                    previous_month_expenses = []
+                    for expense in all_expenses:
+                        expense_date = None
+                        if expense.get('expense_date'):
+                            try:
+                                expense_date = datetime.fromisoformat(str(expense['expense_date']).replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                continue
+                        
+                        # Apply previous period date filters
+                        if expense_date and expense_date >= prev_start_date and expense_date < prev_end_date:
+                            previous_month_expenses.append(expense)
+                    
+                    previous_month_total = sum(expense.get('amount', 0) for expense in previous_month_expenses)
                 except ValueError:
                     logger.warning("❌ Invalid date format for month-over-month calculation")
             
@@ -2014,14 +2286,21 @@ def create_app():
     @require_auth
     def get_user_tags(user_id):
         """
-        Get all tags for the current user.
+        Get all tags for the current user using database service.
         """
         try:
             logger.info(f"📋 Fetching tags for user {user_id}")
-            tags = Tag.query.filter_by(user_id=user_id).all()
             
-            logger.info(f"✅ Retrieved {len(tags)} tags for user {user_id}")
-            return jsonify([tag.to_dict() for tag in tags]), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                tags_data = database_service.get_tags(user_id)
+                logger.info(f"✅ Retrieved {len(tags_data)} tags via Firebase for user {user_id}")
+                return jsonify(tags_data), 200
+            else:
+                # Fallback to SQLite logic
+                tags = Tag.query.filter_by(user_id=user_id).all()
+                logger.info(f"✅ Retrieved {len(tags)} tags from SQLite for user {user_id}")
+                return jsonify([tag.to_dict() for tag in tags]), 200
         except Exception as e:
             logger.error(f"💥 Error fetching tags for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
@@ -2030,7 +2309,7 @@ def create_app():
     @require_auth
     def create_user_tag(user_id):
         """
-        Create a new tag for the current user.
+        Create a new tag for the current user using database service.
         """
         try:
             logger.info(f"🏷️ Creating new tag for user {user_id}")
@@ -2041,26 +2320,46 @@ def create_app():
                 logger.error("❌ Missing required field: name")
                 return jsonify({'error': 'Missing required field: name'}), 400
             
-            # Check for duplicate tag name for this user
-            existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
-            if existing_tag:
-                logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
-                return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
-            
-            # Create new tag with user_id
-            new_tag = Tag(
-                name=data['name'],
-                color=data.get('color', '#8884d8'),  # Default color if not provided
-                user_id=user_id
-            )
-            
-            db.session.add(new_tag)
-            db.session.commit()
-            
-            logger.info(f"✅ Created tag '{data['name']}' with ID {new_tag.id} for user {user_id}")
-            return jsonify(new_tag.to_dict()), 201
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                # Check for duplicate tag name
+                existing_tag = database_service.get_tag_by_name(user_id, data['name'])
+                if existing_tag:
+                    logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                    return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+                
+                # Create tag data
+                tag_data = {
+                    'name': data['name'],
+                    'color': data.get('color', '#8884d8')  # Default color if not provided
+                }
+                
+                created_tag = database_service.create_tag(user_id, tag_data)
+                logger.info(f"✅ Created tag '{data['name']}' via Firebase with ID {created_tag.get('id')} for user {user_id}")
+                return jsonify(created_tag), 201
+            else:
+                # Fallback to SQLite logic
+                # Check for duplicate tag name for this user
+                existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
+                if existing_tag:
+                    logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                    return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+                
+                # Create new tag with user_id
+                new_tag = Tag(
+                    name=data['name'],
+                    color=data.get('color', '#8884d8'),  # Default color if not provided
+                    user_id=user_id
+                )
+                
+                db.session.add(new_tag)
+                db.session.commit()
+                
+                logger.info(f"✅ Created tag '{data['name']}' with ID {new_tag.id} for user {user_id}")
+                return jsonify(new_tag.to_dict()), 201
         except Exception as e:
-            db.session.rollback()
+            if not database_service or not database_service.is_using_firebase():
+                db.session.rollback()
             logger.error(f"💥 Error creating tag for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
@@ -2068,7 +2367,7 @@ def create_app():
     @require_auth
     def update_user_tag(user_id, tag_id):
         """
-        Update an existing tag with ownership verification.
+        Update an existing tag with ownership verification using database service.
         """
         try:
             logger.info(f"🔄 Updating tag {tag_id} for user {user_id}")
@@ -2079,37 +2378,65 @@ def create_app():
                 logger.error("❌ Missing required fields: name or color")
                 return jsonify({'error': 'Missing required fields: name or color'}), 400
             
-            # Check if tag exists
-            tag = Tag.query.get(tag_id)
-            if not tag:
-                logger.error(f"❌ Tag with ID {tag_id} not found")
-                return jsonify({'error': 'Tag not found'}), 404
-            
-            # Verify ownership
-            if tag.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to update tag {tag_id} belonging to user {tag.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Check for duplicate tag name if name is being changed
-            if 'name' in data and data['name'] != tag.name:
-                existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
-                if existing_tag:
-                    logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
-                    return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
-            
-            # Update tag fields
-            if 'name' in data:
-                tag.name = data['name']
-            
-            if 'color' in data:
-                tag.color = data['color']
-            
-            db.session.commit()
-            
-            logger.info(f"✅ Updated tag {tag_id} for user {user_id}")
-            return jsonify(tag.to_dict()), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                # Check if tag exists and belongs to user
+                tag_data = database_service.get_tag(user_id, str(tag_id))
+                if not tag_data:
+                    logger.error(f"❌ Tag with ID {tag_id} not found")
+                    return jsonify({'error': 'Tag not found'}), 404
+                
+                # Check for duplicate tag name if name is being changed
+                if 'name' in data and data['name'] != tag_data.get('name'):
+                    existing_tag = database_service.get_tag_by_name(user_id, data['name'])
+                    if existing_tag:
+                        logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                        return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+                
+                # Update tag
+                update_data = {}
+                if 'name' in data:
+                    update_data['name'] = data['name']
+                if 'color' in data:
+                    update_data['color'] = data['color']
+                
+                updated_tag = database_service.update_tag(user_id, str(tag_id), update_data)
+                logger.info(f"✅ Updated tag {tag_id} via Firebase for user {user_id}")
+                return jsonify(updated_tag), 200
+            else:
+                # Fallback to SQLite logic
+                # Check if tag exists
+                tag = Tag.query.get(tag_id)
+                if not tag:
+                    logger.error(f"❌ Tag with ID {tag_id} not found")
+                    return jsonify({'error': 'Tag not found'}), 404
+                
+                # Verify ownership
+                if tag.user_id != user_id:
+                    logger.warning(f"🚫 User {user_id} attempted to update tag {tag_id} belonging to user {tag.user_id}")
+                    return jsonify({'error': 'Unauthorized access'}), 403
+                
+                # Check for duplicate tag name if name is being changed
+                if 'name' in data and data['name'] != tag.name:
+                    existing_tag = Tag.query.filter_by(user_id=user_id, name=data['name']).first()
+                    if existing_tag:
+                        logger.error(f"❌ Tag with name '{data['name']}' already exists for user {user_id}")
+                        return jsonify({'error': f"Tag with name '{data['name']}' already exists"}), 400
+                
+                # Update tag fields
+                if 'name' in data:
+                    tag.name = data['name']
+                
+                if 'color' in data:
+                    tag.color = data['color']
+                
+                db.session.commit()
+                
+                logger.info(f"✅ Updated tag {tag_id} for user {user_id}")
+                return jsonify(tag.to_dict()), 200
         except Exception as e:
-            db.session.rollback()
+            if not database_service or not database_service.is_using_firebase():
+                db.session.rollback()
             logger.error(f"💥 Error updating tag {tag_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
@@ -2117,38 +2444,60 @@ def create_app():
     @require_auth
     def delete_user_tag(user_id, tag_id):
         """
-        Delete a tag with ownership verification.
+        Delete a tag with ownership verification using database service.
         """
         try:
             logger.info(f"🗑️ Deleting tag {tag_id} for user {user_id}")
             
-            # Check if tag exists
-            tag = Tag.query.get(tag_id)
-            if not tag:
-                logger.error(f"❌ Tag with ID {tag_id} not found")
-                return jsonify({'error': 'Tag not found'}), 404
-            
-            # Verify ownership
-            if tag.user_id != user_id:
-                logger.warning(f"🚫 User {user_id} attempted to delete tag {tag_id} belonging to user {tag.user_id}")
-                return jsonify({'error': 'Unauthorized access'}), 403
-            
-            # Remove tag from all items first
-            for item in tag.items:
-                if tag in item.tags:
-                    item.tags.remove(tag)
-            
-            # Flush the session to ensure the item-tag relationships are updated
-            db.session.flush()
-            
-            # Delete tag
-            db.session.delete(tag)
-            db.session.commit()
-            
-            logger.info(f"✅ Deleted tag {tag_id} for user {user_id}")
-            return jsonify({'message': f'Tag {tag_id} deleted successfully'}), 200
+            if database_service and database_service.is_using_firebase():
+                # Use Firebase via database service
+                # Check if tag exists and belongs to user
+                tag_data = database_service.get_tag(user_id, str(tag_id))
+                if not tag_data:
+                    logger.error(f"❌ Tag with ID {tag_id} not found")
+                    return jsonify({'error': 'Tag not found'}), 404
+                
+                # Note: Firebase doesn't have the complex item-tag relationships like SQLite
+                # Tags are stored as simple arrays in items, so we don't need to handle relationships
+                
+                # Delete tag
+                success = database_service.delete_tag(user_id, str(tag_id))
+                if success:
+                    logger.info(f"✅ Deleted tag {tag_id} via Firebase for user {user_id}")
+                    return jsonify({'message': f'Tag {tag_id} deleted successfully'}), 200
+                else:
+                    logger.error(f"❌ Failed to delete tag {tag_id} via Firebase")
+                    return jsonify({'error': 'Failed to delete tag'}), 500
+            else:
+                # Fallback to SQLite logic
+                # Check if tag exists
+                tag = Tag.query.get(tag_id)
+                if not tag:
+                    logger.error(f"❌ Tag with ID {tag_id} not found")
+                    return jsonify({'error': 'Tag not found'}), 404
+                
+                # Verify ownership
+                if tag.user_id != user_id:
+                    logger.warning(f"🚫 User {user_id} attempted to delete tag {tag_id} belonging to user {tag.user_id}")
+                    return jsonify({'error': 'Unauthorized access'}), 403
+                
+                # Remove tag from all items first
+                for item in tag.items:
+                    if tag in item.tags:
+                        item.tags.remove(tag)
+                
+                # Flush the session to ensure the item-tag relationships are updated
+                db.session.flush()
+                
+                # Delete tag
+                db.session.delete(tag)
+                db.session.commit()
+                
+                logger.info(f"✅ Deleted tag {tag_id} for user {user_id}")
+                return jsonify({'message': f'Tag {tag_id} deleted successfully'}), 200
         except Exception as e:
-            db.session.rollback()
+            if not database_service or not database_service.is_using_firebase():
+                db.session.rollback()
             logger.error(f"💥 Error deleting tag {tag_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
@@ -2185,29 +2534,50 @@ def create_app():
                     logger.warning(f"⚠️ Invalid end date format: {end_date_str}")
             
             # ---- ITEM METRICS ----
-            # Get active items (not sold)
-            active_items_query = Item.query.filter(Item.status != 'sold', Item.user_id == user_id)
+            # Get all items for this user
+            all_items = database_service.get_items(user_id)
             
-            # Apply date filters if provided
-            if start_date:
-                active_items_query = active_items_query.filter(Item.purchase_date >= start_date)
-            if end_date:
-                active_items_query = active_items_query.filter(Item.purchase_date <= end_date)
-            
-            active_items = active_items_query.all()
+            # Filter active items (not sold) and apply date filters
+            active_items = []
+            for item in all_items:
+                if item.get('status') != 'sold':
+                    # Apply date filters if provided
+                    if start_date or end_date:
+                        # Parse purchase_date from item - handle both field name formats
+                        purchase_date = None
+                        purchase_date_value = item.get('purchase_date') or item.get('purchaseDate')
+                        if purchase_date_value:
+                            try:
+                                purchase_date = datetime.fromisoformat(str(purchase_date_value).replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                logger.warning(f"⚠️ Invalid purchase date format: {purchase_date_value}")
+                                continue
+                        
+                        # Apply date filters
+                        if start_date and purchase_date and purchase_date < start_date:
+                            continue
+                        if end_date and purchase_date and purchase_date > end_date:
+                            continue
+                    
+                    active_items.append(item)
             
             # Count items by status
             total_inventory = len(active_items)
-            unlisted_items = len([item for item in active_items if item.status == 'unlisted'])
-            listed_items = len([item for item in active_items if item.status == 'listed'])
+            unlisted_items = len([item for item in active_items if item.get('status') == 'unlisted'])
+            listed_items = len([item for item in active_items if item.get('status') == 'listed'])
             
-            # Calculate inventory values
-            total_inventory_cost = sum(item.purchase_price for item in active_items)
-            total_shipping_cost = sum(item.shipping_price or 0 for item in active_items)
+            # Calculate inventory values - handle both camelCase (Firebase) and snake_case (SQLite) field names
+            total_inventory_cost = sum(
+                item.get('purchase_price', 0) or item.get('purchasePrice', 0) for item in active_items
+            )
+            total_shipping_cost = sum(
+                item.get('shipping_price', 0) or item.get('shippingPrice', 0) for item in active_items
+            )
             
             # Estimate market value
             total_market_value = sum(
-                item.market_price if item.market_price else (item.purchase_price * 1.2)
+                (item.get('market_price', 0) or item.get('marketPrice', 0)) if (item.get('market_price') or item.get('marketPrice')) 
+                else ((item.get('purchase_price', 0) or item.get('purchasePrice', 0)) * 1.2)
                 for item in active_items
             )
             
@@ -2215,32 +2585,56 @@ def create_app():
             potential_profit = total_market_value - total_inventory_cost - total_shipping_cost
             
             # ---- SALES METRICS ----
-            # Get completed sales for this user
-            sales_query = Sale.query.filter(Sale.status == 'completed', Sale.user_id == user_id)
+            # Get all sales for this user
+            all_sales = database_service.get_sales(user_id)
             
-            # Apply date filters if provided
-            if start_date:
-                sales_query = sales_query.filter(Sale.sale_date >= start_date)
-            if end_date:
-                sales_query = sales_query.filter(Sale.sale_date <= end_date)
+            # Filter completed sales and apply date filters
+            sales = []
+            for sale in all_sales:
+                if sale.get('status') == 'completed':
+                    # Apply date filters if provided
+                    if start_date or end_date:
+                        # Parse sale_date from sale - handle both field name formats
+                        sale_date = None
+                        sale_date_value = sale.get('sale_date') or sale.get('saleDate')
+                        if sale_date_value:
+                            try:
+                                sale_date = datetime.fromisoformat(str(sale_date_value).replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                logger.warning(f"⚠️ Invalid sale date format: {sale_date_value}")
+                                continue
+                        
+                        # Apply date filters
+                        if start_date and sale_date and sale_date < start_date:
+                            continue
+                        if end_date and sale_date and sale_date > end_date:
+                            continue
+                    
+                    sales.append(sale)
             
-            sales = sales_query.all()
-            
-            # Calculate sales metrics
+            # Calculate sales metrics - handle both camelCase (Firebase) and snake_case (SQLite) field names
             total_sales = len(sales)
-            total_sales_revenue = sum(sale.sale_price for sale in sales)
-            total_platform_fees = sum(sale.platform_fees or 0 for sale in sales)
-            total_sales_tax = sum(sale.sales_tax or 0 for sale in sales)
+            total_sales_revenue = sum(
+                sale.get('sale_price', 0) or sale.get('salePrice', 0) for sale in sales
+            )
+            total_platform_fees = sum(
+                sale.get('platform_fees', 0) or sale.get('platformFees', 0) for sale in sales
+            )
+            total_sales_tax = sum(
+                sale.get('sales_tax', 0) or sale.get('salesTax', 0) for sale in sales
+            )
             
-            # Calculate cost basis of sold items
+            # Calculate cost basis of sold items - handle both field name formats
             cost_of_goods_sold = 0
             sold_items_shipping_cost = 0
             
             for sale in sales:
-                item = Item.query.get(sale.item_id)
-                if item and item.user_id == user_id:  # Verify ownership
-                    cost_of_goods_sold += item.purchase_price
-                    sold_items_shipping_cost += (item.shipping_price or 0)
+                item_id = sale.get('item_id') or sale.get('itemId')
+                if item_id:
+                    item = database_service.get_item(user_id, item_id)
+                    if item:
+                        cost_of_goods_sold += item.get('purchase_price', 0) or item.get('purchasePrice', 0)
+                        sold_items_shipping_cost += item.get('shipping_price', 0) or item.get('shippingPrice', 0)
             
             # Calculate gross profit from sales
             gross_profit = (
@@ -2252,27 +2646,42 @@ def create_app():
             )
             
             # ---- EXPENSE METRICS ----
-            # Get expenses for this user
-            expense_query = Expense.query.filter_by(user_id=user_id)
+            # Get all expenses for this user
+            all_expenses = database_service.get_expenses(user_id)
             
-            # Apply date filters if provided
-            if start_date:
-                expense_query = expense_query.filter(Expense.expense_date >= start_date)
-            if end_date:
-                expense_query = expense_query.filter(Expense.expense_date <= end_date)
+            # Filter expenses by date if provided
+            expenses = []
+            for expense in all_expenses:
+                # Apply date filters if provided
+                if start_date or end_date:
+                    # Parse expense_date from expense - handle both field name formats
+                    expense_date = None
+                    expense_date_value = expense.get('expense_date') or expense.get('expenseDate')
+                    if expense_date_value:
+                        try:
+                            expense_date = datetime.fromisoformat(str(expense_date_value).replace('Z', '+00:00'))
+                        except (ValueError, TypeError):
+                            logger.warning(f"⚠️ Invalid expense date format: {expense_date_value}")
+                            continue
+                    
+                    # Apply date filters
+                    if start_date and expense_date and expense_date < start_date:
+                        continue
+                    if end_date and expense_date and expense_date > end_date:
+                        continue
+                
+                expenses.append(expense)
             
-            expenses = expense_query.all()
-            
-            # Calculate expense metrics
-            total_expenses = sum(expense.amount for expense in expenses)
+            # Calculate expense metrics - handle both field name formats
+            total_expenses = sum(expense.get('amount', 0) for expense in expenses)
             
             # Group expenses by type
             expense_by_type = {}
             for expense in expenses:
-                expense_type = expense.expense_type
+                expense_type = expense.get('expense_type', 'other') or expense.get('expenseType', 'other')
                 if expense_type not in expense_by_type:
                     expense_by_type[expense_type] = 0
-                expense_by_type[expense_type] += expense.amount
+                expense_by_type[expense_type] += expense.get('amount', 0)
             
             # ---- NET PROFIT AND ROI ----
             # Net profit from sold items (realized profit)
@@ -2307,26 +2716,43 @@ def create_app():
                 logger.info(f"🗓️ Previous period: {prev_start_date} to {prev_end_date}")
                 
                 # --- PREVIOUS PERIOD SALES ---
-                prev_sales_query = Sale.query.filter(
-                    Sale.status == 'completed',
-                    Sale.user_id == user_id,
-                    Sale.sale_date >= prev_start_date,
-                    Sale.sale_date < prev_end_date
-                )
-                prev_sales = prev_sales_query.all()
+                # Filter completed sales for previous period
+                prev_sales = []
+                for sale in all_sales:
+                    if sale.get('status') == 'completed':
+                        # Parse sale_date - handle both field name formats
+                        sale_date = None
+                        sale_date_value = sale.get('sale_date') or sale.get('saleDate')
+                        if sale_date_value:
+                            try:
+                                sale_date = datetime.fromisoformat(str(sale_date_value).replace('Z', '+00:00'))
+                            except (ValueError, TypeError):
+                                continue
+                        
+                        # Apply previous period date filters
+                        if sale_date and sale_date >= prev_start_date and sale_date < prev_end_date:
+                            prev_sales.append(sale)
                 
-                prev_total_sales_revenue = sum(sale.sale_price for sale in prev_sales)
-                prev_total_platform_fees = sum(sale.platform_fees or 0 for sale in prev_sales)
-                prev_total_sales_tax = sum(sale.sales_tax or 0 for sale in prev_sales)
+                prev_total_sales_revenue = sum(
+                    sale.get('sale_price', 0) or sale.get('salePrice', 0) for sale in prev_sales
+                )
+                prev_total_platform_fees = sum(
+                    sale.get('platform_fees', 0) or sale.get('platformFees', 0) for sale in prev_sales
+                )
+                prev_total_sales_tax = sum(
+                    sale.get('sales_tax', 0) or sale.get('salesTax', 0) for sale in prev_sales
+                )
                 
                 prev_cost_of_goods_sold = 0
                 prev_sold_items_shipping_cost = 0
                 
                 for sale in prev_sales:
-                    item = Item.query.get(sale.item_id)
-                    if item and item.user_id == user_id:  # Verify ownership
-                        prev_cost_of_goods_sold += item.purchase_price
-                        prev_sold_items_shipping_cost += (item.shipping_price or 0)
+                    item_id = sale.get('item_id') or sale.get('itemId')
+                    if item_id:
+                        item = database_service.get_item(user_id, item_id)
+                        if item:
+                            prev_cost_of_goods_sold += item.get('purchase_price', 0) or item.get('purchasePrice', 0)
+                            prev_sold_items_shipping_cost += item.get('shipping_price', 0) or item.get('shippingPrice', 0)
                 
                 prev_gross_profit = (
                     prev_total_sales_revenue 
@@ -2337,14 +2763,23 @@ def create_app():
                 )
                 
                 # --- PREVIOUS PERIOD EXPENSES ---
-                prev_expense_query = Expense.query.filter(
-                    Expense.user_id == user_id,
-                    Expense.expense_date >= prev_start_date,
-                    Expense.expense_date < prev_end_date
-                )
-                prev_expenses = prev_expense_query.all()
+                # Filter expenses for previous period
+                prev_expenses = []
+                for expense in all_expenses:
+                    # Parse expense_date - handle both field name formats
+                    expense_date = None
+                    expense_date_value = expense.get('expense_date') or expense.get('expenseDate')
+                    if expense_date_value:
+                        try:
+                            expense_date = datetime.fromisoformat(str(expense_date_value).replace('Z', '+00:00'))
+                        except (ValueError, TypeError):
+                            continue
+                    
+                    # Apply previous period date filters
+                    if expense_date and expense_date >= prev_start_date and expense_date < prev_end_date:
+                        prev_expenses.append(expense)
                 
-                prev_total_expenses = sum(expense.amount for expense in prev_expenses)
+                prev_total_expenses = sum(expense.get('amount', 0) for expense in prev_expenses)
                 
                 # --- PREVIOUS PERIOD NET PROFIT ---
                 prev_net_profit_sold = prev_gross_profit - prev_total_expenses

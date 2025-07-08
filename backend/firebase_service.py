@@ -202,14 +202,24 @@ class FirebaseService:
         try:
             doc_ref = self._get_user_collection(user_id, 'items').document(item_id)
             doc_ref.delete()
-            
             logger.info(f"Deleted item {item_id} for user {user_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error deleting item {item_id} for user {user_id}: {e}")
             raise
-    
+
+    def update_item_field(self, user_id: str, item_id: str, field: str, value: Any) -> Dict[str, Any]:
+        """Update a specific field of an item"""
+        try:
+            # Prepare the update data
+            update_data = {field: value}
+            return self.update_item(user_id, item_id, update_data)
+            
+        except Exception as e:
+            logger.error(f"Error updating field {field} for item {item_id} for user {user_id}: {e}")
+            raise
+
     # ==================== SALES METHODS ====================
     
     def create_sale(self, user_id: str, sale_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -317,14 +327,24 @@ class FirebaseService:
         try:
             doc_ref = self._get_user_collection(user_id, 'sales').document(sale_id)
             doc_ref.delete()
-            
             logger.info(f"Deleted sale {sale_id} for user {user_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error deleting sale {sale_id} for user {user_id}: {e}")
             raise
-    
+
+    def update_sale_field(self, user_id: str, sale_id: str, field: str, value: Any) -> Dict[str, Any]:
+        """Update a specific field of a sale"""
+        try:
+            # Prepare the update data
+            update_data = {field: value}
+            return self.update_sale(user_id, sale_id, update_data)
+            
+        except Exception as e:
+            logger.error(f"Error updating field {field} for sale {sale_id} for user {user_id}: {e}")
+            raise
+
     # ==================== EXPENSES METHODS ====================
     
     def create_expense(self, user_id: str, expense_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -541,6 +561,180 @@ class FirebaseService:
             
         except Exception as e:
             logger.error(f"Error getting dashboard metrics for user {user_id}: {e}")
+            raise
+
+    def get_sales_by_item(self, user_id: str, item_id: str) -> List[Dict[str, Any]]:
+        """Get all sales for a specific item"""
+        try:
+            collection_ref = self._get_user_collection(user_id, 'sales')
+            query = collection_ref.where('item_id', '==', item_id)
+            query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+            
+            docs = query.stream()
+            sales = []
+            
+            for doc in docs:
+                sale_data = doc.to_dict()
+                sale_data['id'] = doc.id
+                sales.append(self._deserialize_datetime(sale_data))
+            
+            logger.info(f"Retrieved {len(sales)} sales for item {item_id} for user {user_id}")
+            return sales
+            
+        except Exception as e:
+            logger.error(f"Error getting sales for item {item_id} for user {user_id}: {e}")
+            raise
+
+    # ==================== TAGS METHODS ====================
+    
+    def create_tag(self, user_id: str, tag_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new tag in Firestore"""
+        try:
+            # Add timestamps and user_id
+            tag_data = self._add_timestamps(tag_data)
+            tag_data['user_id'] = user_id
+            
+            # Serialize datetime objects
+            serialized_data = self._serialize_datetime(tag_data)
+            
+            # Add to Firestore
+            collection_ref = self._get_user_collection(user_id, 'tags')
+            _, doc_ref = collection_ref.add(serialized_data)
+            
+            # Return the created tag with Firestore document ID
+            created_tag = serialized_data.copy()
+            created_tag['id'] = doc_ref.id
+            
+            logger.info(f"Created tag {doc_ref.id} for user {user_id}")
+            return self._deserialize_datetime(created_tag)
+            
+        except Exception as e:
+            logger.error(f"Error creating tag for user {user_id}: {e}")
+            raise
+    
+    def get_tags(self, user_id: str) -> List[Dict[str, Any]]:
+        """Get all tags for a user"""
+        try:
+            collection_ref = self._get_user_collection(user_id, 'tags')
+            query = collection_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+            
+            docs = query.stream()
+            tags = []
+            
+            for doc in docs:
+                tag_data = doc.to_dict()
+                tag_data['id'] = doc.id
+                tags.append(self._deserialize_datetime(tag_data))
+            
+            logger.info(f"Retrieved {len(tags)} tags for user {user_id}")
+            return tags
+            
+        except Exception as e:
+            logger.error(f"Error getting tags for user {user_id}: {e}")
+            raise
+    
+    def get_tag(self, user_id: str, tag_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific tag by ID"""
+        try:
+            doc_ref = self._get_user_collection(user_id, 'tags').document(tag_id)
+            doc = doc_ref.get()
+            
+            if doc.exists:
+                tag_data = doc.to_dict()
+                tag_data['id'] = doc.id
+                logger.info(f"Retrieved tag {tag_id} for user {user_id}")
+                return self._deserialize_datetime(tag_data)
+            else:
+                logger.warning(f"Tag {tag_id} not found for user {user_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting tag {tag_id} for user {user_id}: {e}")
+            raise
+    
+    def update_tag(self, user_id: str, tag_id: str, update_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing tag"""
+        try:
+            # Add updated timestamp
+            update_data = self._add_timestamps(update_data, is_update=True)
+            
+            # Serialize datetime objects
+            serialized_data = self._serialize_datetime(update_data)
+            
+            # Update in Firestore
+            doc_ref = self._get_user_collection(user_id, 'tags').document(tag_id)
+            doc_ref.update(serialized_data)
+            
+            # Get and return updated tag
+            updated_tag = self.get_tag(user_id, tag_id)
+            if updated_tag:
+                logger.info(f"Updated tag {tag_id} for user {user_id}")
+                return updated_tag
+            else:
+                raise ValueError(f"Tag {tag_id} not found after update")
+                
+        except Exception as e:
+            logger.error(f"Error updating tag {tag_id} for user {user_id}: {e}")
+            raise
+    
+    def delete_tag(self, user_id: str, tag_id: str) -> bool:
+        """Delete a tag from Firestore"""
+        try:
+            doc_ref = self._get_user_collection(user_id, 'tags').document(tag_id)
+            doc_ref.delete()
+            
+            logger.info(f"Deleted tag {tag_id} for user {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error deleting tag {tag_id} for user {user_id}: {e}")
+            raise
+    
+    def get_tag_by_name(self, user_id: str, tag_name: str) -> Optional[Dict[str, Any]]:
+        """Get a tag by name for duplicate checking"""
+        try:
+            collection_ref = self._get_user_collection(user_id, 'tags')
+            query = collection_ref.where('name', '==', tag_name).limit(1)
+            
+            docs = list(query.stream())
+            
+            if docs:
+                tag_data = docs[0].to_dict()
+                tag_data['id'] = docs[0].id
+                logger.info(f"Retrieved tag '{tag_name}' for user {user_id}")
+                return self._deserialize_datetime(tag_data)
+            else:
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error getting tag by name '{tag_name}' for user {user_id}: {e}")
+            raise
+
+    def get_expense_receipt_url(self, user_id: str, expense_id: str) -> Optional[str]:
+        """Get the receipt URL for an expense"""
+        try:
+            # Get the expense to check if it has a receipt
+            expense = self.get_expense(user_id, expense_id)
+            if not expense:
+                logger.warning(f"Expense {expense_id} not found for user {user_id}")
+                return None
+            
+            # Check if receipt exists
+            receipt_filename = expense.get('receipt_filename')
+            if not receipt_filename:
+                logger.warning(f"No receipt attached to expense {expense_id}")
+                return None
+            
+            # For Firebase, we'll use the same URL pattern as SQLite for now
+            # This assumes the receipt files are still stored in the local filesystem
+            # In a full Firebase implementation, receipts would be stored in Firebase Storage
+            receipt_url = f"/api/uploads/{user_id}/receipts/{receipt_filename}"
+            
+            logger.info(f"Generated receipt URL for expense {expense_id}: {receipt_url}")
+            return receipt_url
+            
+        except Exception as e:
+            logger.error(f"Error getting receipt URL for expense {expense_id} for user {user_id}: {e}")
             raise
 
 # Global instance

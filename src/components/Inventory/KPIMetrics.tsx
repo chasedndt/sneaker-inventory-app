@@ -212,16 +212,16 @@ const KPIMetrics: React.FC<KPIMetricsProps> = ({ metrics }) => {
                 </>
               ) : (
                 <>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {money(calculatedProfit)}
-                  </Typography>
-                  <Typography 
-                    variant="caption" 
-                    color={averageROI >= 0 ? 'success.main' : 'error.main'}
-                    sx={{ fontWeight: 'bold' }}
-                  >
-                    {averageROI.toFixed(1)}% ROI
-                  </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                {money(calculatedProfit)}
+              </Typography>
+              <Typography 
+                variant="caption" 
+                color={averageROI >= 0 ? 'success.main' : 'error.main'}
+                sx={{ fontWeight: 'bold' }}
+              >
+                {averageROI.toFixed(1)}% ROI
+              </Typography>
                 </>
               )}
             </Box>

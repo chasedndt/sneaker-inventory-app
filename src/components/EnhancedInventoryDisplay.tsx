@@ -223,19 +223,18 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
         
         // Attempt to get the image URL if we have an image source
         if (imageSource) {
-          // FIX: Use getImageUrl utility to properly construct the URL with user ID
+          // Use getImageUrl utility to properly construct the URL with user ID
           imageUrl = getImageUrl(imageSource, item.id, currentUser?.uid);
-          // TEMP DEBUG - Always log to see what's happening
-          console.log(`🔍 DEBUG: Item ${item.productName}`);
-          console.log(`  - Raw imageSource: ${imageSource}`);
-          console.log(`  - Generated imageUrl: ${imageUrl}`);
-          console.log(`  - Current user ID: ${currentUser?.uid}`);
+          if (enableDebugLogging) {
+            console.log(`🔍 DEBUG: Item ${item.productName} - Generated imageUrl: ${imageUrl}`);
+          }
         } else {
-          // No image available, use a placeholder
-          const placeholder = getCategoryPlaceholderImage(item.category);
-          imageUrl = placeholder;
+          // No image available, don't set imageUrl so we show the placeholder content
+          imageUrl = undefined;
           placeholderMessage = `No image for ${item.category}`;
-          console.log(`🔍 DEBUG: No image source for ${item.productName}, using placeholder: ${imageUrl}`);
+          if (enableDebugLogging) {
+            console.log(`🔍 DEBUG: No image source for ${item.productName}, will show placeholder content`);
+          }
         }
         
         return {
@@ -253,7 +252,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       setErrorMessage('Error processing inventory items');
       setIsLoading(false);
     }
-  }, [items, currentUser, getAuthToken, apiBaseUrl, settings, handleImageError]);
+  }, [items, currentUser, getAuthToken, apiBaseUrl, settings]);
 
   const showFreeTierLimitWarning = currentAccountTier === 'free' && items.length >= 30;
 
@@ -338,23 +337,70 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                       bgcolor: 'rgba(255,255,255,0.15)',
                       borderRight: '1px solid rgba(255,255,255,0.1)'
                     }}>
-                      {/* Use the correct image path that includes the user ID */}
+                      {/* Display image or placeholder content */}
+                      {item.imageUrl && !item.imageUrl.includes('placeholder') ? (
+                        <Box 
+                          component="img"
+                          src={item.imageUrl}
+                          alt={item.productName}
+                          onError={(e) => {
+                            const imgElement = e.currentTarget as HTMLImageElement;
+                            // Hide the broken image and show placeholder content instead
+                            imgElement.style.display = 'none';
+                            const placeholderDiv = imgElement.parentElement?.querySelector('.placeholder-content');
+                            if (placeholderDiv) {
+                              (placeholderDiv as HTMLElement).style.display = 'flex';
+                            }
+                            handleImageError(item.productName, item.imageUrl || 'unknown');
+                          }}
+                          sx={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            objectPosition: 'center'
+                          }}
+                        />
+                      ) : null}
+                      
+                      {/* Placeholder content for items without images */}
                       <Box 
-                        component="img"
-                        src={item.imageUrl || getCategoryPlaceholderImage(item.category)}
-                        alt={item.productName}
-                        onError={(e) => {
-                          // Use our centralized error handler to prevent spam
-                          handleImageError(item.productName, item.imageUrl || 'unknown');
-                          (e.currentTarget as HTMLImageElement).src = getCategoryPlaceholderImage(item.category);
-                        }}
+                        className="placeholder-content"
                         sx={{
+                          display: (!item.imageUrl || item.imageUrl.includes('placeholder')) ? 'flex' : 'none',
                           width: '100%',
                           height: '100%',
-                          objectFit: 'cover',
-                          objectPosition: 'center'
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'rgba(255,255,255,0.7)',
+                          textAlign: 'center'
                         }}
-                      />
+                      >
+                        <Box
+                          sx={{
+                            width: '40px',
+                            height: '40px',
+                            borderRadius: '50%',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            mb: 1
+                          }}
+                        >
+                          📷
+                        </Box>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            fontSize: '0.7rem',
+                            color: 'rgba(255,255,255,0.6)',
+                            fontWeight: 500
+                          }}
+                        >
+                          No Image
+                        </Typography>
+                      </Box>
                       <Chip 
                         label={item.category} 
                         size="small"

@@ -96,10 +96,25 @@ pip install -r requirements.txt
 
 With the virtual environment activated:
 
+For **Firebase mode** (recommended):
+```
+$env:USE_FIREBASE="true"; python app.py
+```
+
+For **SQLite mode** (local development):
 ```
 python app.py
 ```
 
 **Note:** You must activate the virtual environment each time you open a new terminal before running backend commands. This is standard practice for Python projects to keep dependencies isolated.
+
+### Firebase Configuration
+
+The app supports both Firebase and SQLite databases. Firebase is the recommended mode for production and testing.
+
+- **Firebase mode**: Set `$env:USE_FIREBASE="true"` before running the server
+- **SQLite mode**: Default mode when no environment variable is set
+
+Firebase credentials should be configured in `backend/firebase-credentials.json`.
 
 ---

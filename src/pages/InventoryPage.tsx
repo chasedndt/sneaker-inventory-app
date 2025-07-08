@@ -242,6 +242,7 @@ const InventoryPage: React.FC = () => {
       setError(null);
       
       // Check API connection using our hook - only proceed if connected
+      // Note: checkConnection is called directly to avoid dependency issues
       const connected = await checkConnection();
       if (!connected) {
         // Connection error is managed by the hook
@@ -253,50 +254,12 @@ const InventoryPage: React.FC = () => {
       console.log('🔍 [INVENTORY DEBUG] Beginning inventory data fetch');
       const data = await api.getItems();
       
-      // Add deep logging of the raw data received from API
-      console.log('🔍 [INVENTORY DEBUG] RAW API DATA:', data);
-      
-      // Log individual item details to see their raw values
-      data.forEach((item: Item) => {
-        // Create a safe list of all properties including debug fields
-        const allProps: Record<string, any> = {};
-        Object.keys(item).forEach(key => {
-          allProps[key] = (item as any)[key];
-        });
-        
-        console.log(`🔍 [INVENTORY RAW ITEM] ID ${item.id} (${item.productName}):`, {
-          marketPrice: item.marketPrice,
-          marketPriceType: typeof item.marketPrice,
-          propertyNames: Object.keys(item), // Log all property names
-          allProps: allProps  // All properties including debug fields
-        });
-      });
-      
       // Filter out sold items for inventory page
       const filteredItems = data.filter((item: Item) => item.status !== 'sold');
       
       // Enhance items with additional calculated fields
       const enhancedItems = filteredItems.map((item: Item) => {
-        // Log detailed item properties before processing
-        console.log(`🔍 [INVENTORY PROCESS] Item ${item.id} (${item.productName}) BEFORE calculation:`, {
-          rawItem: item,
-          productName: item.productName,
-          marketPrice: item.marketPrice,
-          purchasePrice: item.purchasePrice,
-          status: item.status,
-          marketPriceSource: item.marketPrice ? 'database' : 'calculated'
-        });
-        
-        // Look for any hidden or alternative market price fields that might be in the data
-        Object.keys(item).forEach(key => {
-          const value = (item as any)[key];
-          if (typeof value === 'number' && (key.includes('market') || key.includes('price')) && key !== 'marketPrice' && key !== 'purchasePrice') {
-            console.log(`🔍 [POTENTIAL MARKET PRICE FIELD] Found in item ${item.id}: ${key} = ${value}`);
-          }
-        });
-        
-        // Log BEFORE the default calculation is applied
-        console.log(`🔍 [MARKET PRICE LOGIC CHECK] For item ${item.id}: marketPrice=${item.marketPrice}, using default calculation=${!item.marketPrice}, calculation=${item.purchasePrice * 1.2}`);
+        // Calculate market price and other derived fields
         
         // For market price, use the stored value if available or calculate a default
         const marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // 20% markup as default
@@ -341,7 +304,7 @@ const InventoryPage: React.FC = () => {
       // Reset fetching flag
       fetchingRef.current = false;
     }
-  }, [authReady, currentUser, checkConnection]);  // Minimized dependencies to prevent recreation
+  }, [authReady, currentUser]);  // Minimized dependencies to prevent recreation
   
   // Define fetchTags function
   const fetchTags = useCallback(async () => {
@@ -356,11 +319,7 @@ const InventoryPage: React.FC = () => {
     }
   }, [authReady, currentUser]); // Removed setTags as it's a stable function
   
-  // Debug render count
-  useEffect(() => {
-    renderCount.current += 1;
-    console.log(`🔍 [INVENTORY DEBUG] Component rendered ${renderCount.current} times`);
-  });
+  // Debug render count (removed for production)
 
   // Fetch items and tags when auth state is ready and user is available
   useEffect(() => {
@@ -1419,43 +1378,43 @@ const InventoryPage: React.FC = () => {
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
               <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
                 <span>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<FileDownloadIcon />}
-                    size="small"
-                    onClick={handleExportCSV}
+              <Button 
+                variant="outlined" 
+                startIcon={<FileDownloadIcon />}
+                size="small"
+                onClick={handleExportCSV}
                     disabled={accountTier?.toLowerCase() === 'free'}
-                  >
-                    Export CSV
-                  </Button>
+              >
+                Export CSV
+              </Button>
                 </span>
               </Tooltip>
               
               <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
                 <span>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<InsertDriveFileIcon />}
-                    size="small"
-                    onClick={handleExportExcel}
+              <Button 
+                variant="outlined" 
+                startIcon={<InsertDriveFileIcon />}
+                size="small"
+                onClick={handleExportExcel}
                     disabled={accountTier?.toLowerCase() === 'free'}
-                  >
-                    Export Excel
-                  </Button>
+              >
+                Export Excel
+              </Button>
                 </span>
               </Tooltip>
               
               <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Export feature available on Starter and Professional plans." : ""}>
                 <span>
-                  <Button 
-                    variant="outlined" 
-                    startIcon={<PictureAsPdfIcon />}
-                    size="small"
-                    onClick={handleExportPDF}
+              <Button 
+                variant="outlined" 
+                startIcon={<PictureAsPdfIcon />}
+                size="small"
+                onClick={handleExportPDF}
                     disabled={accountTier?.toLowerCase() === 'free'}
-                  >
-                    Export PDF
-                  </Button>
+              >
+                Export PDF
+              </Button>
                 </span>
               </Tooltip>
               
@@ -1577,15 +1536,15 @@ const InventoryPage: React.FC = () => {
               <Grid item>
                 <Tooltip title={accountTier?.toLowerCase() === 'free' ? "Sales recording available on Starter and Professional plans." : ""}>
                   <span>
-                    <Button 
-                      variant="contained" 
-                      color="success"
-                      size="small"
-                      onClick={() => handleUpdateStatus(selectedItems, 'sold')}
+                <Button 
+                  variant="contained" 
+                  color="success"
+                  size="small"
+                  onClick={() => handleUpdateStatus(selectedItems, 'sold')}
                       disabled={accountTier?.toLowerCase() === 'free'}
-                    >
-                      Mark as Sold
-                    </Button>
+                >
+                  Mark as Sold
+                </Button>
                   </span>
                 </Tooltip>
               </Grid>

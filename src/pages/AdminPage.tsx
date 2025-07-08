@@ -41,7 +41,7 @@ const AdminPage: React.FC = () => {
   const confirmSetUserTier = async () => {
     if (!currentUser) return;
     
-    try {
+      try {
       await setUserAccountTier(currentUser.uid, selectedTier);
       alert(`User tier updated to ${selectedTier}. Refreshing token to apply changes...`);
       setTierDialogOpen(false);
@@ -58,10 +58,10 @@ const AdminPage: React.FC = () => {
         window.location.reload();
       }, 1000);
       
-    } catch (error: any) { 
-      alert('Failed to set user tier: ' + error.message);
-      console.error('Failed to set user tier:', error);
-    }
+      } catch (error: any) { 
+        alert('Failed to set user tier: ' + error.message);
+        console.error('Failed to set user tier:', error);
+      }
   };
 
   const handleSeedItems = () => {

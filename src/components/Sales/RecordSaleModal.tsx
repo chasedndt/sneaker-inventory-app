@@ -41,7 +41,7 @@ interface RecordSaleModalProps {
 }
 
 interface FormData {
-  itemId: number;
+  itemId: number | string;
   platform: string;
   saleDate: Dayjs | null;
   salePrice: string;
@@ -112,7 +112,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       }
       
       setFormData({
-        itemId: items.length > 0 ? items[0].id : 0,
+        itemId: items.length > 0 ? items[0].id : '',
         platform: '',
         saleDate: dayjs(),
         salePrice: '',
@@ -134,7 +134,8 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   
   // Update selected item when itemId changes
   useEffect(() => {
-    const item = items.find(item => item.id === formData.itemId);
+    const itemId = typeof formData.itemId === 'string' ? parseInt(formData.itemId, 10) : formData.itemId;
+    const item = items.find(item => item.id === itemId);
     setSelectedItem(item || null);
   }, [formData.itemId, items]);
   
@@ -180,7 +181,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
     
-    if (!formData.itemId) {
+    if (!formData.itemId || formData.itemId === '') {
       newErrors.itemId = 'Please select an item';
     }
     
@@ -223,8 +224,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
     
     try {
       // Prepare sale data for submission
+      const itemId = typeof formData.itemId === 'string' ? parseInt(formData.itemId, 10) : formData.itemId;
       const saleData = {
-        itemId: formData.itemId,
+        itemId: itemId,
         platform: formData.platform,
         saleDate: formData.saleDate?.toISOString() || new Date().toISOString(),
         salePrice: parseFloat(formData.salePrice),
@@ -239,7 +241,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       await salesApi.recordSale(saleData);
       
       // Update the item status to "sold" in inventory
-      await api.updateItemField(formData.itemId, 'status', 'sold');
+      await api.updateItemField(itemId, 'status', 'sold');
       
       // Close modal and trigger refresh
       onClose(true);
@@ -367,9 +369,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                 <FormControl fullWidth error={!!errors.itemId}>
                   <InputLabel>Select Item</InputLabel>
                   <Select
-                    value={formData.itemId}
-                    onChange={(e: SelectChangeEvent<number>) => 
-                      handleChange('itemId', e.target.value as number)
+                    value={formData.itemId === '' ? '' : formData.itemId}
+                    onChange={(e: SelectChangeEvent<number | string>) => 
+                      handleChange('itemId', e.target.value)
                     }
                     label="Select Item"
                     sx={{ color: theme.palette.text.primary }}
