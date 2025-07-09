@@ -138,11 +138,13 @@ const SalesPage: React.FC = () => {
           
           if (!item) {
             // Handle case where item might have been deleted from inventory
+            // Important: Keep size as undefined when item is missing, don't set empty string
             return {
               ...sale,
               itemName: 'Unknown Item',
               brand: 'Unknown',
               category: 'Unknown',
+              size: undefined, // Explicitly keep undefined to show missing data
               purchasePrice: 0,
               profit: sale.salePrice - (sale.platformFees || 0) - (sale.salesTax || 0),
               daysToSell: 0,
@@ -224,6 +226,7 @@ const SalesPage: React.FC = () => {
             itemName: 'Unknown Item',
             brand: 'Unknown',
             category: 'Unknown',
+            size: undefined, // Explicitly keep undefined to show missing data
             purchasePrice: 0,
             profit: sale.salePrice - (sale.platformFees || 0) - (sale.salesTax || 0),
             daysToSell: 0,
@@ -591,8 +594,14 @@ const SalesPage: React.FC = () => {
       // Then delete the sale record
       await salesApi.deleteSale(saleToRestore);
       
-      // Update UI
+      // Update UI by removing the sale
       setSales(prevSales => prevSales.filter(sale => sale.id !== saleToRestore));
+      
+      // Force refresh the sales data to ensure item data is current
+      // This helps resolve any stale data issues with size/item information
+      setTimeout(() => {
+        handleRefresh();
+      }, 500); // Small delay to ensure backend updates are complete
       
       setSnackbar({
         open: true,

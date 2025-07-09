@@ -353,13 +353,13 @@ class FirebaseService:
             doc_ref = self._get_user_collection(user_id, 'sales').document(sale_id)
             doc_ref.delete()
             
-            # Restore the associated item's status to 'active'
+            # Restore the associated item's status to 'unlisted' (consistent with frontend)
             if item_id:
                 try:
-                    self.update_item_field(user_id, str(item_id), 'status', 'active')
-                    logger.info(f"Restored item {item_id} status to 'active' for user {user_id}")
+                    self.update_item_field(user_id, str(item_id), 'status', 'unlisted')
+                    logger.info(f"Restored item {item_id} status to 'unlisted' for user {user_id}")
                 except Exception as item_update_error:
-                    logger.error(f"Failed to restore item {item_id} status to 'active': {item_update_error}")
+                    logger.error(f"Failed to restore item {item_id} status to 'unlisted': {item_update_error}")
                     # Don't fail the sale deletion if item update fails
             
             logger.info(f"Deleted sale {sale_id} for user {user_id}")
