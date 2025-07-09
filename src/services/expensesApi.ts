@@ -94,10 +94,10 @@ export const expensesApi = {
   
   /**
    * Get a single expense by ID
-   * @param id Expense ID
+   * @param id Expense ID (string or number)
    * @returns Promise<Expense> Expense data
    */
-  getExpense: async (id: number): Promise<Expense> => {
+  getExpense: async (id: string | number): Promise<Expense> => {
     try {
       console.log(`🔄 Fetching expense with ID ${id} from API...`);
       const headers = await getAuthHeaders();
@@ -114,7 +114,7 @@ export const expensesApi = {
         if (response.status === 404) {
           console.warn('⚠️ Expense endpoint not found, using mock data');
           const mockExpenses = getMockExpenses();
-          const expense = mockExpenses.find(e => e.id === id);
+          const expense = mockExpenses.find(e => String(e.id) === String(id));
           if (!expense) throw new Error(`Expense with ID ${id} not found`);
           return expense;
         }
@@ -170,11 +170,11 @@ export const expensesApi = {
   
   /**
    * Get a direct URL for viewing a receipt
-   * @param expenseId The expense ID
+   * @param expenseId The expense ID (string or number)
    * @param filename The receipt filename
    * @returns Promise<string> Direct URL for accessing the receipt
    */
-  getReceiptUrl: async (expenseId: number, filename: string): Promise<string> => {
+  getReceiptUrl: async (expenseId: string | number, filename: string): Promise<string> => {
     try {
       console.log(`🔄 Getting receipt URL for expense ${expenseId}, filename ${filename}...`);
       const headers = await getAuthHeaders();
@@ -479,7 +479,7 @@ export const expensesApi = {
    * @param expenseData Updated expense data
    * @returns Promise<Expense> Updated expense data
    */
-  updateExpense: async (id: number, expenseData: any): Promise<Expense> => {
+  updateExpense: async (id: string | number, expenseData: any): Promise<Expense> => {
     try {
       // Check for duplicate submission using submissionId
       if (expenseData.submissionId) {
@@ -553,7 +553,7 @@ export const expensesApi = {
    * @param id Expense ID
    * @returns Promise<{ success: boolean }> Success status
    */
-  deleteExpense: async (id: number): Promise<{ success: boolean }> => {
+  deleteExpense: async (id: string | number): Promise<{ success: boolean }> => {
     try {
       console.log(`🔄 Deleting expense ${id}...`);
       const headers = await getAuthHeaders();

@@ -1,6 +1,6 @@
 // src/models/expenses.ts
 export interface Expense {
-    id: number;
+    id: string | number;
     expenseType: string;
     amount: number;
     currency: string;

@@ -42,7 +42,7 @@ export interface NetProfitResponse {
  * Interface for data submitted when recording a new sale
  */
 export interface RecordSaleData {
-  itemId: number;
+  itemId: number | string; // Support both for Firebase compatibility
   platform: string;
   saleDate: string;
   salePrice: number;

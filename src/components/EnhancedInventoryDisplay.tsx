@@ -339,11 +339,11 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                     }}>
                       {/* Display image or placeholder content */}
                       {item.imageUrl && !item.imageUrl.includes('placeholder') ? (
-                        <Box 
-                          component="img"
+                      <Box 
+                        component="img"
                           src={item.imageUrl}
-                          alt={item.productName}
-                          onError={(e) => {
+                        alt={item.productName}
+                        onError={(e) => {
                             const imgElement = e.currentTarget as HTMLImageElement;
                             // Hide the broken image and show placeholder content instead
                             imgElement.style.display = 'none';
@@ -351,15 +351,15 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             if (placeholderDiv) {
                               (placeholderDiv as HTMLElement).style.display = 'flex';
                             }
-                            handleImageError(item.productName, item.imageUrl || 'unknown');
-                          }}
-                          sx={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            objectPosition: 'center'
-                          }}
-                        />
+                          handleImageError(item.productName, item.imageUrl || 'unknown');
+                        }}
+                        sx={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          objectPosition: 'center'
+                        }}
+                      />
                       ) : null}
                       
                       {/* Placeholder content for items without images */}

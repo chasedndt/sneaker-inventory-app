@@ -243,12 +243,12 @@ export const api = {
       // Add currency information to the form data
       const modifiedFormData = { ...formData };
       
-      // Ensure purchase and shipping currencies are correctly set to the user's preference
-      modifiedFormData.purchaseDetails.purchaseCurrency = userSettings.currency;
-      modifiedFormData.purchaseDetails.shippingCurrency = userSettings.currency;
+      // Use provided currencies or fall back to user's preference (don't override if already set)
+      modifiedFormData.purchaseDetails.purchaseCurrency = formData.purchaseDetails.purchaseCurrency || userSettings.currency;
+      modifiedFormData.purchaseDetails.shippingCurrency = formData.purchaseDetails.shippingCurrency || userSettings.currency;
       
       // Store the original currency and price for future reference
-      modifiedFormData.purchaseDetails.originalCurrency = userSettings.currency;
+      modifiedFormData.purchaseDetails.originalCurrency = modifiedFormData.purchaseDetails.purchaseCurrency;
       modifiedFormData.purchaseDetails.originalPurchasePrice = parseFloat(modifiedFormData.purchaseDetails.purchasePrice) || 0;
       
       // Calculate and store the purchase total (purchase price + shipping price)
@@ -257,12 +257,13 @@ export const api = {
       modifiedFormData.purchaseDetails.purchaseTotal = purchasePrice + shippingPrice;
       
       // Log the currency and price information being used for this item
-      console.log(`Setting item currencies to: ${userSettings.currency}`);
+      console.log(`Setting item currencies to: Purchase=${modifiedFormData.purchaseDetails.purchaseCurrency}, Shipping=${modifiedFormData.purchaseDetails.shippingCurrency}`);
       console.log('Purchase details:', {
         purchasePrice,
         shippingPrice,
         total: purchasePrice + shippingPrice,
-        currency: userSettings.currency
+        purchaseCurrency: modifiedFormData.purchaseDetails.purchaseCurrency,
+        shippingCurrency: modifiedFormData.purchaseDetails.shippingCurrency
       });
       
       // Create a FormData object for multipart request
@@ -546,7 +547,7 @@ export const api = {
   // updateItemField now uses updateMarketPrice for market price updates
   // and updateItem for all other field updates
   
-  updateItemField: async (itemId: number, field: string, value: any) => {
+  updateItemField: async (itemId: number | string, field: string, value: any) => {
     try {
       console.log(`🔄 Updating ${field} for item ${itemId} with user authentication:`, value);
       
@@ -555,11 +556,11 @@ export const api = {
         // Check if value is an object with currency info or just a number
         if (typeof value === 'object' && value.value !== undefined && value.currency) {
           // If it's an object with currency info, use that
-          return await api.updateMarketPrice(itemId, value.value, value.currency);
+          return await api.updateMarketPrice(Number(itemId), value.value, value.currency);
         } else {
           // Otherwise, use the default currency from settings
         // Use a default currency if settings aren't available
-        return await api.updateMarketPrice(itemId, value, '£');
+        return await api.updateMarketPrice(Number(itemId), value, '£');
         }
       }
       
@@ -888,23 +889,13 @@ export const useApi = () => {
         // The API response might contain purchaseCurrency which isn't in our TypeScript interface
         // We need to safely access it using type assertion
         
-        // Try to get the currency from various possible fields in the raw data
+        // ROBUST CURRENCY DETECTION: Check all possible currency fields
         const purchaseCurrency = (item as any).purchaseCurrency;
+        const shippingCurrency = (item as any).shippingCurrency;
         const originalCurrency = item.originalCurrency;
+        const currencyCode = item.currencyCode;
         
-        // Determine the native currency of the item in this priority order:
-        // 1. purchaseCurrency (from raw API data)
-        // 2. originalCurrency (from interface)
-        // 3. currencyCode (from interface)
-        const nativeCurrency = purchaseCurrency || originalCurrency || item.currencyCode;
-        const itemBaseCurrency = nativeCurrency || settings.currency;
-        
-        // Log only if market price exists (to reduce noise)
-        if (item.marketPrice) {
-          console.log(`🔒 Item ${item.id} (${item.productName}): native=${nativeCurrency}, user=${settings.currency}`);
-        }
-        
-        // If we detected a currency symbol instead of code (e.g., '£' instead of 'GBP'), convert to code
+        // Currency symbol to code mapping
         const currencySymbolToCode: Record<string, string> = {
           '£': 'GBP',
           '$': 'USD',
@@ -912,93 +903,105 @@ export const useApi = () => {
           '¥': 'JPY'
         };
         
-        // Use the correct currency code if a symbol was provided
-        const normalizedItemCurrency = currencySymbolToCode[itemBaseCurrency] || itemBaseCurrency;
+        // Helper function to normalize currency (symbol to code)
+        const normalizeCurrency = (currency: string | undefined): string | undefined => {
+          if (!currency) return undefined;
+          const trimmed = currency.trim();
+          return currencySymbolToCode[trimmed] || trimmed;
+        };
         
-        // Make sure all monetary values are correctly converted to user's currency
+        // Determine the item's native currency with strict validation
+        let itemNativeCurrency: string | undefined;
+        
+        // Priority order for currency detection:
+        // 1. purchaseCurrency (most reliable from backend)
+        // 2. originalCurrency (from interface)
+        // 3. currencyCode (from interface)
+        // 4. If none found, DO NOT ASSUME - keep undefined
+        const candidateCurrencies = [
+          normalizeCurrency(purchaseCurrency),
+          normalizeCurrency(originalCurrency),
+          normalizeCurrency(currencyCode)
+        ].filter(Boolean);
+        
+        itemNativeCurrency = candidateCurrencies[0];
+        
+                // Preserve original values
         let purchasePrice = item.purchasePrice;
-        
-        // CRITICAL DEBUG: Carefully track the market price value
-        console.log(`🔍 [MARKET PRICE TRACE] Item ${item.id} (${item.productName}) BEFORE processing:`, {
-          rawMarketPrice: item.marketPrice,
-          rawMarketPriceType: typeof item.marketPrice,
-          rawMarketPriceJSON: JSON.stringify(item.marketPrice)
-        });
-        
-        // Preserve the exact market price from the backend without default values
         let marketPrice = item.marketPrice;
         let shippingPrice = item.shippingPrice || 0;
         
-        // Log the original values
-        console.log(`Item ${item.id} original values:`, {
-          currency: normalizedItemCurrency,
-          purchasePrice,
-          marketPrice,
-          shippingPrice
+        // Normalize user's currency setting for comparison
+        const normalizedUserCurrency = normalizeCurrency(settings.currency);
+        
+        // CRITICAL FIX: Only convert if we have a valid item currency AND it differs from user currency
+        // This prevents the bug where items without explicit currency get incorrectly converted
+        const shouldConvert = itemNativeCurrency && 
+                             normalizedUserCurrency &&
+                             itemNativeCurrency !== normalizedUserCurrency &&
+                             itemNativeCurrency.length > 0;
+        
+        // Log currency detection for debugging
+        console.log(`🔍 [CURRENCY DETECTION] Item ${item.id} (${item.productName}):`, {
+          purchaseCurrency,
+          shippingCurrency,
+          originalCurrency,
+          currencyCode,
+          detectedNativeCurrency: itemNativeCurrency,
+          userCurrency: settings.currency,
+          normalizedUserCurrency,
+          shouldConvert,
+          rawMarketPrice: item.marketPrice,
+          rawPurchasePrice: item.purchasePrice
         });
         
-        // Convert ONLY if the item's normalized currency differs from user's currency
-        // This prevents unnecessary conversions when the item is already in the user's currency
-        if (normalizedItemCurrency !== settings.currency) {
-          // Log the pre-conversion values for debugging
-          console.log(`🔐 [PRE-CONVERSION] Item ${item.id} (${item.productName}) values:`, {
-            purchasePrice,
-            marketPrice,
-            shippingPrice,
-            fromCurrency: normalizedItemCurrency,
-            toCurrency: settings.currency
-          });
+                 if (shouldConvert && itemNativeCurrency) {
+           console.log(`💱 [CURRENCY CONVERSION] Converting item ${item.id} from ${itemNativeCurrency} to ${settings.currency}`);
+           
+           // Convert purchase price
+           if (purchasePrice && typeof purchasePrice === 'number') {
+             purchasePrice = settings.convertCurrency(purchasePrice, itemNativeCurrency);
+           }
+           
+           // Convert market price if it exists
+           if (marketPrice !== undefined && marketPrice !== null && typeof marketPrice === 'number') {
+             marketPrice = settings.convertCurrency(marketPrice, itemNativeCurrency);
+           }
+           
+           // Convert shipping price if it exists
+           if (shippingPrice && typeof shippingPrice === 'number') {
+             shippingPrice = settings.convertCurrency(shippingPrice, itemNativeCurrency);
+           }
           
-          // Convert purchase price using normalized currency
-          purchasePrice = settings.convertCurrency(purchasePrice, normalizedItemCurrency);
-          
-          // Convert market price if it exists
-          if (marketPrice !== undefined && marketPrice !== null) {
-            console.log(`🔍 [MARKET PRICE CONVERSION] Item ${item.id} (${item.productName}) - Converting market price:`, {
-              beforeConversion: marketPrice,
-              fromCurrency: normalizedItemCurrency,
-              toCurrency: settings.currency
-            });
-            
-            const convertedValue = settings.convertCurrency(marketPrice, normalizedItemCurrency);
-            
-            console.log(`🔍 [MARKET PRICE CONVERSION] Item ${item.id} (${item.productName}) - After conversion:`, {
-              afterConversion: convertedValue
-            });
-            
-            marketPrice = convertedValue;
-          } else {
-            console.log(`🔍 [MARKET PRICE CONVERSION] Item ${item.id} (${item.productName}) - No market price to convert`);
-          }
-          
-          // Convert shipping price if it exists
-          if (shippingPrice) {
-            shippingPrice = settings.convertCurrency(shippingPrice, normalizedItemCurrency);
-          }
-          
-          console.log(`Item ${item.id} converted to ${settings.currency}:`, {
+          console.log(`✅ [CONVERSION COMPLETE] Item ${item.id} converted:`, {
             purchasePrice,
             marketPrice,
             shippingPrice
           });
+        } else {
+          console.log(`⏭️ [NO CONVERSION] Item ${item.id} - ${!itemNativeCurrency ? 'No native currency detected' : 'Already in user currency'}`);
         }
         
         // Create the final enhanced item object
         const enhancedItem = {
           ...item,
-          // Update the monetary values with converted amounts
+          // Update the monetary values with converted amounts (or original if no conversion)
           purchasePrice,
           marketPrice,
           shippingPrice,
           // Add currency information to ensure proper display
           currencyCode: settings.currency,
           displayCurrency: settings.currency,
+          // Store the original currency information for reference
+          originalCurrency: itemNativeCurrency || settings.currency,
           // Make sure purchase total is consistent with the purchase price
           // Force recalculation of purchaseTotal to ensure it matches the displayed price
           purchaseTotal: purchasePrice + shippingPrice,
-          // For debugging - store the original values to help diagnose conversion issues
+          // For debugging - store the original values and conversion info
           _debug_originalPrice: item.purchasePrice,
-          _debug_originalTotal: item.purchaseTotal || 0
+          _debug_originalTotal: item.purchaseTotal || 0,
+          _debug_nativeCurrency: itemNativeCurrency,
+          _debug_wasConverted: shouldConvert
         };
         
         // Debug log for final enhanced item

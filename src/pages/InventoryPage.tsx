@@ -604,8 +604,10 @@ const InventoryPage: React.FC = () => {
     try {
       // If marking as sold, open RecordSaleModal
       if (newStatus === 'sold') {
-        // Get the selected items to sell
-        const itemsToSell = items.filter(item => itemIds.includes(item.id));
+        // Get the selected items to sell - handle both string and number IDs
+        const itemsToSell = items.filter(item => {
+          return itemIds.some(id => String(id) === String(item.id));
+        });
         setItemsToSell(itemsToSell);
         setIsRecordSaleModalOpen(true);
         return;
@@ -613,7 +615,9 @@ const InventoryPage: React.FC = () => {
       
       // If marking as listed, open ListItemModal
       if (newStatus === 'listed') {
-        const itemsToList = items.filter(item => itemIds.includes(item.id));
+        const itemsToList = items.filter(item => {
+          return itemIds.some(id => String(id) === String(item.id));
+        });
         setItemsToList(itemsToList);
         setIsListItemModalOpen(true);
         return;
@@ -623,7 +627,7 @@ const InventoryPage: React.FC = () => {
       // First update UI for immediate feedback
       setItems(prevItems => 
         prevItems.map(item => {
-          if (itemIds.includes(item.id)) {
+          if (itemIds.some(id => String(id) === String(item.id))) {
             return {
               ...item,
               status: newStatus
@@ -689,7 +693,7 @@ const InventoryPage: React.FC = () => {
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      const allIds = filteredItems.map(item => item.id);
+      const allIds = filteredItems.map(item => Number(item.id));
       setSelectedItems(allIds);
     } else {
       setSelectedItems([]);
@@ -731,7 +735,7 @@ const InventoryPage: React.FC = () => {
     }
     
     if (selectedItems.length === 1) {
-      const itemToEdit = items.find(item => item.id === selectedItems[0]);
+      const itemToEdit = items.find(item => String(item.id) === String(selectedItems[0]));
       setItemToEdit(itemToEdit);
       setIsEditModalOpen(true);
     } else if (selectedItems.length > 1) {
@@ -773,7 +777,7 @@ const InventoryPage: React.FC = () => {
       }
       
       // Update UI
-      setItems(prevItems => prevItems.filter(item => !itemsToDelete.includes(item.id)));
+      setItems(prevItems => prevItems.filter(item => !itemsToDelete.some(id => String(id) === String(item.id))));
       
       setSnackbar({
         open: true,
@@ -854,6 +858,35 @@ const InventoryPage: React.FC = () => {
     if (!itemToDuplicate) return;
     
     try {
+      // Debug: Log the item structure to understand currency information
+      console.log('🔍 [DUPLICATION DEBUG] Item to duplicate:', {
+        id: itemToDuplicate.id,
+        productName: itemToDuplicate.productName,
+        purchasePrice: itemToDuplicate.purchasePrice,
+        purchaseCurrency: (itemToDuplicate as any).purchaseCurrency,
+        purchase_currency: (itemToDuplicate as any).purchase_currency,
+        shippingCurrency: (itemToDuplicate as any).shippingCurrency,
+        shipping_currency: (itemToDuplicate as any).shipping_currency,
+        purchaseDetails: itemToDuplicate.purchaseDetails,
+        allKeys: Object.keys(itemToDuplicate),
+        fullItem: itemToDuplicate
+      });
+      
+      // More robust currency detection
+      const originalPurchaseCurrency = (itemToDuplicate as any).purchaseCurrency || 
+                                       (itemToDuplicate as any).purchase_currency || 
+                                       itemToDuplicate.purchaseDetails?.purchaseCurrency || 
+                                       'GBP';
+      
+      const originalShippingCurrency = (itemToDuplicate as any).shippingCurrency || 
+                                       (itemToDuplicate as any).shipping_currency || 
+                                       originalPurchaseCurrency || 
+                                       'GBP';
+      
+      console.log('🔍 [DUPLICATION DEBUG] Detected currencies:', {
+        originalPurchaseCurrency,
+        originalShippingCurrency
+      });
       // Clone the item without the id
       const newItem = {
         productDetails: {
@@ -873,9 +906,9 @@ const InventoryPage: React.FC = () => {
         },
         purchaseDetails: {
           purchasePrice: itemToDuplicate.purchasePrice.toString(),
-          purchaseCurrency: 'USD',
+          purchaseCurrency: originalPurchaseCurrency,
           shippingPrice: (itemToDuplicate.shippingPrice || 0).toString(),
-          shippingCurrency: 'USD',
+          shippingCurrency: originalShippingCurrency,
           marketPrice: (itemToDuplicate.marketPrice || 0).toString(),
           purchaseDate: itemToDuplicate.purchaseDate,
           purchaseLocation: itemToDuplicate.purchaseLocation || '',

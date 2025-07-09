@@ -53,8 +53,8 @@ interface ExpensesTableProps {
   onViewReceipt?: (expense: Expense) => void;
   loading?: boolean;
   error?: string | null;
-  selectedExpenses: number[];
-  onSelectExpense: (expenseId: number, checked: boolean) => void;
+  selectedExpenses: (string | number)[];
+  onSelectExpense: (expenseId: string | number, checked: boolean) => void;
   onSelectAll: (checked: boolean) => void;
 }
 

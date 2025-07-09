@@ -6,33 +6,49 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Box,
-  Typography,
   TextField,
-  Autocomplete,
+  Grid,
   FormControl,
   InputLabel,
-  Grid,
-  IconButton,
-  InputAdornment,
+  Select,
+  MenuItem,
+  CircularProgress,
+  Typography,
+  Autocomplete,
   FormHelperText,
   Alert,
-  CircularProgress,
-  Select,
-  SelectChangeEvent,
-  MenuItem,
+  Box,
+  IconButton,
   Avatar,
-  useTheme
+  InputAdornment,
+  SelectChangeEvent
 } from '@mui/material';
-import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { DateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import CloseIcon from '@mui/icons-material/Close';
 import dayjs, { Dayjs } from 'dayjs';
-
-import { Item, api, useApi } from '../../services/api';
+import CloseIcon from '@mui/icons-material/Close';
+import { Item } from '../../services/api';
 import { salesApi } from '../../services/salesApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { useAuthReady } from '../../hooks/useAuthReady';
+import { useTheme } from '@mui/material/styles';
+
+// Common platforms for autocomplete
+const PREDEFINED_PLATFORMS = [
+  'eBay', 'StockX', 'GOAT', 'Depop', 'Vinted', 'Facebook Marketplace', 
+  'Grailed', 'Instagram', 'WhatsApp', 'In Person', 'Consignment Store', 'Other'
+];
+
+// Currency options with symbols for display
+const CURRENCY_OPTIONS = [
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
+  { code: 'GBP', symbol: '£', name: 'British Pound' },
+  { code: 'EUR', symbol: '€', name: 'Euro' },
+  { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+];
 
 interface RecordSaleModalProps {
   open: boolean;
@@ -41,7 +57,7 @@ interface RecordSaleModalProps {
 }
 
 interface FormData {
-  itemId: number | string;
+  itemId: number | string; // Support both number and string for Firebase compatibility
   platform: string;
   saleDate: Dayjs | null;
   salePrice: string;
@@ -61,24 +77,22 @@ interface FormErrors {
   platformFees?: string;
 }
 
-// Predefined platforms with option for custom input
-const PREDEFINED_PLATFORMS = ['StockX', 'GOAT', 'eBay', 'Grailed', 'Depop', 'Stadium Goods'];
-const CURRENCIES = ['$', '€', '£', '¥'];
-
 const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   open,
   onClose,
   items
 }) => {
   const theme = useTheme();
-  const { authReady, currentUser } = useAuthReady();
+  const { authReady } = useAuthReady();
+  const { currentUser } = useAuth();
+  const { currency: userCurrency } = useSettings(); // Get user's preferred currency
   
   const [formData, setFormData] = useState<FormData>({
-    itemId: 0,
+    itemId: items.length > 0 ? items[0].id : 0,
     platform: '',
     saleDate: dayjs(),
     salePrice: '',
-    currency: '$',
+    currency: userCurrency || 'USD', // Use user's currency setting or default to USD
     salesTax: '',
     platformFees: '',
     status: 'pending',
@@ -112,11 +126,11 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
       }
       
       setFormData({
-        itemId: items.length > 0 ? items[0].id : '',
+        itemId: items.length > 0 ? items[0].id : 0,
         platform: '',
         saleDate: dayjs(),
         salePrice: '',
-        currency: '$',
+        currency: userCurrency || 'USD', // Use user's currency setting
         salesTax: '',
         platformFees: '',
         status: 'pending',
@@ -130,15 +144,27 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
         setSelectedItem(items[0]);
       }
     }
-  }, [open, items, currentUser]);
-  
+  }, [open, items, currentUser, userCurrency]);
+
   // Update selected item when itemId changes
   useEffect(() => {
-    const itemId = typeof formData.itemId === 'string' ? parseInt(formData.itemId, 10) : formData.itemId;
-    const item = items.find(item => item.id === itemId);
+    const item = items.find(item => {
+      // Handle both string and number IDs
+      if (typeof formData.itemId === 'string') {
+        return String(item.id) === formData.itemId;
+      } else {
+        return item.id === formData.itemId;
+      }
+    });
     setSelectedItem(item || null);
   }, [formData.itemId, items]);
-  
+
+  // Get currency symbol for display
+  const getCurrencySymbol = (currencyCode: string): string => {
+    const currency = CURRENCY_OPTIONS.find(c => c.code === currencyCode);
+    return currency ? currency.symbol : currencyCode;
+  };
+
   const handleChange = (field: keyof FormData, value: any) => {
     setFormData(prev => ({
       ...prev,
@@ -181,10 +207,12 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
     
-    if (!formData.itemId || formData.itemId === '') {
+    if (!formData.itemId || formData.itemId === '' || formData.itemId === 0) {
       newErrors.itemId = 'Please select an item';
-    } else if (typeof formData.itemId === 'string' && isNaN(parseInt(formData.itemId, 10))) {
-      newErrors.itemId = 'Invalid item selected';
+    }
+    // For Firebase string IDs, check if it's a valid non-empty string
+    if (typeof formData.itemId === 'string' && formData.itemId.trim() === '') {
+      newErrors.itemId = 'Please select an item';
     }
     
     if (!formData.platform) {
@@ -225,19 +253,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
     setSubmitError(null);
     
     try {
-      // Prepare sale data for submission
-      let itemId: number;
-      if (typeof formData.itemId === 'string') {
-        itemId = parseInt(formData.itemId, 10);
-        if (isNaN(itemId)) {
-          throw new Error('Invalid item ID selected');
-        }
-      } else {
-        itemId = formData.itemId;
-      }
-      
+      // Use the itemId as-is (works for both string and number IDs)
       const saleData = {
-        itemId: itemId,
+        itemId: formData.itemId,
         platform: formData.platform,
         saleDate: formData.saleDate?.toISOString() || new Date().toISOString(),
         salePrice: parseFloat(formData.salePrice),
@@ -248,11 +266,8 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
         saleId: formData.saleId || undefined
       };
       
-      // Record the sale
+      // Record the sale (backend will automatically update item status to 'sold')
       await salesApi.recordSale(saleData);
-      
-      // Update the item status to "sold" in inventory
-      await api.updateItemField(itemId, 'status', 'sold');
       
       // Close modal and trigger refresh
       onClose(true);
@@ -459,9 +474,9 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                           sx={{ width: 60 }}
                           variant="standard"
                         >
-                          {CURRENCIES.map((currency) => (
-                            <MenuItem key={currency} value={currency}>
-                              {currency}
+                          {CURRENCY_OPTIONS.map((currency) => (
+                            <MenuItem key={currency.code} value={currency.code}>
+                              {currency.symbol} {currency.name}
                             </MenuItem>
                           ))}
                         </Select>
@@ -489,7 +504,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        {formData.currency}
+                        {getCurrencySymbol(formData.currency)}
                       </InputAdornment>
                     )
                   }}
@@ -514,7 +529,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                   InputProps={{
                     startAdornment: (
                       <InputAdornment position="start">
-                        {formData.currency}
+                        {getCurrencySymbol(formData.currency)}
                       </InputAdornment>
                     )
                   }}
@@ -580,7 +595,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                       </Grid>
                       <Grid item xs={6}>
                         <Typography variant="body2" align="right" color={theme.palette.text.primary}>
-                          {formData.currency}{formData.salePrice}
+                          {getCurrencySymbol(formData.currency)}{formData.salePrice}
                         </Typography>
                       </Grid>
                       
@@ -604,7 +619,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                           </Grid>
                           <Grid item xs={6}>
                             <Typography variant="body2" align="right" color={theme.palette.text.primary}>
-                              -{formData.currency}{parseFloat(formData.salesTax).toFixed(2)}
+                              -{getCurrencySymbol(formData.currency)}{parseFloat(formData.salesTax).toFixed(2)}
                             </Typography>
                           </Grid>
                         </>
@@ -619,7 +634,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                           </Grid>
                           <Grid item xs={6}>
                             <Typography variant="body2" align="right" color={theme.palette.text.primary}>
-                              -{formData.currency}{parseFloat(formData.platformFees).toFixed(2)}
+                              -{getCurrencySymbol(formData.currency)}{parseFloat(formData.platformFees).toFixed(2)}
                             </Typography>
                           </Grid>
                         </>
@@ -648,7 +663,7 @@ const RecordSaleModal: React.FC<RecordSaleModalProps> = ({
                               align="right"
                               color={profit >= 0 ? theme.palette.success.main : theme.palette.error.main}
                             >
-                              {formData.currency}{profit.toFixed(2)} ({roi.toFixed(1)}% ROI)
+                              {getCurrencySymbol(formData.currency)}{profit.toFixed(2)} ({roi.toFixed(1)}% ROI)
                             </Typography>
                           );
                         })()}

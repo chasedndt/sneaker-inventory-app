@@ -223,7 +223,7 @@ class FirebaseService:
     # ==================== SALES METHODS ====================
     
     def create_sale(self, user_id: str, sale_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Create a new sale in Firestore"""
+        """Create a new sale in Firestore and update item status to 'sold'"""
         try:
             # Add timestamps and user_id
             sale_data = self._add_timestamps(sale_data)
@@ -235,6 +235,16 @@ class FirebaseService:
             # Add to Firestore
             collection_ref = self._get_user_collection(user_id, 'sales')
             _, doc_ref = collection_ref.add(serialized_data)
+            
+            # Update the associated item's status to 'sold'
+            item_id = sale_data.get('itemId')
+            if item_id:
+                try:
+                    self.update_item_field(user_id, str(item_id), 'status', 'sold')
+                    logger.info(f"Updated item {item_id} status to 'sold' for user {user_id}")
+                except Exception as item_update_error:
+                    logger.error(f"Failed to update item {item_id} status to 'sold': {item_update_error}")
+                    # Don't fail the sale creation if item update fails
             
             # Return the created sale with Firestore document ID
             created_sale = serialized_data.copy()
@@ -259,8 +269,13 @@ class FirebaseService:
                     if value is not None:
                         query = query.where(field, '==', value)
             
-            # Order by sale_date descending
-            query = query.order_by('sale_date', direction=firestore.Query.DESCENDING)
+            # Order by saleDate descending (the actual field name in our data)
+            try:
+                query = query.order_by('saleDate', direction=firestore.Query.DESCENDING)
+            except Exception as order_error:
+                # Fallback to created_at if saleDate ordering fails
+                logger.warning(f"Failed to order by saleDate, falling back to created_at: {order_error}")
+                query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
             
             # Execute query
             docs = query.stream()
@@ -323,10 +338,30 @@ class FirebaseService:
             raise
     
     def delete_sale(self, user_id: str, sale_id: str) -> bool:
-        """Delete a sale"""
+        """Delete a sale and restore item status to 'active'"""
         try:
+            # First, get the sale to find the associated item
+            sale_data = self.get_sale(user_id, sale_id)
+            if not sale_data:
+                logger.warning(f"Sale {sale_id} not found for user {user_id}")
+                return False
+            
+            # Get the item ID from the sale
+            item_id = sale_data.get('itemId')
+            
+            # Delete the sale
             doc_ref = self._get_user_collection(user_id, 'sales').document(sale_id)
             doc_ref.delete()
+            
+            # Restore the associated item's status to 'active'
+            if item_id:
+                try:
+                    self.update_item_field(user_id, str(item_id), 'status', 'active')
+                    logger.info(f"Restored item {item_id} status to 'active' for user {user_id}")
+                except Exception as item_update_error:
+                    logger.error(f"Failed to restore item {item_id} status to 'active': {item_update_error}")
+                    # Don't fail the sale deletion if item update fails
+            
             logger.info(f"Deleted sale {sale_id} for user {user_id}")
             return True
             
@@ -567,8 +602,8 @@ class FirebaseService:
         """Get all sales for a specific item"""
         try:
             collection_ref = self._get_user_collection(user_id, 'sales')
-            query = collection_ref.where('item_id', '==', item_id)
-            query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
+            query = collection_ref.where('itemId', '==', item_id)
+            query = query.order_by('sale_date', direction=firestore.Query.DESCENDING)
             
             docs = query.stream()
             sales = []

@@ -377,12 +377,18 @@ const Dashboard: React.FC = () => {
       // Debug expenses data
       console.log('💰 Expenses data:', expensesData);
       
-      // Filter active items (not sold)
+      // Filter active items (not sold) for portfolio calculations
       const activeItems = processedItems.filter((item: Item) => item.status !== 'sold');
       console.log(`💼 Active inventory items: ${activeItems.length}`);
       
+      // For dashboard display, show recent items including sold ones (limited to last 10)
+      const recentItems = processedItems
+        .sort((a: any, b: any) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime())
+        .slice(0, 10) as Item[];
+      console.log(`📋 Recent items for dashboard display: ${recentItems.length}`);
+      
       // Update state with all datasets
-      setItems(activeItems);
+      setItems(recentItems); // Show recent items including sold ones
       setSales(salesData);
       setExpenses(expensesData);
       setError(null);

@@ -58,7 +58,7 @@ const ExpensesPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   // State for selected expenses (for bulk actions)
-  const [selectedExpenses, setSelectedExpenses] = useState<number[]>([]);
+  const [selectedExpenses, setSelectedExpenses] = useState<(string | number)[]>([]);
   
   // State for snackbar notifications
   const [snackbar, setSnackbar] = useState<{

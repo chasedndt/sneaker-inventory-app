@@ -271,7 +271,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
   }, [filteredData]);
 
   const changeValues = useMemo(() => ({
-    changeNetProfit: metricsData?.profitMetrics?.netProfitChange || 0,
+    changeNetProfit: 0, // TODO: Add potential profit change calculation
     changeSalesIncome: metricsData?.salesMetrics?.revenueChange || 0,
     changeItemSpend: 0, // Placeholder
     changeROIPercentage: metricsData?.profitMetrics?.roiChange || 0,
@@ -283,7 +283,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
 
   const memoizedMetrics = useMemo(() => {
     return {
-      netProfit: metricsData?.profitMetrics?.netProfitSold || 0,
+      netProfit: metricsData?.inventoryMetrics?.potentialProfit || 0, // Fixed: Use potentialProfit for unsold items
       salesIncome: metricsData?.salesMetrics?.totalSalesRevenue || 0,
       itemSpend: metricsData?.inventoryMetrics?.totalInventoryCost || 0,
       roiPercentage: Number((metricsData?.profitMetrics?.roiSold || 0).toFixed(2)),
@@ -294,7 +294,7 @@ export const ReportsSection: React.FC<ReportsSectionProps> = function ReportsSec
                               (metricsData?.expenseMetrics?.totalExpenses || 0)
     };
   }, [
-    metricsData?.profitMetrics?.netProfitSold,
+    metricsData?.inventoryMetrics?.potentialProfit, // Fixed: Use potentialProfit for unsold items
     metricsData?.salesMetrics?.totalSalesRevenue,
     metricsData?.inventoryMetrics?.totalInventoryCost,
     metricsData?.profitMetrics?.roiSold,

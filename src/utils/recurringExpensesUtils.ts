@@ -97,8 +97,8 @@ export const generateRecurringExpenseEntries = (
  */
 export const getNextRecurrenceDates = (
   expenses: Expense[]
-): Record<number, Date> => {
-  const nextDates: Record<number, Date> = {};
+): Record<string | number, Date> => {
+  const nextDates: Record<string | number, Date> = {};
   const now = new Date();
   
   expenses.forEach(expense => {

@@ -4,7 +4,8 @@ import os
 import json
 import time
 import logging
-from models import db, Tag, Item, item_tags
+from database_service import DatabaseService
+from auth_helpers import require_auth
 import traceback
 
 # Set up logging with more details
@@ -18,11 +19,14 @@ logger.setLevel(logging.DEBUG)
 # Create blueprint
 tag_routes = Blueprint('tag_routes', __name__)
 
-# Tags JSON file path (for simple persistence)
+# Initialize database service
+database_service = DatabaseService()
+
+# Tags JSON file path (for fallback only)
 TAGS_FILE = os.path.join(os.path.dirname(__file__), 'instance', 'tags.json')
 
 def ensure_tags_file_exists():
-    """Ensure the tags file exists and is a valid JSON"""
+    """Ensure the tags file exists and is a valid JSON (fallback only)"""
     os.makedirs(os.path.dirname(TAGS_FILE), exist_ok=True)
     if not os.path.exists(TAGS_FILE):
         with open(TAGS_FILE, 'w') as f:
@@ -37,22 +41,18 @@ def ensure_tags_file_exists():
 
 
 @tag_routes.route('/tags', methods=['GET'])
-def get_tags():
-    """Get all tags"""
+@require_auth
+def get_tags(user_id):
+    """Get all tags for authenticated user"""
     try:
-        logger.info("📋 Fetching all tags")
+        logger.info(f"📋 Fetching all tags for user {user_id}")
         
-        # Try to use database first
-        try:
-            tags = Tag.query.all()
-            tags_list = [tag.to_dict() for tag in tags]
-            logger.info(f"✅ Retrieved {len(tags_list)} tags from database")
+        if database_service.is_using_firebase():
+            tags_list = database_service.get_tags(user_id)
+            logger.info(f"✅ Retrieved {len(tags_list)} tags from Firebase")
             return jsonify(tags_list), 200
-        except Exception as db_err:
-            logger.warning(f"⚠️ Failed to fetch tags from database: {str(db_err)}")
-            logger.warning(traceback.format_exc())
-            
-            # Fall back to file-based storage
+        else:
+            # Fall back to file-based storage for SQLite mode
             ensure_tags_file_exists()
             with open(TAGS_FILE, 'r') as f:
                 tags = json.load(f)
@@ -66,10 +66,11 @@ def get_tags():
 
 
 @tag_routes.route('/tags', methods=['POST'])
-def create_tag():
-    """Create a new tag"""
+@require_auth
+def create_tag(user_id):
+    """Create a new tag for authenticated user"""
     try:
-        logger.info("🏷️ Creating new tag")
+        logger.info(f"🏷️ Creating new tag for user {user_id}")
         data = request.json
         
         # Validate request
@@ -80,26 +81,24 @@ def create_tag():
         name = data['name']
         color = data['color']
         
-        # Try to use database first
-        try:
+        if database_service.is_using_firebase():
             # Check for duplicate name
-            existing_tag = Tag.query.filter_by(name=name).first()
+            existing_tag = database_service.get_tag_by_name(user_id, name)
             if existing_tag:
                 logger.error(f"❌ Tag with name '{name}' already exists")
                 return jsonify({'error': f"Tag with name '{name}' already exists"}), 400
             
             # Create new tag
-            new_tag = Tag(name=name, color=color)
-            db.session.add(new_tag)
-            db.session.commit()
+            tag_data = {
+                'name': name,
+                'color': color
+            }
+            created_tag = database_service.create_tag(user_id, tag_data)
             
-            logger.info(f"✅ Tag created with ID: {new_tag.id}")
-            return jsonify(new_tag.to_dict()), 201
-        except Exception as db_err:
-            logger.warning(f"⚠️ Failed to create tag in database: {str(db_err)}")
-            logger.warning(traceback.format_exc())
-            
-            # Fall back to file-based storage
+            logger.info(f"✅ Tag created with ID: {created_tag['id']}")
+            return jsonify(created_tag), 201
+        else:
+            # Fall back to file-based storage for SQLite mode
             ensure_tags_file_exists()
             with open(TAGS_FILE, 'r') as f:
                 tags = json.load(f)
@@ -130,10 +129,11 @@ def create_tag():
 
 
 @tag_routes.route('/tags/<tag_id>', methods=['PUT'])
-def update_tag(tag_id):
-    """Update an existing tag"""
+@require_auth
+def update_tag(user_id, tag_id):
+    """Update an existing tag for authenticated user"""
     try:
-        logger.info(f"🔄 Updating tag {tag_id}")
+        logger.info(f"🔄 Updating tag {tag_id} for user {user_id}")
         data = request.json
         
         # Validate request
@@ -144,32 +144,30 @@ def update_tag(tag_id):
         name = data['name']
         color = data['color']
         
-        # Try to use database first
-        try:
-            # Find the tag
-            tag = Tag.query.get(tag_id)
-            if not tag:
+        if database_service.is_using_firebase():
+            # Check if tag exists
+            existing_tag = database_service.get_tag(user_id, tag_id)
+            if not existing_tag:
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
-            # Check for duplicate name
-            existing_tag = Tag.query.filter_by(name=name).first()
-            if existing_tag and str(existing_tag.id) != str(tag_id):
+            # Check for duplicate name (excluding current tag)
+            name_check = database_service.get_tag_by_name(user_id, name)
+            if name_check and name_check['id'] != tag_id:
                 logger.error(f"❌ Tag with name '{name}' already exists")
                 return jsonify({'error': f"Tag with name '{name}' already exists"}), 400
             
             # Update tag
-            tag.name = name
-            tag.color = color
-            db.session.commit()
+            update_data = {
+                'name': name,
+                'color': color
+            }
+            updated_tag = database_service.update_tag(user_id, tag_id, update_data)
             
             logger.info(f"✅ Tag {tag_id} updated successfully")
-            return jsonify(tag.to_dict()), 200
-        except Exception as db_err:
-            logger.warning(f"⚠️ Failed to update tag in database: {str(db_err)}")
-            logger.warning(traceback.format_exc())
-            
-            # Fall back to file-based storage
+            return jsonify(updated_tag), 200
+        else:
+            # Fall back to file-based storage for SQLite mode
             ensure_tags_file_exists()
             with open(TAGS_FILE, 'r') as f:
                 tags = json.load(f)
@@ -207,43 +205,35 @@ def update_tag(tag_id):
 
 
 @tag_routes.route('/tags/<tag_id>', methods=['DELETE'])
-def delete_tag(tag_id):
-    """Delete a tag"""
+@require_auth
+def delete_tag(user_id, tag_id):
+    """Delete a tag for authenticated user"""
     try:
-        logger.info(f"🗑️ Deleting tag {tag_id}")
+        logger.info(f"🗑️ Deleting tag {tag_id} for user {user_id}")
         
-        # Try to use database first
-        try:
-            # Find the tag
-            tag = Tag.query.get(tag_id)
-            if not tag:
+        if database_service.is_using_firebase():
+            # Check if tag exists
+            existing_tag = database_service.get_tag(user_id, tag_id)
+            if not existing_tag:
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
-            # Remove tag from all items first
-            for item in tag.items:
-                if tag in item.tags:
-                    item.tags.remove(tag)
-            
-            # Flush the session to ensure the item-tag relationships are updated
-            db.session.flush()
-            
             # Delete tag
-            db.session.delete(tag)
-            db.session.commit()
+            success = database_service.delete_tag(user_id, tag_id)
             
-            logger.info(f"✅ Tag {tag_id} deleted successfully")
-            return jsonify({'message': f"Tag {tag_id} deleted successfully"}), 200
-        except Exception as db_err:
-            logger.warning(f"⚠️ Failed to delete tag from database: {str(db_err)}")
-            logger.warning(traceback.format_exc())
-            
-            # Fall back to file-based storage
+            if success:
+                logger.info(f"✅ Tag {tag_id} deleted successfully")
+                return jsonify({'message': 'Tag deleted successfully'}), 200
+            else:
+                logger.error(f"❌ Failed to delete tag {tag_id}")
+                return jsonify({'error': 'Failed to delete tag'}), 500
+        else:
+            # Fall back to file-based storage for SQLite mode
             ensure_tags_file_exists()
             with open(TAGS_FILE, 'r') as f:
                 tags = json.load(f)
             
-            # Find the tag
+            # Find and remove the tag
             tag_index = None
             for i, tag in enumerate(tags):
                 if tag['id'] == tag_id:
@@ -254,14 +244,14 @@ def delete_tag(tag_id):
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
-            # Delete tag
-            del tags[tag_index]
+            # Remove tag
+            removed_tag = tags.pop(tag_index)
             
             with open(TAGS_FILE, 'w') as f:
                 json.dump(tags, f)
             
             logger.info(f"✅ Tag {tag_id} deleted successfully")
-            return jsonify({'message': f"Tag {tag_id} deleted successfully"}), 200
+            return jsonify({'message': 'Tag deleted successfully'}), 200
     except Exception as e:
         logger.error(f"💥 Error deleting tag: {str(e)}")
         logger.error(traceback.format_exc())
@@ -269,106 +259,39 @@ def delete_tag(tag_id):
 
 
 @tag_routes.route('/items/<int:item_id>/tags', methods=['POST'])
-def apply_tags_to_item(item_id):
-    """Apply tags to an item"""
+@require_auth
+def apply_tags_to_item(user_id, item_id):
+    """Apply tags to an item for authenticated user"""
     try:
-        logger.info(f"🏷️ Applying tags to item {item_id}")
-        logger.info(f"Request data: {request.data}")
-        
-        # Parse request data and handle potential JSON errors
-        try:
-            data = request.json
-            if not data:
-                logger.error("Empty request data")
-                return jsonify({'error': 'Empty request data'}), 400
-        except Exception as json_err:
-            logger.error(f"Invalid JSON in request: {str(json_err)}")
-            return jsonify({'error': f'Invalid JSON in request: {str(json_err)}'}), 400
+        logger.info(f"🏷️ Applying tags to item {item_id} for user {user_id}")
+        data = request.json
         
         # Validate request
-        if 'tagIds' not in data:
-            logger.error("❌ Missing required field: tagIds")
-            return jsonify({'error': 'Missing required field: tagIds'}), 400
+        if not data or 'tag_ids' not in data:
+            logger.error("❌ Missing required field: tag_ids")
+            return jsonify({'error': 'Missing required field: tag_ids'}), 400
         
-        tag_ids = data['tagIds']
-        logger.info(f"Tag IDs received: {tag_ids}")
+        tag_ids = data['tag_ids']
         
-        # Validate tag_ids is a list
-        if not isinstance(tag_ids, list):
-            logger.error("❌ tagIds must be a list")
-            return jsonify({'error': 'tagIds must be a list'}), 400
-        
-        # Find the item
-        item = Item.query.get(item_id)
-        if not item:
-            logger.error(f"❌ Item with ID {item_id} not found")
-            return jsonify({'error': f"Item with ID {item_id} not found"}), 404
-        
-        # Log current tags before changes
-        logger.info(f"Current tags for item {item_id}: {[t.id for t in item.tags]}")
-        
-        try:
-            # Remove existing tags
-            item.tags = []
-            db.session.flush()
-            logger.info(f"Cleared existing tags for item {item_id}")
+        if database_service.is_using_firebase():
+            # Get the item
+            item_data = database_service.get_item(user_id, str(item_id))
+            if not item_data:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f"Item with ID {item_id} not found"}), 404
             
-            # Check if all tags exist and add them
-            valid_tags = []
-            for tag_id in tag_ids:
-                # Try both string and int conversion as needed
-                try:
-                    if isinstance(tag_id, str) and tag_id.isdigit():
-                        tag_id_int = int(tag_id)
-                    else:
-                        tag_id_int = tag_id
-                except (ValueError, TypeError):
-                    tag_id_int = tag_id
-                
-                # Try to find tag using different ID formats
-                tag = None
-                try:
-                    tag = Tag.query.get(tag_id_int)
-                except Exception:
-                    pass
-                
-                if not tag and isinstance(tag_id, str):
-                    try:
-                        tag = Tag.query.get(tag_id)
-                    except Exception:
-                        pass
-                
-                if tag:
-                    valid_tags.append(tag)
-                    logger.info(f"Found tag: {tag.id} - {tag.name}")
-                else:
-                    logger.warning(f"❓ Tag with ID {tag_id} not found")
+            # Update item with new tags
+            update_data = {
+                'tags': tag_ids
+            }
+            updated_item = database_service.update_item(user_id, str(item_id), update_data)
             
-            # Add valid tags to item
-            for tag in valid_tags:
-                item.tags.append(tag)
-                logger.info(f"Added tag {tag.id} to item {item_id}")
-            
-            # Commit the changes
-            db.session.commit()
-            logger.info(f"✅ Committed tag changes to database")
-            
-            # Get updated tags for confirmation
-            updated_item = Item.query.get(item_id)
-            updated_tag_ids = [t.id for t in updated_item.tags]
-            logger.info(f"✅ Updated tags for item {item_id}: {updated_tag_ids}")
-            
-            return jsonify({
-                'message': f"Tags applied to item {item_id}", 
-                'tagIds': updated_tag_ids,
-                'itemId': item_id
-            }), 200
-            
-        except Exception as db_err:
-            db.session.rollback()
-            logger.error(f"💥 Database error while applying tags: {str(db_err)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(db_err)}), 500
+            logger.info(f"✅ Tags applied to item {item_id} successfully")
+            return jsonify({'message': 'Tags applied successfully', 'item': updated_item}), 200
+        else:
+            # SQLite mode - not implemented for now
+            logger.error("❌ Tag application not implemented for SQLite mode")
+            return jsonify({'error': 'Tag application not available in SQLite mode'}), 501
     except Exception as e:
         logger.error(f"💥 Error applying tags to item: {str(e)}")
         logger.error(traceback.format_exc())
@@ -376,67 +299,44 @@ def apply_tags_to_item(item_id):
 
 
 @tag_routes.route('/items/<int:item_id>/tags/remove', methods=['POST'])
-def remove_tags_from_item(item_id):
-    """Remove tags from an item"""
+@require_auth
+def remove_tags_from_item(user_id, item_id):
+    """Remove tags from an item for authenticated user"""
     try:
-        logger.info(f"🗑️ Removing tags from item {item_id}")
+        logger.info(f"🗑️ Removing tags from item {item_id} for user {user_id}")
         data = request.json
         
         # Validate request
-        if not data or 'tagIds' not in data:
-            logger.error("❌ Missing required field: tagIds")
-            return jsonify({'error': 'Missing required field: tagIds'}), 400
+        if not data or 'tag_ids' not in data:
+            logger.error("❌ Missing required field: tag_ids")
+            return jsonify({'error': 'Missing required field: tag_ids'}), 400
         
-        tag_ids = data['tagIds']
-        if not isinstance(tag_ids, list):
-            logger.error("❌ tagIds must be a list")
-            return jsonify({'error': 'tagIds must be a list'}), 400
+        tag_ids_to_remove = data['tag_ids']
         
-        # Find the item
-        item = Item.query.get(item_id)
-        if not item:
-            logger.error(f"❌ Item with ID {item_id} not found")
-            return jsonify({'error': f"Item with ID {item_id} not found"}), 404
-        
-        # Remove specified tags
-        try:
-            # Log current tags
-            logger.info(f"Current tags for item {item_id}: {[t.id for t in item.tags]}")
+        if database_service.is_using_firebase():
+            # Get the item
+            item_data = database_service.get_item(user_id, str(item_id))
+            if not item_data:
+                logger.error(f"❌ Item with ID {item_id} not found")
+                return jsonify({'error': f"Item with ID {item_id} not found"}), 404
             
-            # Convert all tag_ids to strings for consistent comparison
-            str_tag_ids = [str(tid) for tid in tag_ids]
+            # Get current tags and remove specified ones
+            current_tags = item_data.get('tags', [])
+            updated_tags = [tag_id for tag_id in current_tags if tag_id not in tag_ids_to_remove]
             
-            # Remove tags that match the provided IDs
-            tags_to_remove = []
-            for tag in item.tags:
-                if str(tag.id) in str_tag_ids:
-                    tags_to_remove.append(tag)
-                    logger.info(f"Marking tag {tag.id} for removal")
+            # Update item with remaining tags
+            update_data = {
+                'tags': updated_tags
+            }
+            updated_item = database_service.update_item(user_id, str(item_id), update_data)
             
-            # Remove the tags
-            for tag in tags_to_remove:
-                item.tags.remove(tag)
-                logger.info(f"Removed tag {tag.id} from item {item_id}")
-            
-            db.session.commit()
-            
-            # Get updated tags for confirmation
-            updated_item = Item.query.get(item_id)
-            updated_tag_ids = [t.id for t in updated_item.tags]
-            logger.info(f"✅ Updated tags for item {item_id} after removal: {updated_tag_ids}")
-            
-            return jsonify({
-                'message': f"Tags removed from item {item_id}", 
-                'tagIds': str_tag_ids,
-                'remainingTags': updated_tag_ids
-            }), 200
-        except Exception as db_err:
-            db.session.rollback()
-            logger.error(f"💥 Database error while removing tags: {str(db_err)}")
-            logger.error(traceback.format_exc())
-            return jsonify({'error': str(db_err)}), 500
+            logger.info(f"✅ Tags removed from item {item_id} successfully")
+            return jsonify({'message': 'Tags removed successfully', 'item': updated_item}), 200
+        else:
+            # SQLite mode - not implemented for now
+            logger.error("❌ Tag removal not implemented for SQLite mode")
+            return jsonify({'error': 'Tag removal not available in SQLite mode'}), 501
     except Exception as e:
-        db.session.rollback()
         logger.error(f"💥 Error removing tags from item: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
