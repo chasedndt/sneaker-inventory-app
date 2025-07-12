@@ -46,6 +46,7 @@ export interface SalesItem extends Sale {
   brand: string;
   category: string;
   size?: string;
+  reference?: string; // SKU-ID field
   purchasePrice: number;
   profit: number;
   daysToSell: number;
@@ -128,13 +129,20 @@ const SalesPage: React.FC = () => {
         setError(null); // Clear previous errors
         // First get all inventory items
         const inventoryItems = await api.getItems();
+        console.log(`[SalesPage] Retrieved ${inventoryItems.length} inventory items`);
         
         // Then get all sales data
         const salesData = await salesApi.getSales();
+        console.log(`[SalesPage] Retrieved ${salesData.length} sales`);
         
         // Combine sales data with inventory items to create SalesItems
         const enhancedSales = salesData.map((sale: Sale) => {
-          const item = inventoryItems.find((inventoryItem: Item) => inventoryItem.id === sale.itemId);
+          const item = inventoryItems.find((inventoryItem: Item) => String(inventoryItem.id) === String(sale.itemId));
+          
+          if (!item) {
+            console.warn(`[SalesPage] Could not find item with ID ${sale.itemId} for sale ${sale.id}`);
+            console.log(`[SalesPage] Available item IDs:`, inventoryItems.map((item: Item) => item.id));
+          }
           
           if (!item) {
             // Handle case where item might have been deleted from inventory
@@ -169,6 +177,7 @@ const SalesPage: React.FC = () => {
             brand: item.brand,
             category: item.category,
             size: item.size,
+            reference: item.reference, // Include SKU-ID field
             purchasePrice: item.purchasePrice,
             imageUrl: item.imageUrl,
             images: item.images, // Include the images array
@@ -218,7 +227,7 @@ const SalesPage: React.FC = () => {
       
       // Similar processing as in useEffect
       const enhancedSales = salesData.map((sale: Sale) => {
-        const item = inventoryItems.find((inventoryItem: Item) => inventoryItem.id === sale.itemId);
+        const item = inventoryItems.find((inventoryItem: Item) => String(inventoryItem.id) === String(sale.itemId));
         
         if (!item) {
           return {
@@ -246,6 +255,7 @@ const SalesPage: React.FC = () => {
           brand: item.brand,
           category: item.category,
           size: item.size,
+          reference: item.reference, // Include SKU-ID field
           purchasePrice: item.purchasePrice,
           imageUrl: item.imageUrl,
           images: item.images, // Include the images array
@@ -601,6 +611,12 @@ const SalesPage: React.FC = () => {
       // This helps resolve any stale data issues with size/item information
       setTimeout(() => {
         handleRefresh();
+        
+        // Also trigger inventory page refresh if it's loaded
+        // This ensures inventory page shows the returned item with proper size data
+        const inventoryRefreshEvent = new CustomEvent('inventory-refresh');
+        window.dispatchEvent(inventoryRefreshEvent);
+        console.log('🔄 [SALES] Triggered inventory refresh after item restore');
       }, 500); // Small delay to ensure backend updates are complete
       
       setSnackbar({

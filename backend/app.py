@@ -314,7 +314,32 @@ def create_app():
             items_data = database_service.get_items(user_id)
             logger.debug(f"✅ Retrieved {len(items_data)} items via Firebase for user_id: {user_id}")
             
-            return jsonify(items_data), 200
+            # Process items to convert sizes array to individual size fields for frontend compatibility
+            processed_items = []
+            for item in items_data:
+                processed_item = item.copy()
+                
+                # Convert sizes array to individual size and sizeSystem fields
+                sizes = item.get('sizes', [])
+                if sizes and len(sizes) > 0:
+                    # Take the first size entry (most common use case)
+                    first_size = sizes[0]
+                    if isinstance(first_size, dict):
+                        processed_item['size'] = first_size.get('size', '')
+                        processed_item['sizeSystem'] = first_size.get('system', '')
+                    else:
+                        # Handle legacy format where size might be a string
+                        processed_item['size'] = str(first_size)
+                        processed_item['sizeSystem'] = ''
+                else:
+                    # No size data available
+                    processed_item['size'] = ''
+                    processed_item['sizeSystem'] = ''
+                
+                processed_items.append(processed_item)
+            
+            logger.debug(f"✅ Processed {len(processed_items)} items with size data for user_id: {user_id}")
+            return jsonify(processed_items), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")
             return safe_error_response(e, "Failed to fetch items")
@@ -334,8 +359,28 @@ def create_app():
                 logger.warning(f"❌ Item with ID {item_id} not found in Firebase")
                 return jsonify({'error': 'Item not found'}), 404
             
+            # Process item to convert sizes array to individual size fields for frontend compatibility
+            processed_item = item_data.copy()
+            
+            # Convert sizes array to individual size and sizeSystem fields
+            sizes = item_data.get('sizes', [])
+            if sizes and len(sizes) > 0:
+                # Take the first size entry (most common use case)
+                first_size = sizes[0]
+                if isinstance(first_size, dict):
+                    processed_item['size'] = first_size.get('size', '')
+                    processed_item['sizeSystem'] = first_size.get('system', '')
+                else:
+                    # Handle legacy format where size might be a string
+                    processed_item['size'] = str(first_size)
+                    processed_item['sizeSystem'] = ''
+            else:
+                # No size data available
+                processed_item['size'] = ''
+                processed_item['sizeSystem'] = ''
+            
             logger.info(f"✅ Retrieved item {item_id} from Firebase for user_id: {user_id}")
-            return jsonify(item_data), 200
+            return jsonify(processed_item), 200
         except Exception as e:
             logger.error(f"💥 Error fetching item {item_id}: {str(e)}")
             return safe_error_response(e, "Failed to fetch item")

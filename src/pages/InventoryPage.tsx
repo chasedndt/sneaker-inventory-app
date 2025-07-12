@@ -318,7 +318,48 @@ const InventoryPage: React.FC = () => {
       // Don't set the main error state for tags - we can proceed without them
     }
   }, [authReady, currentUser]); // Removed setTags as it's a stable function
-  
+
+  // Enhanced refresh mechanism that ensures size data is properly loaded
+  const forceRefreshWithSizeData = useCallback(async () => {
+    console.log('🔄 [INVENTORY] Force refresh with size data verification');
+    
+    // Reset all flags to ensure fresh data
+    dataFetchedRef.current = false;
+    fetchingRef.current = false;
+    
+    // Force refresh
+    await fetchItems(true);
+    
+    // Verify size data is present after refresh
+    setTimeout(() => {
+      const currentItems = items;
+      const itemsWithoutSize = currentItems.filter(item => !item.size && item.status !== 'sold');
+      
+      if (itemsWithoutSize.length > 0) {
+        console.warn('⚠️ [INVENTORY] Some items missing size data after refresh, attempting another refresh');
+        // Try one more time if size data is missing
+        fetchItems(true);
+      } else {
+        console.log('✅ [INVENTORY] All items have proper size data');
+      }
+    }, 1000);
+  }, [fetchItems, items]);
+
+  // Add window event listener for inventory refresh requests
+  useEffect(() => {
+    const handleInventoryRefresh = () => {
+      console.log('🔄 [INVENTORY] Received refresh request from external source');
+      forceRefreshWithSizeData();
+    };
+
+    // Listen for custom refresh events
+    window.addEventListener('inventory-refresh', handleInventoryRefresh);
+
+    return () => {
+      window.removeEventListener('inventory-refresh', handleInventoryRefresh);
+    };
+  }, [forceRefreshWithSizeData]);
+
   // Debug render count (removed for production)
 
   // Fetch items and tags when auth state is ready and user is available
@@ -416,10 +457,8 @@ const InventoryPage: React.FC = () => {
     }
     
     try {
-      // Reset the data fetched flag to allow refresh
-      dataFetchedRef.current = false;
-      // Use the unified fetchItems function for consistency
-      await fetchItems(true); // Force refresh
+      // Use the enhanced refresh mechanism
+      await forceRefreshWithSizeData();
       // Also refresh tags
       await fetchTags();
       
