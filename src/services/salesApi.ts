@@ -294,6 +294,70 @@ export const salesApi = {
   },
 
   /**
+   * Delete multiple sales
+   * @param saleIds Array of sale IDs to delete
+   * @returns Promise<{ success: boolean, deletedCount: number }> Success status and count
+   */
+  deleteSales: async (saleIds: number[]): Promise<{ success: boolean, deletedCount: number }> => {
+    try {
+      console.log(`🔄 Deleting ${saleIds.length} sales...`, saleIds);
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+      
+      const response = await fetch(`${API_BASE_URL}/sales/bulk-delete`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ saleIds }),
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ API deleteSales failed with status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`✅ ${result.deletedCount} sales deleted successfully`);
+      return result;
+    } catch (error: any) {
+      console.error(`💥 Error deleting sales:`, error);
+      throw error;
+    }
+  },
+
+  /**
+   * Return multiple sales to inventory
+   * @param saleIds Array of sale IDs to return to inventory
+   * @returns Promise<{ success: boolean, returnedCount: number }> Success status and count
+   */
+  returnSalesToInventory: async (saleIds: number[]): Promise<{ success: boolean, returnedCount: number }> => {
+    try {
+      console.log(`🔄 Returning ${saleIds.length} sales to inventory...`, saleIds);
+      const headers = await getAuthHeaders();
+      headers['Content-Type'] = 'application/json';
+      
+      const response = await fetch(`${API_BASE_URL}/sales/bulk-return`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ saleIds }),
+      });
+      
+      if (!response.ok) {
+        console.error(`❌ API returnSalesToInventory failed with status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log(`✅ ${result.returnedCount} sales returned to inventory successfully`);
+      return result;
+    } catch (error: any) {
+      console.error(`💥 Error returning sales to inventory:`, error);
+      throw error;
+    }
+  },
+
+  /**
    * Get the total net profit from sold items with proper expense accounting
    * @param startDate Optional start date filter
    * @param endDate Optional end date filter

@@ -372,12 +372,205 @@ class FirebaseService:
     def update_sale_field(self, user_id: str, sale_id: str, field: str, value: Any) -> Dict[str, Any]:
         """Update a specific field of a sale"""
         try:
-            # Prepare the update data
             update_data = {field: value}
             return self.update_sale(user_id, sale_id, update_data)
             
         except Exception as e:
-            logger.error(f"Error updating field {field} for sale {sale_id} for user {user_id}: {e}")
+            logger.error(f"Error updating sale field {field} for sale {sale_id} for user {user_id}: {e}")
+            raise
+    
+    def bulk_delete_sales(self, user_id: str, sale_ids: List[str]) -> Dict[str, Any]:
+        """Delete multiple sales and restore their items to unlisted status"""
+        logger.info(f"🗑️ [BULK DELETE] Starting bulk delete of {len(sale_ids)} sales for user {user_id}")
+        logger.info(f"🗑️ [BULK DELETE] Sale IDs to process: {sale_ids}")
+        
+        try:
+            db = self._ensure_client()
+            deleted_count = 0
+            failed_sales = []
+            
+            # Validate input
+            if not user_id:
+                raise ValueError("User ID is required")
+            if not sale_ids or not isinstance(sale_ids, list):
+                raise ValueError("Sale IDs must be a non-empty list")
+            
+            logger.info(f"✅ [BULK DELETE] Input validation passed")
+            
+            # Process each sale
+            for i, sale_id in enumerate(sale_ids, 1):
+                logger.info(f"🗑️ [BULK DELETE] Processing sale {i}/{len(sale_ids)}: {sale_id}")
+                
+                try:
+                    # Step 1: Get sale data first to get item_id
+                    logger.info(f"📋 [BULK DELETE] Step 1: Retrieving sale data for {sale_id}")
+                    sale_data = self.get_sale(user_id, sale_id)
+                    
+                    if not sale_data:
+                        logger.error(f"❌ [BULK DELETE] Sale {sale_id} not found for user {user_id}")
+                        failed_sales.append(sale_id)
+                        continue
+                    
+                    logger.info(f"✅ [BULK DELETE] Sale {sale_id} retrieved successfully")
+                    
+                    # Step 2: Extract item_id
+                    item_id = sale_data.get('itemId')
+                    if item_id:
+                        logger.info(f"📦 [BULK DELETE] Step 2: Item ID extracted: {item_id}")
+                    else:
+                        logger.warning(f"⚠️ [BULK DELETE] Sale {sale_id} has no itemId field")
+                    
+                    # Step 3: Delete the sale
+                    logger.info(f"🗑️ [BULK DELETE] Step 3: Deleting sale record {sale_id}")
+                    sales_ref = self._get_user_collection(user_id, 'sales')
+                    sales_ref.document(sale_id).delete()
+                    logger.info(f"✅ [BULK DELETE] Sale {sale_id} deleted successfully")
+                    
+                    # Step 4: Restore item status to unlisted if item exists
+                    if item_id:
+                        logger.info(f"🔄 [BULK DELETE] Step 4: Verifying item {item_id} exists")
+                        try:
+                            # Verify item exists before updating
+                            item_data = self.get_item(user_id, item_id)
+                            if item_data:
+                                logger.info(f"🔄 [BULK DELETE] Updating item {item_id} status to 'unlisted'")
+                                items_ref = self._get_user_collection(user_id, 'items')
+                                items_ref.document(item_id).update({
+                                    'status': 'unlisted',
+                                    'updated_at': datetime.utcnow()
+                                })
+                                logger.info(f"✅ [BULK DELETE] Item {item_id} restored to unlisted status")
+                            else:
+                                logger.warning(f"⚠️ [BULK DELETE] Item {item_id} not found (orphaned sale)")
+                        except Exception as item_error:
+                            logger.error(f"💥 [BULK DELETE] Failed to restore item {item_id} status: {str(item_error)}")
+                            # Don't fail the whole operation for item status issues
+                    
+                    deleted_count += 1
+                    logger.info(f"🎉 [BULK DELETE] Successfully deleted sale {sale_id}")
+                    
+                except Exception as sale_error:
+                    logger.error(f"💥 [BULK DELETE] Failed to delete sale {sale_id}: {str(sale_error)}")
+                    logger.error(f"💥 [BULK DELETE] Error type: {type(sale_error).__name__}")
+                    import traceback
+                    logger.error(f"💥 [BULK DELETE] Full traceback: {traceback.format_exc()}")
+                    failed_sales.append(sale_id)
+            
+            # Final summary
+            logger.info(f"🏁 [BULK DELETE] Bulk delete completed: {deleted_count} deleted, {len(failed_sales)} failed")
+            if failed_sales:
+                logger.error(f"❌ [BULK DELETE] Failed sales: {failed_sales}")
+            
+            return {
+                'success': True,
+                'deletedCount': deleted_count,
+                'failedSales': failed_sales
+            }
+            
+        except Exception as e:
+            logger.error(f"💥 [BULK DELETE] Critical error in bulk delete sales for user {user_id}: {str(e)}")
+            logger.error(f"💥 [BULK DELETE] Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"💥 [BULK DELETE] Full traceback: {traceback.format_exc()}")
+            raise
+    
+    def bulk_return_sales_to_inventory(self, user_id: str, sale_ids: List[str]) -> Dict[str, Any]:
+        """Return multiple sales to inventory by updating item status back to unlisted"""
+        logger.info(f"🔄 [BULK RETURN] Starting bulk return of {len(sale_ids)} sales to inventory for user {user_id}")
+        logger.info(f"🔄 [BULK RETURN] Sale IDs to process: {sale_ids}")
+        
+        try:
+            db = self._ensure_client()
+            returned_count = 0
+            failed_sales = []
+            
+            # Validate input
+            if not user_id:
+                raise ValueError("User ID is required")
+            if not sale_ids or not isinstance(sale_ids, list):
+                raise ValueError("Sale IDs must be a non-empty list")
+            
+            logger.info(f"✅ [BULK RETURN] Input validation passed")
+            
+            # Process each sale
+            for i, sale_id in enumerate(sale_ids, 1):
+                logger.info(f"🔄 [BULK RETURN] Processing sale {i}/{len(sale_ids)}: {sale_id}")
+                
+                try:
+                    # Step 1: Get sale data to get item_id
+                    logger.info(f"📋 [BULK RETURN] Step 1: Retrieving sale data for {sale_id}")
+                    sale_data = self.get_sale(user_id, sale_id)
+                    
+                    if not sale_data:
+                        logger.error(f"❌ [BULK RETURN] Sale {sale_id} not found for user {user_id}")
+                        failed_sales.append(sale_id)
+                        continue
+                    
+                    logger.info(f"✅ [BULK RETURN] Sale {sale_id} retrieved successfully")
+                    
+                    # Step 2: Extract and validate item_id
+                    item_id = sale_data.get('itemId')
+                    if not item_id:
+                        logger.error(f"❌ [BULK RETURN] Sale {sale_id} has no itemId field")
+                        failed_sales.append(sale_id)
+                        continue
+                    
+                    logger.info(f"📦 [BULK RETURN] Step 2: Item ID extracted: {item_id}")
+                    
+                    # Step 3: Verify item exists before updating
+                    logger.info(f"🔍 [BULK RETURN] Step 3: Verifying item {item_id} exists")
+                    item_data = self.get_item(user_id, item_id)
+                    
+                    if not item_data:
+                        logger.error(f"❌ [BULK RETURN] Item {item_id} not found for user {user_id} (orphaned sale)")
+                        failed_sales.append(sale_id)
+                        continue
+                    
+                    logger.info(f"✅ [BULK RETURN] Item {item_id} exists with current status: {item_data.get('status')}")
+                    
+                    # Step 4: Update item status to unlisted
+                    logger.info(f"🔄 [BULK RETURN] Step 4: Updating item {item_id} status to 'unlisted'")
+                    items_ref = self._get_user_collection(user_id, 'items')
+                    items_ref.document(item_id).update({
+                        'status': 'unlisted',
+                        'updated_at': datetime.utcnow()
+                    })
+                    
+                    logger.info(f"✅ [BULK RETURN] Item {item_id} status updated to 'unlisted'")
+                    
+                    # Step 5: Delete the sale record
+                    logger.info(f"🗑️ [BULK RETURN] Step 5: Deleting sale record {sale_id}")
+                    sales_ref = self._get_user_collection(user_id, 'sales')
+                    sales_ref.document(sale_id).delete()
+                    
+                    logger.info(f"✅ [BULK RETURN] Sale {sale_id} deleted successfully")
+                    
+                    returned_count += 1
+                    logger.info(f"🎉 [BULK RETURN] Successfully returned sale {sale_id} to inventory (item {item_id})")
+                    
+                except Exception as sale_error:
+                    logger.error(f"💥 [BULK RETURN] Failed to return sale {sale_id} to inventory: {str(sale_error)}")
+                    logger.error(f"💥 [BULK RETURN] Error type: {type(sale_error).__name__}")
+                    import traceback
+                    logger.error(f"💥 [BULK RETURN] Full traceback: {traceback.format_exc()}")
+                    failed_sales.append(sale_id)
+            
+            # Final summary
+            logger.info(f"🏁 [BULK RETURN] Bulk return completed: {returned_count} returned, {len(failed_sales)} failed")
+            if failed_sales:
+                logger.error(f"❌ [BULK RETURN] Failed sales: {failed_sales}")
+            
+            return {
+                'success': True,
+                'returnedCount': returned_count,
+                'failedSales': failed_sales
+            }
+            
+        except Exception as e:
+            logger.error(f"💥 [BULK RETURN] Critical error in bulk return sales to inventory for user {user_id}: {str(e)}")
+            logger.error(f"💥 [BULK RETURN] Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"💥 [BULK RETURN] Full traceback: {traceback.format_exc()}")
             raise
 
     # ==================== EXPENSES METHODS ====================
@@ -772,5 +965,9 @@ class FirebaseService:
             logger.error(f"Error getting receipt URL for expense {expense_id} for user {user_id}: {e}")
             raise
 
+
+    
+
+
 # Global instance
-firebase_service = FirebaseService() 
+firebase_service = FirebaseService()

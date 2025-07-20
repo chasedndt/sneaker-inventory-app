@@ -125,9 +125,23 @@ class DatabaseService:
     def get_sales_by_item(self, user_id: str, item_id: str) -> List[Dict[str, Any]]:
         """Get all sales for a specific item"""
         if self.use_firebase:
-            return self.firebase_service.get_sales_by_item(user_id, item_id)
+            return self.firebase_service.get_sales(user_id, {'itemId': item_id})
         else:
             return []
+    
+    def bulk_delete_sales(self, user_id: str, sale_ids: List[str]) -> Dict[str, Any]:
+        """Delete multiple sales and restore their items to active status"""
+        if self.use_firebase:
+            return self.firebase_service.bulk_delete_sales(user_id, sale_ids)
+        else:
+            raise NotImplementedError("SQLite bulk delete sales handled by existing endpoints")
+    
+    def bulk_return_sales_to_inventory(self, user_id: str, sale_ids: List[str]) -> Dict[str, Any]:
+        """Return multiple sales to inventory by updating item status back to active"""
+        if self.use_firebase:
+            return self.firebase_service.bulk_return_sales_to_inventory(user_id, sale_ids)
+        else:
+            raise NotImplementedError("SQLite bulk return sales handled by existing endpoints")
     
     # Expenses methods
     def get_expenses(self, user_id: str) -> List[Dict[str, Any]]:

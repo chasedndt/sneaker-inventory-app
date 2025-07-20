@@ -652,6 +652,43 @@ const SalesPage: React.FC = () => {
     setSaleToRestore(null);
   };
 
+  // Handle Bulk Delete Sales
+  const handleBulkDeleteSales = (saleIds: number[]) => {
+    setSalesToDelete(saleIds);
+    setDeleteConfirmOpen(true);
+  };
+
+  // Handle Bulk Return to Inventory
+  const handleBulkReturnToInventory = async (saleIds: number[]) => {
+    try {
+      setLoading(true);
+      console.log('🔄 Returning multiple sales to inventory:', saleIds);
+      
+      const result = await salesApi.returnSalesToInventory(saleIds);
+      
+      if (result.success) {
+        setSnackbar({
+          open: true,
+          message: `Successfully returned ${result.returnedCount} sales to inventory`,
+          severity: 'success'
+        });
+        
+        // Clear selection and refresh data
+        setSelectedSales([]);
+        await handleRefresh();
+      }
+    } catch (error: any) {
+      console.error('💥 Error returning sales to inventory:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to return sales to inventory: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Filter sales based on search query
   const filteredSales = useMemo(() => {
     if (!searchQuery) return sales;
@@ -886,34 +923,30 @@ const SalesPage: React.FC = () => {
                 </Button>
               </Grid>
               
-              {/* Show these buttons only when exactly one sale is selected */}
-              {selectedSales.length === 1 && (
-                <>
-                  <Grid item>
-                    <Button 
-                      variant="outlined" 
-                      color="primary"
-                      size="small"
-                      startIcon={<KeyboardReturnIcon />}
-                      onClick={() => handleRestoreToInventory(selectedSales[0])}
-                    >
-                      Return to Inventory
-                    </Button>
-                  </Grid>
-                  
-                  <Grid item>
-                    <Button 
-                      variant="outlined" 
-                      color="error"
-                      size="small"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => handleDeleteSale(selectedSales[0])}
-                    >
-                      Delete Sale
-                    </Button>
-                  </Grid>
-                </>
-              )}
+              {/* Bulk action buttons for multiple sales */}
+              <Grid item>
+                <Button 
+                  variant="outlined" 
+                  color="primary"
+                  size="small"
+                  startIcon={<KeyboardReturnIcon />}
+                  onClick={() => handleBulkReturnToInventory(selectedSales)}
+                >
+                  Return to Inventory ({selectedSales.length})
+                </Button>
+              </Grid>
+              
+              <Grid item>
+                <Button 
+                  variant="outlined" 
+                  color="error"
+                  size="small"
+                  startIcon={<DeleteIcon />}
+                  onClick={() => handleBulkDeleteSales(selectedSales)}
+                >
+                  Delete Sales ({selectedSales.length})
+                </Button>
+              </Grid>
             </>
           ) : (
             <>
@@ -930,29 +963,37 @@ const SalesPage: React.FC = () => {
               </Grid>
               
               <Grid item>
-                <Button 
-                  variant="outlined" 
-                  color="primary"
-                  size="small"
-                  startIcon={<KeyboardReturnIcon />}
-                  disabled={true}
-                  sx={{ opacity: 0.6 }}
-                >
-                  Return to Inventory
-                </Button>
+                <Tooltip title="Select sales to return items to inventory">
+                  <span>
+                    <Button 
+                      variant="outlined" 
+                      color="primary"
+                      size="small"
+                      startIcon={<KeyboardReturnIcon />}
+                      disabled={true}
+                      sx={{ opacity: 0.6 }}
+                    >
+                      Return to Inventory
+                    </Button>
+                  </span>
+                </Tooltip>
               </Grid>
               
               <Grid item>
-                <Button 
-                  variant="outlined" 
-                  color="error"
-                  size="small"
-                  startIcon={<DeleteIcon />}
-                  disabled={true}
-                  sx={{ opacity: 0.6 }}
-                >
-                  Delete Sale
-                </Button>
+                <Tooltip title="Select sales to delete">
+                  <span>
+                    <Button 
+                      variant="outlined" 
+                      color="error"
+                      size="small"
+                      startIcon={<DeleteIcon />}
+                      disabled={true}
+                      sx={{ opacity: 0.6 }}
+                    >
+                      Delete Sales
+                    </Button>
+                  </span>
+                </Tooltip>
               </Grid>
             </>
           )}

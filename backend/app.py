@@ -1073,6 +1073,97 @@ def create_app():
             logger.error(f"💥 Error fetching sales for item {item_id} for user {user_id}: {str(e)}")
             return jsonify({'error': str(e)}), 500
 
+    # BULK SALES OPERATIONS
+    # OPTIONS handler for bulk-delete (must be registered BEFORE the main route)
+    @app.route('/api/sales/bulk-delete', methods=['OPTIONS'])
+    def bulk_delete_sales_preflight():
+        logger.info("🔄 Handling OPTIONS preflight for /api/sales/bulk-delete")
+        response = current_app.response_class(status=200)
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+    
+    @app.route('/api/sales/bulk-delete', methods=['POST'])
+    @require_auth
+    def bulk_delete_sales(user_id):
+        """
+        Delete multiple sales and restore their items to active status.
+        """
+        
+        try:
+            data = request.get_json()
+            sale_ids = data.get('saleIds', [])
+            
+            if not sale_ids:
+                return jsonify({'error': 'No sale IDs provided'}), 400
+            
+            logger.info(f"🗑️ Bulk deleting {len(sale_ids)} sales for user {user_id}")
+            
+            # Use database service for bulk delete
+            result = database_service.bulk_delete_sales(user_id, sale_ids)
+            
+            if result.get('success'):
+                logger.info(f"✅ Bulk deleted {result.get('deletedCount')} sales for user {user_id}")
+                return jsonify({
+                    'success': True,
+                    'deletedCount': result.get('deletedCount'),
+                    'failedSales': result.get('failedSales', [])
+                }), 200
+            else:
+                logger.error(f"❌ Bulk delete failed for user {user_id}")
+                return jsonify({'error': 'Bulk delete operation failed'}), 500
+                
+        except Exception as e:
+            logger.error(f"💥 Error in bulk delete sales for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+    
+    # OPTIONS handler for bulk-return (must be registered BEFORE the main route)
+    @app.route('/api/sales/bulk-return', methods=['OPTIONS'])
+    def bulk_return_sales_preflight():
+        logger.info("🔄 Handling OPTIONS preflight for /api/sales/bulk-return")
+        response = current_app.response_class(status=200)
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:3000'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        return response
+    
+    @app.route('/api/sales/bulk-return', methods=['POST'])
+    @require_auth
+    def bulk_return_sales_to_inventory(user_id):
+        """
+        Return multiple sales to inventory by updating item status back to active.
+        """
+        
+        try:
+            data = request.get_json()
+            sale_ids = data.get('saleIds', [])
+            
+            if not sale_ids:
+                return jsonify({'error': 'No sale IDs provided'}), 400
+            
+            logger.info(f"🔄 Bulk returning {len(sale_ids)} sales to inventory for user {user_id}")
+            
+            # Use database service for bulk return
+            result = database_service.bulk_return_sales_to_inventory(user_id, sale_ids)
+            
+            if result.get('success'):
+                logger.info(f"✅ Bulk returned {result.get('returnedCount')} sales to inventory for user {user_id}")
+                return jsonify({
+                    'success': True,
+                    'returnedCount': result.get('returnedCount'),
+                    'failedSales': result.get('failedSales', [])
+                }), 200
+            else:
+                logger.error(f"❌ Bulk return failed for user {user_id}")
+                return jsonify({'error': 'Bulk return operation failed'}), 500
+                
+        except Exception as e:
+            logger.error(f"💥 Error in bulk return sales to inventory for user {user_id}: {str(e)}")
+            return jsonify({'error': str(e)}), 500
+
     # We'll handle OPTIONS requests at each specific endpoint instead of globally
     # This ensures that each endpoint can properly handle its own preflight requests
 
