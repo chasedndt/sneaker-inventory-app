@@ -40,7 +40,7 @@ interface DashboardDataHook extends DashboardData {
  */
 const useDashboardData = (): DashboardDataHook => {
   const { authReady, currentUser } = useAuthReady();
-  const settings = useSettings();
+  const { currency } = useSettings();
   const [items, setItems] = useState<Item[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -130,7 +130,7 @@ const useDashboardData = (): DashboardDataHook => {
     
     // Log only once at the start of the calculation and only if debug logging is enabled
     if (enableDebugLogging) {
-      console.log(`📊 [DASHBOARD] Calculating portfolio value for ${filteredItems.length} items in ${settings?.currency || 'default currency'}`);
+      console.log(`📊 [DASHBOARD] Calculating portfolio value for ${filteredItems.length} items in ${currency || 'USD'}`);
     }
     
     // Calculate current portfolio value with proper currency conversion
@@ -146,12 +146,12 @@ const useDashboardData = (): DashboardDataHook => {
       const originalMarketPrice = marketPrice;
       
       // Convert the market price to the display currency if needed
-      if (marketPriceCurrency !== settings.currency) {
+      if (marketPriceCurrency !== currency) {
         try {
-          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, settings.currency, enableDebugLogging);
+          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, currency || 'USD', enableDebugLogging);
           // Only log significant conversions or first/last items for reference when debug logging is enabled
           if (enableDebugLogging && (index === 0 || index === filteredItems.length-1 || Math.abs(marketPrice - originalMarketPrice) > 5)) {
-            console.log(`💱 Item ${item.productName}: ${marketPriceCurrency} ${originalMarketPrice.toFixed(2)} → ${settings.currency} ${marketPrice.toFixed(2)}`);
+            console.log(`💱 Item ${item.productName}: ${marketPriceCurrency} ${originalMarketPrice.toFixed(2)} → ${currency || 'USD'} ${marketPrice.toFixed(2)}`);
           }
         } catch (error) {
           console.error(`❌ Currency conversion error for ${item.productName}:`, error);
@@ -162,7 +162,7 @@ const useDashboardData = (): DashboardDataHook => {
     }, 0);
     
     if (enableDebugLogging) {
-      console.log(`📊 [DASHBOARD] Final portfolio value: ${currentValue.toFixed(2)} ${settings.currency}`);
+      console.log(`📊 [DASHBOARD] Final portfolio value: ${currentValue.toFixed(2)} ${currency || 'USD'}`);
     }
 
     

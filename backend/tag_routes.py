@@ -19,8 +19,15 @@ logger.setLevel(logging.DEBUG)
 # Create blueprint
 tag_routes = Blueprint('tag_routes', __name__)
 
-# Initialize database service
-database_service = DatabaseService()
+# Database service - lazy initialization
+database_service = None
+
+def get_database_service():
+    """Get or create the database service instance"""
+    global database_service
+    if database_service is None:
+        database_service = DatabaseService()
+    return database_service
 
 # Tags JSON file path (for fallback only)
 TAGS_FILE = os.path.join(os.path.dirname(__file__), 'instance', 'tags.json')
@@ -47,8 +54,8 @@ def get_tags(user_id):
     try:
         logger.info(f"📋 Fetching all tags for user {user_id}")
         
-        if database_service.is_using_firebase():
-            tags_list = database_service.get_tags(user_id)
+        if get_database_service().is_using_firebase():
+            tags_list = get_database_service().get_tags(user_id)
             logger.info(f"✅ Retrieved {len(tags_list)} tags from Firebase")
             return jsonify(tags_list), 200
         else:
@@ -81,9 +88,9 @@ def create_tag(user_id):
         name = data['name']
         color = data['color']
         
-        if database_service.is_using_firebase():
+        if get_database_service().is_using_firebase():
             # Check for duplicate name
-            existing_tag = database_service.get_tag_by_name(user_id, name)
+            existing_tag = get_database_service().get_tag_by_name(user_id, name)
             if existing_tag:
                 logger.error(f"❌ Tag with name '{name}' already exists")
                 return jsonify({'error': f"Tag with name '{name}' already exists"}), 400
@@ -93,7 +100,7 @@ def create_tag(user_id):
                 'name': name,
                 'color': color
             }
-            created_tag = database_service.create_tag(user_id, tag_data)
+            created_tag = get_database_service().create_tag(user_id, tag_data)
             
             logger.info(f"✅ Tag created with ID: {created_tag['id']}")
             return jsonify(created_tag), 201
@@ -144,15 +151,15 @@ def update_tag(user_id, tag_id):
         name = data['name']
         color = data['color']
         
-        if database_service.is_using_firebase():
+        if get_database_service().is_using_firebase():
             # Check if tag exists
-            existing_tag = database_service.get_tag(user_id, tag_id)
+            existing_tag = get_database_service().get_tag(user_id, tag_id)
             if not existing_tag:
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
             # Check for duplicate name (excluding current tag)
-            name_check = database_service.get_tag_by_name(user_id, name)
+            name_check = get_database_service().get_tag_by_name(user_id, name)
             if name_check and name_check['id'] != tag_id:
                 logger.error(f"❌ Tag with name '{name}' already exists")
                 return jsonify({'error': f"Tag with name '{name}' already exists"}), 400
@@ -162,7 +169,7 @@ def update_tag(user_id, tag_id):
                 'name': name,
                 'color': color
             }
-            updated_tag = database_service.update_tag(user_id, tag_id, update_data)
+            updated_tag = get_database_service().update_tag(user_id, tag_id, update_data)
             
             logger.info(f"✅ Tag {tag_id} updated successfully")
             return jsonify(updated_tag), 200
@@ -211,15 +218,15 @@ def delete_tag(user_id, tag_id):
     try:
         logger.info(f"🗑️ Deleting tag {tag_id} for user {user_id}")
         
-        if database_service.is_using_firebase():
+        if get_database_service().is_using_firebase():
             # Check if tag exists
-            existing_tag = database_service.get_tag(user_id, tag_id)
+            existing_tag = get_database_service().get_tag(user_id, tag_id)
             if not existing_tag:
                 logger.error(f"❌ Tag with ID {tag_id} not found")
                 return jsonify({'error': f"Tag with ID {tag_id} not found"}), 404
             
             # Delete tag
-            success = database_service.delete_tag(user_id, tag_id)
+            success = get_database_service().delete_tag(user_id, tag_id)
             
             if success:
                 logger.info(f"✅ Tag {tag_id} deleted successfully")
@@ -273,18 +280,15 @@ def apply_tags_to_item(user_id, item_id):
         
         tag_ids = data['tag_ids']
         
-        if database_service.is_using_firebase():
+        if get_database_service().is_using_firebase():
             # Get the item
-            item_data = database_service.get_item(user_id, str(item_id))
+            item_data = get_database_service().get_item(user_id, str(item_id))
             if not item_data:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f"Item with ID {item_id} not found"}), 404
             
             # Update item with new tags
-            update_data = {
-                'tags': tag_ids
-            }
-            updated_item = database_service.update_item(user_id, str(item_id), update_data)
+            updated_item = get_database_service().update_item_field(user_id, str(item_id), 'tags', tag_ids)
             
             logger.info(f"✅ Tags applied to item {item_id} successfully")
             return jsonify({'message': 'Tags applied successfully', 'item': updated_item}), 200
@@ -313,9 +317,9 @@ def remove_tags_from_item(user_id, item_id):
         
         tag_ids_to_remove = data['tag_ids']
         
-        if database_service.is_using_firebase():
+        if get_database_service().is_using_firebase():
             # Get the item
-            item_data = database_service.get_item(user_id, str(item_id))
+            item_data = get_database_service().get_item(user_id, str(item_id))
             if not item_data:
                 logger.error(f"❌ Item with ID {item_id} not found")
                 return jsonify({'error': f"Item with ID {item_id} not found"}), 404
@@ -325,10 +329,7 @@ def remove_tags_from_item(user_id, item_id):
             updated_tags = [tag_id for tag_id in current_tags if tag_id not in tag_ids_to_remove]
             
             # Update item with remaining tags
-            update_data = {
-                'tags': updated_tags
-            }
-            updated_item = database_service.update_item(user_id, str(item_id), update_data)
+            updated_item = get_database_service().update_item_field(user_id, str(item_id), 'tags', updated_tags)
             
             logger.info(f"✅ Tags removed from item {item_id} successfully")
             return jsonify({'message': 'Tags removed successfully', 'item': updated_item}), 200

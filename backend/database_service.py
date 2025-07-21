@@ -21,8 +21,8 @@ class DatabaseService:
         
         if self.use_firebase:
             try:
-                from firebase_service import FirebaseService
-                self.firebase_service = FirebaseService()
+                from services.firebase_db import get_firebase_db
+                self.firebase_service = get_firebase_db()
                 logger.info("Database service initialized with Firebase")
             except ImportError as e:
                 logger.error(f"Firebase service not available: {e}")

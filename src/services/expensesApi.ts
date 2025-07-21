@@ -66,6 +66,8 @@ export const expensesApi = {
         throw new Error('Authentication required. Please log in again.');
       }
       console.log('➡️ [getExpenses] Sending headers:', headers);
+      console.log('🔍 [getExpenses] Request URL:', url);
+      
       // Make the request
       const response = await fetch(url, {
         method: 'GET',
@@ -73,18 +75,37 @@ export const expensesApi = {
         headers,
       });
       
+      console.log('📡 [getExpenses] Response status:', response.status);
+      console.log('📡 [getExpenses] Response headers:', Object.fromEntries(response.headers.entries()));
+      
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ [getExpenses] Error response body:', errorText);
+        
         // Only use mock data if we get a 404 (endpoint not found)
         if (response.status === 404) {
           console.warn('⚠️ Expenses endpoint not found, using mock data');
           return getMockExpenses();
         }
         
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
       
       const expenses = await response.json();
       console.log(`✅ Received ${expenses.length} expenses from API`);
+      
+      // Add detailed logging if no expenses are returned
+      if (expenses.length === 0) {
+        console.warn('⚠️ [getExpenses] No expenses returned from API!');
+        console.log('🔍 [getExpenses] Debug info:');
+        console.log('  - URL used:', url);
+        console.log('  - Auth headers sent:', headers);
+        console.log('  - Date filters:', { startDate, endDate });
+        console.log('  - Response status:', response.status);
+      } else {
+        console.log('📋 [getExpenses] Sample expense:', expenses[0]);
+      }
+      
       return expenses;
     } catch (error: any) {
       console.error('💥 Error in getExpenses:', error);

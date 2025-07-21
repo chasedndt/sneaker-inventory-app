@@ -94,7 +94,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
   const enableDebugLogging = process.env.NODE_ENV !== 'production'; // Control debug logging
   const theme = useTheme();
   const { money } = useFormat(); // Use the formatting hook
-  const settings = useSettings(); // Get currency settings at component level
+  const { currency } = useSettings(); // Get currency settings at component level
   const [groupedItems, setGroupedItems] = useState<ItemWithImage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -204,7 +204,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       // Debug each item's market price only when debugging is enabled
       if (enableDebugLogging) {
         limitedItems.forEach(item => {
-          log(`✅ [Dashboard Card] ${item.productName}: ${settings.currency} ${item.marketPrice}`);
+          log(`✅ [Dashboard Card] ${item.productName}: ${currency} ${item.marketPrice}`);
         });
       }
       
@@ -252,7 +252,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
       setErrorMessage('Error processing inventory items');
       setIsLoading(false);
     }
-  }, [items, currentUser, getAuthToken, apiBaseUrl, settings]);
+  }, [items, currentUser, getAuthToken, apiBaseUrl, currency]);
 
   const showFreeTierLimitWarning = currentAccountTier === 'free' && items.length >= 30;
 
@@ -481,7 +481,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(effectiveMarketPrice, settings.currency)}
+                          {money(effectiveMarketPrice, currency)}
                         </Typography>
                         
                         <Tooltip
@@ -489,7 +489,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
                                 {/* Use consistent format for all items, using our calculated unrealizedProfit */}
-                                Unrealized Profit: {money(unrealizedProfit, settings.currency)}
+                                Unrealized Profit: {money(unrealizedProfit, currency)}
                               </Typography>
                             </Box>
                           }

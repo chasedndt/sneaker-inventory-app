@@ -30,6 +30,7 @@ import { ExpenseFormData, Expense, ExpenseType } from '../../models/expenses';
 import { CURRENCY_SYMBOLS } from '../../utils/currencyUtils';
 import { expensesApi } from '../../services/expensesApi';
 import { useAuth } from '../../contexts/AuthContext'; // Import auth context
+import { useSettings } from '../../contexts/SettingsContext'; // Import settings context
 
 interface ExpenseEntryFormProps {
   initialExpense?: Expense;
@@ -45,11 +46,12 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   isEditing = false,
 }) => {
   const { currentUser } = useAuth(); // Get current user
+  const { currency } = useSettings(); // Get user settings for currency
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([]);
   const [formData, setFormData] = useState<ExpenseFormData>({
     expenseType: '',
     amount: '',
-    currency: '$',
+    currency: currency || 'USD', // Use user's preferred currency or default to USD
     expenseDate: dayjs(),
     vendor: '',
     notes: '',
@@ -100,6 +102,16 @@ const ExpenseEntryForm: React.FC<ExpenseEntryFormProps> = ({
   }, [currentUser]);
 
   // src/components/Expenses/ExpenseEntryForm.tsx (continued)
+  // Update currency when settings change (for new expenses)
+  useEffect(() => {
+    if (!initialExpense && currency) {
+      setFormData(prev => ({
+        ...prev,
+        currency: currency
+      }));
+    }
+  }, [currency, initialExpense]);
+
   // Initialize form with existing expense data if editing
   useEffect(() => {
     if (initialExpense) {
