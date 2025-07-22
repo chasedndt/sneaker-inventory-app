@@ -30,12 +30,15 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 export const expensesApi = {
   /**
-   * Get all expenses
-   * @param startDate Optional start date filter
-   * @param endDate Optional end date filter
-   * @returns Promise<Expense[]> List of expenses
+   * Get all expenses with backend currency conversion
+   * @param options Optional parameters including date filters and display currency
+   * @returns Promise<Expense[]> List of expenses with backend-converted amounts
    */
-  getExpenses: async (startDate?: Date, endDate?: Date): Promise<Expense[]> => {
+  getExpenses: async (options?: { 
+    startDate?: Date, 
+    endDate?: Date, 
+    display_currency?: string 
+  }): Promise<Expense[]> => {
     try {
       console.log('🔄 Fetching expenses from API...');
       
@@ -43,12 +46,17 @@ export const expensesApi = {
       let url = `${API_BASE_URL}/expenses`;
       const params = new URLSearchParams();
       
-      if (startDate) {
-        params.append('start_date', startDate.toISOString());
+      if (options?.startDate) {
+        params.append('start_date', options.startDate.toISOString());
       }
       
-      if (endDate) {
-        params.append('end_date', endDate.toISOString());
+      if (options?.endDate) {
+        params.append('end_date', options.endDate.toISOString());
+      }
+      
+      if (options?.display_currency) {
+        params.append('display_currency', options.display_currency);
+        console.log('💱 [getExpenses] Requesting backend conversion to:', options.display_currency);
       }
       
       // Append query parameters if any exist
@@ -100,7 +108,7 @@ export const expensesApi = {
         console.log('🔍 [getExpenses] Debug info:');
         console.log('  - URL used:', url);
         console.log('  - Auth headers sent:', headers);
-        console.log('  - Date filters:', { startDate, endDate });
+        console.log('  - Date filters:', { startDate: options?.startDate, endDate: options?.endDate });
         console.log('  - Response status:', response.status);
       } else {
         console.log('📋 [getExpenses] Sample expense:', expenses[0]);

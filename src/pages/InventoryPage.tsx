@@ -1202,13 +1202,47 @@ const InventoryPage: React.FC = () => {
 
   // Calculate KPI metrics with 'unlisted' status
   const kpiMetrics = useMemo(() => {
+    console.log(`🏪 INVENTORY PAGE KPI CALCULATION START`);
+    console.log(`📊 Processing ${filteredItems.length} filtered items`);
+    console.log(`💱 Display currency: ${defaultCurrency}`);
+    
     const totalItems = filteredItems.length;
     const unlistedItems = filteredItems.filter(item => item.status === 'unlisted').length;
     const listedItems = filteredItems.filter(item => item.status === 'listed').length;
     const soldItems = filteredItems.filter(item => item.status === 'sold').length;
     
-    const totalPurchaseValue = filteredItems.reduce((sum, item) => sum + item.purchasePrice, 0);
-    const totalShippingValue = filteredItems.reduce((sum, item) => sum + (item.shippingPrice || 0), 0);
+    console.log(`📈 Item counts: Total=${totalItems}, Unlisted=${unlistedItems}, Listed=${listedItems}, Sold=${soldItems}`);
+    
+    // Convert all purchase prices to the current currency before summing
+    const totalPurchaseValue = filteredItems.reduce((sum, item, index) => {
+      console.log(`\n📦 INVENTORY ITEM ${index + 1}/${filteredItems.length}: ${item.productName} (ID: ${item.id})`);
+      
+      // Get purchase price and its currency
+      const purchasePrice = item.purchasePrice;
+      const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
+      
+      console.log(`💰 RAW PURCHASE: ${purchasePrice} ${purchaseCurrency}`);
+      
+      // Convert to display currency
+      const convertedPrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
+      
+      console.log(`💱 CONVERTED PURCHASE: ${convertedPrice} ${defaultCurrency}`);
+      console.log(`📊 RUNNING PURCHASE TOTAL: ${sum + convertedPrice}`);
+      
+      return sum + convertedPrice;
+    }, 0);
+    // Convert all shipping prices to the current currency before summing
+    const totalShippingValue = filteredItems.reduce((sum, item) => {
+      // Get shipping price and its currency
+      const shippingPrice = item.shippingPrice || 0;
+      if (shippingPrice === 0) return sum;
+      
+      const shippingCurrency = item.purchaseDetails?.shippingCurrency || item.purchaseDetails?.purchaseCurrency || 'GBP';
+      
+      // Convert to display currency
+      const convertedPrice = currencyConverter(shippingPrice, shippingCurrency, defaultCurrency || 'GBP');
+      return sum + convertedPrice;
+    }, 0);
     // Convert all market prices to the current currency before summing
     const totalMarketValue = filteredItems.reduce((sum, item) => {
       // If item has marketPriceCurrency, convert to current currency

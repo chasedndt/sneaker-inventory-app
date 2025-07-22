@@ -146,42 +146,46 @@ export const normalizeCurrencyCode = (currency: string): string => {
  * @returns Converted amount
  */
 export const currencyConverter = (amount: number, fromCurrency: string, toCurrency: string, enableDebugLogging: boolean = false): number => {
-  // Handle invalid inputs
-  if (isNaN(amount)) {
+  // 🔍 COMPREHENSIVE FRONTEND LOGGING FOR DEBUGGING
+  console.log(`🔄 FRONTEND CURRENCY CONVERSION START: ${amount} ${fromCurrency} → ${toCurrency}`);
+  
+  // Handle zero amounts
+  if (amount === 0) {
+    console.log(`💰 FRONTEND CONVERSION RESULT: 0.00 (amount was zero)`);
     return 0;
   }
-  
-  // Normalize both currencies
+
+  // Normalize currency codes (convert symbols to codes)
   const normalizedFromCurrency = normalizeCurrencyCode(fromCurrency);
   const normalizedToCurrency = normalizeCurrencyCode(toCurrency);
   
-  // If same currency after normalization, return amount as is
+  console.log(`📝 FRONTEND NORMALIZED: ${fromCurrency} → ${normalizedFromCurrency}, ${toCurrency} → ${normalizedToCurrency}`);
+
+  // If currencies are the same, no conversion needed
   if (normalizedFromCurrency === normalizedToCurrency) {
+    console.log(`💰 FRONTEND CONVERSION RESULT: ${amount} (same currency, no conversion)`);
     return amount;
   }
-  
-  // Check if currencies are supported
+
+  // Check if we have exchange rates for both currencies
   if (!EXCHANGE_RATES[normalizedFromCurrency] || !EXCHANGE_RATES[normalizedToCurrency]) {
-    // Log once but don't spam
-    console.warn(`Unsupported currency: ${normalizedFromCurrency} or ${normalizedToCurrency}, using original amount`);
-    return amount;
+    console.warn(`⚠️ FRONTEND Missing exchange rate for ${normalizedFromCurrency} or ${normalizedToCurrency}`);
+    console.log(`💰 FRONTEND CONVERSION RESULT: ${amount} (missing rates, returning original)`);
+    return amount; // Return original amount if we can't convert
   }
+
+  // Convert to USD first, then to target currency
+  const fromRate = EXCHANGE_RATES[normalizedFromCurrency];
+  const toRate = EXCHANGE_RATES[normalizedToCurrency];
+  const amountInUSD = amount / fromRate;
+  const result = amountInUSD * toRate;
   
-  try {
-    // Convert to USD first (as base currency)
-    const amountInUSD = amount / EXCHANGE_RATES[normalizedFromCurrency];
-    
-    // Then convert from USD to target currency
-    const result = amountInUSD * EXCHANGE_RATES[normalizedToCurrency];
-    
-    if (enableDebugLogging) {
-      console.log(`💱 [CURRENCY CONVERSION] ${amount} ${normalizedFromCurrency} = ${result.toFixed(2)} ${normalizedToCurrency} (Rate: ${formatRate(EXCHANGE_RATES[normalizedToCurrency]/EXCHANGE_RATES[normalizedFromCurrency])})`);    
-    }
-    return result;
-  } catch (error) {
-    console.error('Currency conversion error:', error);
-    return amount; // Return original amount as fallback
-  }
+  console.log(`📊 FRONTEND RATES: ${normalizedFromCurrency}=${fromRate}, ${normalizedToCurrency}=${toRate}`);
+  console.log(`🔢 FRONTEND CALCULATION: ${amount} ÷ ${fromRate} × ${toRate} = ${result.toFixed(2)}`);
+  console.log(`💰 FRONTEND CONVERSION RESULT: ${amount} ${fromCurrency} → ${result.toFixed(2)} ${toCurrency}`);
+  console.log(`🔄 FRONTEND CURRENCY CONVERSION END\n`);
+
+  return result;
 };
 
 /**

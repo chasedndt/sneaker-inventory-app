@@ -113,7 +113,21 @@ const ExpensesTable: React.FC<ExpensesTableProps> = ({
       label: 'Amount',
       minWidth: 100,
       align: 'right',
-      format: (value, row) => formatCurrency(value, row?.currency || 'USD'), // Use passed formatCurrency
+      format: (value, row) => {
+        // Use backend-converted amount if available (single source of truth)
+        // This ensures consistency with KPI metrics and Dashboard
+        const displayAmount = (row as any)?.convertedAmount ?? value;
+        const displayCurrency = (row as any)?.displayCurrency ?? row?.currency ?? 'USD';
+        
+        // Use pure formatting without conversion since backend already converted the amount
+        // This prevents double conversion that was causing $6.32 -> $6.72 discrepancy
+        return new Intl.NumberFormat('en-US', {
+          style: 'currency',
+          currency: displayCurrency,
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        }).format(displayAmount);
+      },
       sortable: true
     },
     {

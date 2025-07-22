@@ -12,6 +12,11 @@ export interface Expense {
     recurrencePeriod?: string;
     created_at?: string;
     updated_at?: string;
+    // Backend currency conversion fields (added when display_currency is requested)
+    convertedAmount?: number;    // Amount converted to display currency by backend
+    originalAmount?: number;     // Original amount for reference
+    originalCurrency?: string;   // Original currency for reference
+    displayCurrency?: string;    // Display currency used for conversion
   }
   
   export interface ExpenseSummary {

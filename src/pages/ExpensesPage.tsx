@@ -50,9 +50,16 @@ const ExpensesPage: React.FC = () => {
   const { currency: displayCurrency, convertCurrency, formatCurrency } = useSettings(); // Get currency settings
   const { getAuthToken } = useAuth(); // Get auth token method
   
+  // Enhanced expense interface with pre-converted amounts
+  interface ExpenseWithConversion extends Expense {
+    convertedAmount: number; // Amount converted to display currency
+    originalAmount: number;  // Original amount for reference
+    originalCurrency: string; // Original currency for reference
+  }
+  
   // State for expenses
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [filteredExpenses, setFilteredExpenses] = useState<Expense[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseWithConversion[]>([]);
+  const [filteredExpenses, setFilteredExpenses] = useState<ExpenseWithConversion[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -325,11 +332,11 @@ const ExpensesPage: React.FC = () => {
 
   // Function to apply filters to expenses
   const applyFilters = (
-    allExpenses: Expense[], 
+    allExpenses: ExpenseWithConversion[], 
     currentFilters: ExpenseFiltersType,
     convertCurrencyFunc: (amount: number, fromCurrency: string) => number
-  ): Expense[] => {
-    return allExpenses.filter(expense => {
+  ): ExpenseWithConversion[] => {
+    return allExpenses.filter((expense: ExpenseWithConversion) => {
       let passes = true;
       
       // Date range filter
@@ -345,13 +352,11 @@ const ExpensesPage: React.FC = () => {
         passes = false;
       }
 
-      // Amount range filter - convert to display currency before comparing
-      const expenseAmountInDisplayCurrency = convertCurrencyFunc(expense.amount, expense.currency || 'USD');
-
-      if (currentFilters.minAmount && expenseAmountInDisplayCurrency < Number(currentFilters.minAmount)) {
+      // Amount range filter - use pre-converted amount (no additional conversion needed)
+      if (currentFilters.minAmount && expense.convertedAmount < Number(currentFilters.minAmount)) {
         passes = false;
       }
-      if (currentFilters.maxAmount && expenseAmountInDisplayCurrency > Number(currentFilters.maxAmount)) {
+      if (currentFilters.maxAmount && expense.convertedAmount > Number(currentFilters.maxAmount)) {
         passes = false;
       }
       
@@ -521,24 +526,37 @@ const ExpensesPage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      // Get expenses from API
-      const fetchedExpenses = await expensesApi.getExpenses();
-      setExpenses(fetchedExpenses);
-      // Apply current filters to the newly fetched expenses
-      const currentlyFiltered = applyFilters(fetchedExpenses, filters, convertCurrency);
-      setFilteredExpenses(currentlyFiltered);
+      // Get expenses from API with backend currency conversion
+      // Pass display currency to backend so it returns pre-converted values
+      const fetchedExpenses = await expensesApi.getExpenses({ display_currency: displayCurrency });
+      
+      // Backend now returns expenses with convertedAmount, originalAmount, and originalCurrency
+      // No frontend conversion needed - backend is the single source of truth
+      const expensesWithConversion: ExpenseWithConversion[] = fetchedExpenses.map(expense => ({
+        ...expense,
+        convertedAmount: expense.convertedAmount || expense.amount, // Use backend conversion
+        originalAmount: expense.originalAmount || expense.amount,
+        originalCurrency: expense.originalCurrency || expense.currency || 'USD'
+      }));
+      
+      console.log('💱 EXPENSE CONVERSION DEBUG:', {
+        displayCurrency,
+        expenseCount: expensesWithConversion.length,
+        conversions: expensesWithConversion.map(exp => ({
+          id: exp.id,
+          original: `${exp.originalAmount} ${exp.originalCurrency}`,
+          converted: `${exp.convertedAmount.toFixed(2)} ${displayCurrency}`,
+          vendor: exp.vendor
+        }))
+      });
 
-      // Calculate expense summary from all fetched (unfiltered) expenses
-      const totalAmount = fetchedExpenses.reduce((sum, expense) => {
-        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD');
-        return sum + convertedAmount;
-      }, 0);
-      const expenseCount = fetchedExpenses.length;
+      // Calculate expense summary using pre-converted amounts (no additional conversions)
+      const totalAmount = expensesWithConversion.reduce((sum, expense) => sum + expense.convertedAmount, 0);
+      const expenseCount = expensesWithConversion.length;
 
-      const expenseByType = fetchedExpenses.reduce((groups, expense) => {
+      const expenseByType = expensesWithConversion.reduce((groups, expense) => {
         const type = expense.expenseType || 'Other';
-        const convertedAmount = convertCurrency(expense.amount, expense.currency || 'USD');
-        groups[type] = (groups[type] || 0) + convertedAmount;
+        groups[type] = (groups[type] || 0) + expense.convertedAmount;
         return groups;
       }, {} as Record<string, number>);
 
@@ -551,13 +569,19 @@ const ExpensesPage: React.FC = () => {
         monthOverMonthChange,
       });
 
+      // Set the converted expenses in state
+      setExpenses(expensesWithConversion);
+      // Apply current filters to the newly fetched expenses with conversions
+      const currentlyFiltered = applyFilters(expensesWithConversion, filters, convertCurrency);
+      setFilteredExpenses(currentlyFiltered);
+
     } catch (error: any) {
       console.error('Failed to load expenses:', error);
       setError(error.message || 'Failed to load expenses');
     } finally {
       setLoading(false);
     }
-  }, [currentUser, authReady, filters, convertCurrency, setExpenses, setFilteredExpenses, setExpenseSummary, setLoading, setError, setSnackbar]); // Updated dependencies
+  }, [currentUser, authReady, filters, convertCurrency]); // Updated dependencies
 
   useEffect(() => {
     loadExpenses();

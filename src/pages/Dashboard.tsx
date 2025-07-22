@@ -33,6 +33,7 @@ import { salesApi, Sale } from '../services/salesApi';
 import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
 import { currencyConverter } from '../utils/currencyUtils';
+import useDashboardData from '../hooks/useDashboardData';
 import PortfolioValue from '../components/PortfolioValue';
 import ReportsSection from '../components/ReportsSection';
 import AddItemModal from '../components/AddItemModal';
@@ -116,12 +117,18 @@ const Dashboard: React.FC = () => {
     console.log('[AuthReady Dashboard] authReady=', authReady, '| currentUser.id=', currentUser?.uid);
   }, [authReady, currentUser]);
   const settings = useSettings(); // Get the user's currency settings
-  const [items, setItems] = useState<Item[]>([]);
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]); 
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  // Use the dashboard data hook with proper currency conversion
+  const {
+    items,
+    sales,
+    expenses,
+    loading,
+    refreshing,
+    error,
+    fetchData,
+    calculatePortfolioData
+  } = useDashboardData();
   const [startDate, setStartDate] = useState<Dayjs | null>(null);
   const [endDate, setEndDate] = useState<Dayjs | null>(null);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
@@ -250,183 +257,7 @@ const Dashboard: React.FC = () => {
     checkBackend();
   }, [checkBackend]);
 
-  // Fetch data from the API - now using the enhanced API that correctly handles currency conversion
-  const fetchData = useCallback(async (showRefreshing = false) => {
-    console.log('[Dashboard.fetchData START]', {
-      showRefreshing,
-      backendStatus,
-      authLoading,
-      authReady,
-      currentUserUid: currentUser?.uid
-    });
-    console.log('[Dashboard] fetchData called. showRefreshing:', showRefreshing, '| currentUser:', currentUser);
-    if (authLoading) {
-      console.log('[Dashboard] Auth is still loading, aborting fetchData.');
-      return;
-    }
-    try {
-      if (backendStatus === 'down') {
-        console.log('[Dashboard.fetchData EARLY EXIT] backendStatus=down');
-        setError('Backend is down. Please try again later.');
-        setLoading(false);
-        setRefreshing(false);
-        return;
-      }
-      if (!currentUser) {
-        console.warn('[Dashboard] User not authenticated, cannot fetch dashboard data');
-        setError('Please log in to view your dashboard (user not authenticated).');
-        setLoading(false);
-        return;
-      }
-      if (showRefreshing) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-      
-      console.log('🔄 Fetching inventory items, sales, and expenses data for authenticated user...');
-      
-      // IMPORTANT FIX: Use the api directly, NOT inside the callback (React Hooks rule violation)
-      // This is EXACTLY what the inventory page uses
-      const response = await api.getItems();
-      
-      // ✅ CRITICAL: Do NOT manually convert currencies - the enhanced API already did that!
-      // This fixes the difference between dashboard and inventory page values
-      const processedItems = response.map((item: Item) => {
-        // Get raw values from item (with type safety)
-        const marketPrice = item.marketPrice;
-        const purchasePrice = item.purchasePrice;
-        const status = item.status;
-        // Use type assertion for properties that might not be in the interface
-        const marketPriceCurrency = (item as any).marketPriceCurrency;
-        const purchaseCurrency = (item as any).purchaseCurrency;
-        
-        // Specifically log Coach bag item details to debug the $0 issue
-        if (item.productName && item.productName.includes('Coach') && item.productName.includes('Tabby')) {
-          console.log('🛍️ [COACH BAG DEBUG]', {
-            name: item.productName,
-            rawMarketPrice: item.marketPrice,
-            marketPriceType: typeof item.marketPrice,
-            convertedMarketPrice: marketPrice,
-            marketPriceCurrency,
-            purchasePrice,
-            purchaseCurrency,
-            status
-          });
-        }
-        
-        // Only log detailed data in development mode
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(`🔍 [DASHBOARD] Processing ${item.productName}`);
-        }
-        
-        // Fix for Coach bag and similar items that might have string or undefined market prices
-        let fixedMarketPrice = marketPrice;
-        let useMarketPrice = true;
-        
-        // If market price is undefined, null, or not a number, try to parse it or use fallbacks
-        if (typeof fixedMarketPrice !== 'number' || isNaN(fixedMarketPrice)) {
-          // Try to parse it if it's a string (sometimes API returns price as string)
-          if (typeof fixedMarketPrice === 'string') {
-            const parsed = parseFloat(fixedMarketPrice);
-            if (!isNaN(parsed)) {
-              fixedMarketPrice = parsed;
-            } else {
-              useMarketPrice = false;
-            }
-          } else {
-            // If not a string or parsing failed, flag to use purchasePrice as fallback
-            useMarketPrice = false;
-          }
-        }
-        
-        return {
-          ...item,
-          // Use the fixed market price value or fallback to purchase price
-          marketPrice: useMarketPrice && typeof fixedMarketPrice === 'number' ? fixedMarketPrice : purchasePrice,
-          purchasePrice: purchasePrice,
-          // Calculate profit using the already-converted values
-          estimatedProfit: useMarketPrice && typeof fixedMarketPrice === 'number' && typeof purchasePrice === 'number' ? 
-            (fixedMarketPrice - purchasePrice) : 0
-        };
-      });
-      
-      // Log detailed comparison for a "sanity check"
-      console.log('[Dashboard Health] backendStatus=', backendStatus);
-      console.log('🧪 [DASHBOARD] Item values from enhanced API:');
-      processedItems.forEach((item: Item) => {
-        console.log(`${item.productName}: ${settings.currency} ${item.marketPrice?.toFixed(2)} ` +
-          `(Purchase: ${settings.currency} ${item.purchasePrice?.toFixed(2)})`);
-      });
-      
-      // Fetch sales data
-      const salesData = await salesApi.getSales();
-      if (currentUser) {
-        console.log(`✅ Received ${salesData.length} sales records from API for user ${currentUser.uid}`);
-      }
-      
-      // Debug sales data
-      console.log('📊 Sales data:', salesData);
-      
-      // Fetch expenses data
-      const expensesData = await expensesApi.getExpenses();
-      if (currentUser) {
-        console.log(`✅ Received ${expensesData.length} expense records from API for user ${currentUser.uid}`);
-      }
-      
-      // Debug expenses data
-      console.log('💰 Expenses data:', expensesData);
-      
-      // Filter active items (not sold) for portfolio calculations
-      const activeItems = processedItems.filter((item: Item) => item.status !== 'sold');
-      console.log(`💼 Active inventory items: ${activeItems.length}`);
-      
-      // For dashboard display, show recent items including sold ones (limited to last 10)
-      const recentItems = processedItems
-        .sort((a: any, b: any) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime())
-        .slice(0, 10) as Item[];
-      console.log(`📋 Recent items for dashboard display: ${recentItems.length}`);
-      
-      // Update state with all datasets
-      setItems(recentItems); // Show recent items including sold ones
-      setSales(salesData);
-      setExpenses(expensesData);
-      setError(null);
-      setLoading(false);
-      setRefreshing(false);
-      
-      // Show success message if refreshing
-      if (showRefreshing) {
-        setSnackbar({
-          open: true,
-          message: 'Data refreshed successfully!',
-          severity: 'success'
-        });
-      }
-      
-      setBackendStatus('ok');
-      
-          console.log('[Dashboard.fetchData SUCCESS]');
-    } catch (error: any) {
-      console.error('[Dashboard.fetchData ERROR]', error);
-      setError('Failed to load data. Please try again.');
-      setLoading(false);
-      setRefreshing(false);
-      // Fix error type - use a valid value for setBackendStatus
-      setBackendStatus('down');
-      setBackendError(error.message || 'Unknown error');
-      
-      if (showRefreshing) {
-        setSnackbar({
-          open: true,
-          message: `Error refreshing data: ${error.message || 'Unknown error'}`,
-          severity: 'error'
-        });
-      }
-    } finally {
-      console.log('[Dashboard.fetchData FINALLY] loading=', loading, '| refreshing=', refreshing);
-    }
-  }, [api, salesApi, expensesApi, getAuthToken, currentUser, backendStatus, authLoading, authReady, settings.currency]);
+  // Data fetching is now handled by the useDashboardData hook
 
   // Backend health check on mount and when user logs in/out
   useEffect(() => {
@@ -445,7 +276,7 @@ const Dashboard: React.FC = () => {
     if (!authLoading && backendStatus === 'ok' && currentUser) {
       fetchData();
     }
-  }, [authLoading, backendStatus, currentUser]);
+  }, [authLoading, backendStatus, currentUser, fetchData]);
 
   // Update date range when time filter changes
   useEffect(() => {
@@ -516,17 +347,44 @@ const Dashboard: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
-  // Calculate portfolio stats including historical data
+  // Calculate portfolio stats including historical data using properly converted currency data
   const calculatePortfolioStats = useCallback(() => {
-    // Active items are always calculated on the entire inventory,
-    // regardless of date filters - this is the entire portfolio value
-    const activeItems = items.filter(item => item.status !== 'sold');
+    // Get the current date range for filtering
+    const now = dayjs();
+    let calculatedStartDate: Dayjs;
     
-    // Enable detailed logging in development for debugging
-    const enableLogging = process.env.NODE_ENV !== 'production';
+    switch (timeRange) {
+      case '24H':
+        calculatedStartDate = now.subtract(1, 'day');
+        break;
+      case '1W':
+        calculatedStartDate = now.subtract(1, 'week');
+        break;
+      case '1M':
+        calculatedStartDate = now.subtract(1, 'month');
+        break;
+      case '3M':
+        calculatedStartDate = now.subtract(3, 'month');
+        break;
+      case '6M':
+        calculatedStartDate = now.subtract(6, 'month');
+        break;
+      case '1Y':
+        calculatedStartDate = now.subtract(1, 'year');
+        break;
+      case 'ALL':
+      default:
+        calculatedStartDate = dayjs('2020-01-01'); // Far back date for "ALL"
+        break;
+    }
     
-    // Fix: Handle empty portfolio gracefully
-    if (activeItems.length === 0) {
+    // Use the properly converted data from useDashboardData hook
+    // This ensures all currency conversion is handled correctly
+    const portfolioData = calculatePortfolioData(startDate || calculatedStartDate, endDate || now);
+    const currentValue = portfolioData.currentValue;
+    
+    // Handle empty portfolio gracefully
+    if (currentValue === 0) {
       return {
         currentValue: 0,
         valueChange: 0,
@@ -537,19 +395,6 @@ const Dashboard: React.FC = () => {
         ]
       };
     }
-    
-    // Calculate current portfolio value
-    let currentValue = activeItems.reduce((sum, item) => {
-      // Get the market price, defaulting to purchase price if unavailable
-      // Use the enhanced API's already converted values (don't convert again)
-      const itemValue = item.marketPrice || item.purchasePrice || 0;
-      
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`Portfolio item ${item.productName}: value = ${itemValue} ${settings.currency}`);
-      }
-      
-      return sum + itemValue;
-    }, 0);
     
     // For historical comparison, determine reasonable previous value based on time period
     let previousValue = currentValue;
@@ -679,7 +524,7 @@ const Dashboard: React.FC = () => {
         value: Number.isFinite(point.value) ? point.value : 0
       }))
     };
-  }, [items, timeRange, settings.currency]);
+  }, [calculatePortfolioData, startDate, endDate, timeRange]);
 
   // Calculate and update portfolio statistics whenever items change
   useEffect(() => {
@@ -689,7 +534,7 @@ const Dashboard: React.FC = () => {
       setPortfolioStats(stats);
       console.log('Updated portfolio stats:', stats);
     }
-  }, [items, timeRange, calculatePortfolioStats, loading]);
+  }, [items, timeRange, startDate, endDate, loading]); // Removed calculatePortfolioStats to prevent excessive re-renders
 
   // Show auth loading state
   if (authLoading) {
@@ -778,7 +623,6 @@ const Dashboard: React.FC = () => {
         <Alert 
           severity="error" 
           sx={{ mb: 3 }}
-          onClose={() => setError(null)}
         >
           {error}
         </Alert>

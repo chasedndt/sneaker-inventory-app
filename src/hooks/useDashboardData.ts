@@ -13,7 +13,7 @@ import { currencyConverter } from '../utils/currencyUtils';
 import { InventoryItem } from '../pages/InventoryPage';
 
 // Control debug logging globally
-const enableDebugLogging = false;
+const enableDebugLogging = true;
 
 interface DashboardData {
   items: Item[];
@@ -33,6 +33,12 @@ interface FilteredData {
 interface DashboardDataHook extends DashboardData {
   fetchData: (showRefreshing?: boolean) => Promise<void>;
   getFilteredData: (startDate: Dayjs | null, endDate: Dayjs | null) => FilteredData;
+  calculatePortfolioData: (startDate: Dayjs | null, endDate: Dayjs | null) => {
+    currentValue: number;
+    expensesTotal: number;
+    salesTotal: number;
+    profit: number;
+  };
 }
 
 /**
@@ -166,11 +172,51 @@ const useDashboardData = (): DashboardDataHook => {
     }
 
     
-    // Calculate expenses total
-    const expensesTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    // Calculate expenses total with currency conversion
+    const expensesTotal = filteredExpenses.reduce((sum, expense) => {
+      let expenseAmount = expense.amount;
+      const expenseCurrency = expense.currency || 'USD';
+      
+      // Convert expense amount to display currency if needed
+      if (expenseCurrency !== currency) {
+        try {
+          expenseAmount = currencyConverter(expenseAmount, expenseCurrency, currency || 'USD', enableDebugLogging);
+          if (enableDebugLogging) {
+            console.log(`💰 [EXPENSE] Converted ${expense.amount} ${expenseCurrency} → ${expenseAmount.toFixed(2)} ${currency}`);
+          }
+        } catch (error) {
+          if (enableDebugLogging) {
+            console.warn(`⚠️ [EXPENSE] Failed to convert ${expense.amount} ${expenseCurrency} to ${currency}, using original amount`);
+          }
+          // Use original amount if conversion fails
+        }
+      }
+      
+      return sum + expenseAmount;
+    }, 0);
     
-    // Calculate sales total
-    const salesTotal = filteredSales.reduce((sum, sale) => sum + sale.salePrice, 0);
+    // Calculate sales total with currency conversion
+    const salesTotal = filteredSales.reduce((sum, sale) => {
+      let saleAmount = sale.salePrice;
+      const saleCurrency = sale.currency || 'USD';
+      
+      // Convert sale amount to display currency if needed
+      if (saleCurrency !== currency) {
+        try {
+          saleAmount = currencyConverter(saleAmount, saleCurrency, currency || 'USD', enableDebugLogging);
+          if (enableDebugLogging) {
+            console.log(`💰 [SALE] Converted ${sale.salePrice} ${saleCurrency} → ${saleAmount.toFixed(2)} ${currency}`);
+          }
+        } catch (error) {
+          if (enableDebugLogging) {
+            console.warn(`⚠️ [SALE] Failed to convert ${sale.salePrice} ${saleCurrency} to ${currency}, using original amount`);
+          }
+          // Use original amount if conversion fails
+        }
+      }
+      
+      return sum + saleAmount;
+    }, 0);
     
     // Calculate profit
     const profit = salesTotal - expensesTotal;
@@ -191,7 +237,8 @@ const useDashboardData = (): DashboardDataHook => {
     refreshing,
     error,
     fetchData,
-    getFilteredData
+    getFilteredData,
+    calculatePortfolioData
   };
 };
 

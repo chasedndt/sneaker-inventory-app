@@ -295,9 +295,21 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
           {groupedItems.map((item, index) => {
             // Get effective market price - either the actual market price if valid, or purchase price + 20% otherwise
             // This ensures all items have a consistent display, matching the inventory page
+            
+            // DEBUG: Log market price data to understand the issue
+            console.log(`🔍 [DEBUG] ${item.productName}:`, {
+              marketPrice: item.marketPrice,
+              marketPriceType: typeof item.marketPrice,
+              marketPriceValid: (typeof item.marketPrice === 'number' && item.marketPrice > 0),
+              purchasePrice: item.purchasePrice,
+              fallbackPrice: item.purchasePrice * 1.2
+            });
+            
             const effectiveMarketPrice = (typeof item.marketPrice === 'number' && item.marketPrice > 0) 
               ? item.marketPrice 
               : item.purchasePrice * 1.2; // Use 20% markup when market price is missing/invalid
+              
+            console.log(`💰 [DEBUG] ${item.productName} final price: $${effectiveMarketPrice}`);
               
             // Calculate unrealized profit amount
             const unrealizedProfit = effectiveMarketPrice - item.purchasePrice;
@@ -481,7 +493,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(effectiveMarketPrice, currency)}
+                          {money(effectiveMarketPrice, (item as any).marketPriceCurrency || 'USD')}
                         </Typography>
                         
                         <Tooltip
@@ -489,7 +501,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             <Box>
                               <Typography variant="caption" sx={{ fontWeight: 500 }}>
                                 {/* Use consistent format for all items, using our calculated unrealizedProfit */}
-                                Unrealized Profit: {money(unrealizedProfit, currency)}
+                                Unrealized Profit: {money(unrealizedProfit, (item as any).marketPriceCurrency || 'USD')}
                               </Typography>
                             </Box>
                           }

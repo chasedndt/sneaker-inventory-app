@@ -19,6 +19,7 @@ from admin.admin_routes import admin_routes
 
 # Import database service for Firebase operations
 from database_service import DatabaseService
+from currency_utils import convert_currency, get_user_display_currency
 
 # Unicode console fix
 import sys
@@ -1226,15 +1227,47 @@ def create_app():
     @require_auth
     def get_expenses(user_id):
         """
-        Get all expenses for the current user using database service.
+        Get all expenses for the current user with backend currency conversion.
+        Returns expenses with both original and converted amounts.
         """
         try:
             logger.info(f"📋 Fetching expenses for user {user_id}")
             
+            # Get display currency from query parameters (default to USD)
+            display_currency = request.args.get('display_currency', 'USD')
+            logger.info(f"💱 Display currency requested: {display_currency}")
+            
             # Use Firebase via database service
-            expenses_data = database_service.get_expenses(user_id)
-            logger.info(f"✅ Retrieved {len(expenses_data)} expenses via Firebase for user_id: {user_id}")
-            return jsonify(expenses_data)
+            raw_expenses = database_service.get_expenses(user_id)
+            logger.info(f"✅ Retrieved {len(raw_expenses)} raw expenses via Firebase for user_id: {user_id}")
+            
+            # Convert each expense using backend currency conversion
+            converted_expenses = []
+            for expense in raw_expenses:
+                original_amount = expense.get('amount', 0)
+                original_currency = expense.get('currency', 'USD')
+                
+                # Convert using backend currency utility
+                try:
+                    converted_amount = convert_currency(original_amount, original_currency, display_currency)
+                    logger.info(f"💰 Converted expense {expense.get('id', 'unknown')}: {original_amount} {original_currency} -> {converted_amount:.2f} {display_currency}")
+                except Exception as conv_error:
+                    logger.warning(f"⚠️ Currency conversion failed for expense {expense.get('id', 'unknown')}: {conv_error}")
+                    converted_amount = original_amount  # Fallback to original amount
+                
+                # Create enhanced expense with conversion data
+                enhanced_expense = {
+                    **expense,
+                    'convertedAmount': converted_amount,
+                    'originalAmount': original_amount,
+                    'originalCurrency': original_currency,
+                    'displayCurrency': display_currency
+                }
+                converted_expenses.append(enhanced_expense)
+            
+            logger.info(f"✅ Returning {len(converted_expenses)} expenses with backend currency conversion")
+            return jsonify(converted_expenses)
+            
         except Exception as e:
             logger.error(f"💥 Error fetching expenses for user {user_id}: {str(e)}")
             return safe_error_response(e, "Failed to fetch expenses")
@@ -1642,9 +1675,21 @@ def create_app():
     def get_dashboard_kpi_metrics(user_id):
         """
         Get comprehensive dashboard KPI metrics for the current user.
+        All monetary values are converted to the user's preferred currency.
         """
         try:
             logger.debug(f"📊 Generating comprehensive dashboard KPI metrics for user {user_id}")
+            
+            # Import currency conversion utilities
+            from currency_utils import convert_currency, get_user_display_currency
+            
+            # Get user's preferred currency from settings
+            user_settings = database_service.get_user_settings(user_id)
+            display_currency = get_user_display_currency(user_settings)
+            logger.info(f"🎯 DASHBOARD KPI METRICS DEBUG START")
+            logger.info(f"👤 User ID: {user_id}")
+            logger.info(f"💱 User display currency: {display_currency}")
+            logger.info(f"⚙️ User settings: {user_settings}")
             
             # Get query parameters for date filtering
             start_date_str = request.args.get('start_date')
@@ -1701,20 +1746,59 @@ def create_app():
             unlisted_items = len([item for item in active_items if item.get('status') == 'unlisted'])
             listed_items = len([item for item in active_items if item.get('status') == 'listed'])
             
-            # Calculate inventory values - handle both camelCase (Firebase) and snake_case (SQLite) field names
-            total_inventory_cost = sum(
-                item.get('purchase_price', 0) or item.get('purchasePrice', 0) for item in active_items
-            )
-            total_shipping_cost = sum(
-                item.get('shipping_price', 0) or item.get('shippingPrice', 0) for item in active_items
-            )
+            # Calculate inventory values with currency conversion - handle both camelCase (Firebase) and snake_case (SQLite) field names
+            total_inventory_cost = 0
+            total_shipping_cost = 0
+            total_market_value = 0
             
-            # Estimate market value
-            total_market_value = sum(
-                (item.get('market_price', 0) or item.get('marketPrice', 0)) if (item.get('market_price') or item.get('marketPrice')) 
-                else ((item.get('purchase_price', 0) or item.get('purchasePrice', 0)) * 1.2)
-                for item in active_items
-            )
+            logger.info(f"🏪 PROCESSING {len(active_items)} ACTIVE ITEMS FOR INVENTORY METRICS")
+            
+            for i, item in enumerate(active_items):
+                item_id = item.get('id') or item.get('item_id')
+                item_name = item.get('product_name') or item.get('productName') or f"Item {item_id}"
+                
+                logger.info(f"\n📦 ITEM {i+1}/{len(active_items)}: {item_name} (ID: {item_id})")
+                
+                # Get purchase price and currency
+                purchase_price = item.get('purchase_price', 0) or item.get('purchasePrice', 0)
+                purchase_currency = item.get('purchase_currency') or item.get('purchaseCurrency') or 'USD'
+                
+                logger.info(f"💰 RAW PURCHASE: {purchase_price} {purchase_currency}")
+                
+                # Get shipping price and currency
+                shipping_price = item.get('shipping_price', 0) or item.get('shippingPrice', 0)
+                shipping_currency = item.get('shipping_currency') or item.get('shippingCurrency') or purchase_currency
+                
+                logger.info(f"🚚 RAW SHIPPING: {shipping_price} {shipping_currency}")
+                
+                # Get market price and currency
+                market_price = item.get('market_price', 0) or item.get('marketPrice', 0)
+                market_currency = item.get('market_price_currency') or item.get('marketPriceCurrency') or purchase_currency
+                
+                logger.info(f"📈 RAW MARKET: {market_price} {market_currency}")
+                
+                # Convert to display currency
+                converted_purchase_price = convert_currency(purchase_price, purchase_currency, display_currency)
+                converted_shipping_price = convert_currency(shipping_price, shipping_currency, display_currency)
+                
+                # Use market price if available, otherwise estimate as purchase price * 1.2
+                if market_price > 0:
+                    converted_market_price = convert_currency(market_price, market_currency, display_currency)
+                    logger.info(f"✅ USING ACTUAL MARKET PRICE")
+                else:
+                    converted_market_price = converted_purchase_price * 1.2
+                    logger.info(f"🔄 USING ESTIMATED MARKET PRICE (purchase * 1.2)")
+                
+                logger.info(f"💱 CONVERTED PURCHASE: {converted_purchase_price:.2f} {display_currency}")
+                logger.info(f"💱 CONVERTED SHIPPING: {converted_shipping_price:.2f} {display_currency}")
+                logger.info(f"💱 CONVERTED MARKET: {converted_market_price:.2f} {display_currency}")
+                
+                # Add to totals
+                total_inventory_cost += converted_purchase_price
+                total_shipping_cost += converted_shipping_price
+                total_market_value += converted_market_price
+                
+                logger.info(f"📊 RUNNING TOTALS: Cost={total_inventory_cost:.2f}, Shipping={total_shipping_cost:.2f}, Market={total_market_value:.2f}")
             
             # Estimate potential profit
             potential_profit = total_market_value - total_inventory_cost - total_shipping_cost
@@ -1747,19 +1831,27 @@ def create_app():
                     
                     sales.append(sale)
             
-            # Calculate sales metrics - handle both camelCase (Firebase) and snake_case (SQLite) field names
+            # Calculate sales metrics with currency conversion - handle both camelCase (Firebase) and snake_case (SQLite) field names
             total_sales = len(sales)
-            total_sales_revenue = sum(
-                sale.get('sale_price', 0) or sale.get('salePrice', 0) for sale in sales
-            )
-            total_platform_fees = sum(
-                sale.get('platform_fees', 0) or sale.get('platformFees', 0) for sale in sales
-            )
-            total_sales_tax = sum(
-                sale.get('sales_tax', 0) or sale.get('salesTax', 0) for sale in sales
-            )
+            total_sales_revenue = 0
+            total_platform_fees = 0
+            total_sales_tax = 0
             
-            # Calculate cost basis of sold items - handle both field name formats
+            for sale in sales:
+                # Get sale currency
+                sale_currency = sale.get('currency') or 'USD'
+                
+                # Get sale amounts
+                sale_price = sale.get('sale_price', 0) or sale.get('salePrice', 0)
+                platform_fees = sale.get('platform_fees', 0) or sale.get('platformFees', 0)
+                sales_tax = sale.get('sales_tax', 0) or sale.get('salesTax', 0)
+                
+                # Convert to display currency
+                total_sales_revenue += convert_currency(sale_price, sale_currency, display_currency)
+                total_platform_fees += convert_currency(platform_fees, sale_currency, display_currency)
+                total_sales_tax += convert_currency(sales_tax, sale_currency, display_currency)
+            
+            # Calculate cost basis of sold items with currency conversion - handle both field name formats
             cost_of_goods_sold = 0
             sold_items_shipping_cost = 0
             
@@ -1768,8 +1860,15 @@ def create_app():
                 if item_id:
                     item = database_service.get_item(user_id, item_id)
                     if item:
-                        cost_of_goods_sold += item.get('purchase_price', 0) or item.get('purchasePrice', 0)
-                        sold_items_shipping_cost += item.get('shipping_price', 0) or item.get('shippingPrice', 0)
+                        # Get item costs and currencies
+                        purchase_price = item.get('purchase_price', 0) or item.get('purchasePrice', 0)
+                        purchase_currency = item.get('purchase_currency') or item.get('purchaseCurrency') or 'USD'
+                        shipping_price = item.get('shipping_price', 0) or item.get('shippingPrice', 0)
+                        shipping_currency = item.get('shipping_currency') or item.get('shippingCurrency') or purchase_currency
+                        
+                        # Convert to display currency
+                        cost_of_goods_sold += convert_currency(purchase_price, purchase_currency, display_currency)
+                        sold_items_shipping_cost += convert_currency(shipping_price, shipping_currency, display_currency)
             
             # Calculate gross profit from sales
             gross_profit = (
@@ -1807,16 +1906,24 @@ def create_app():
                 
                 expenses.append(expense)
             
-            # Calculate expense metrics - handle both field name formats
-            total_expenses = sum(expense.get('amount', 0) for expense in expenses)
-            
-            # Group expenses by type
+            # Calculate expense metrics with currency conversion - handle both field name formats
+            total_expenses = 0
             expense_by_type = {}
+            
             for expense in expenses:
+                # Get expense amount and currency
+                amount = expense.get('amount', 0)
+                expense_currency = expense.get('currency') or 'USD'
                 expense_type = expense.get('expense_type', 'other') or expense.get('expenseType', 'other')
+                
+                # Convert to display currency
+                converted_amount = convert_currency(amount, expense_currency, display_currency)
+                total_expenses += converted_amount
+                
+                # Group by type with converted amounts
                 if expense_type not in expense_by_type:
                     expense_by_type[expense_type] = 0
-                expense_by_type[expense_type] += expense.get('amount', 0)
+                expense_by_type[expense_type] += converted_amount
             
             # ---- NET PROFIT AND ROI ----
             # Net profit from sold items (realized profit)
@@ -1868,15 +1975,24 @@ def create_app():
                         if sale_date and sale_date >= prev_start_date and sale_date < prev_end_date:
                             prev_sales.append(sale)
                 
-                prev_total_sales_revenue = sum(
-                    sale.get('sale_price', 0) or sale.get('salePrice', 0) for sale in prev_sales
-                )
-                prev_total_platform_fees = sum(
-                    sale.get('platform_fees', 0) or sale.get('platformFees', 0) for sale in prev_sales
-                )
-                prev_total_sales_tax = sum(
-                    sale.get('sales_tax', 0) or sale.get('salesTax', 0) for sale in prev_sales
-                )
+                # Calculate previous period sales with currency conversion
+                prev_total_sales_revenue = 0
+                prev_total_platform_fees = 0
+                prev_total_sales_tax = 0
+                
+                for sale in prev_sales:
+                    # Get sale currency
+                    sale_currency = sale.get('currency') or 'USD'
+                    
+                    # Get sale amounts
+                    sale_price = sale.get('sale_price', 0) or sale.get('salePrice', 0)
+                    platform_fees = sale.get('platform_fees', 0) or sale.get('platformFees', 0)
+                    sales_tax = sale.get('sales_tax', 0) or sale.get('salesTax', 0)
+                    
+                    # Convert to display currency
+                    prev_total_sales_revenue += convert_currency(sale_price, sale_currency, display_currency)
+                    prev_total_platform_fees += convert_currency(platform_fees, sale_currency, display_currency)
+                    prev_total_sales_tax += convert_currency(sales_tax, sale_currency, display_currency)
                 
                 prev_cost_of_goods_sold = 0
                 prev_sold_items_shipping_cost = 0
@@ -1886,8 +2002,15 @@ def create_app():
                     if item_id:
                         item = database_service.get_item(user_id, item_id)
                         if item:
-                            prev_cost_of_goods_sold += item.get('purchase_price', 0) or item.get('purchasePrice', 0)
-                            prev_sold_items_shipping_cost += item.get('shipping_price', 0) or item.get('shippingPrice', 0)
+                            # Get item costs and currencies
+                            purchase_price = item.get('purchase_price', 0) or item.get('purchasePrice', 0)
+                            purchase_currency = item.get('purchase_currency') or item.get('purchaseCurrency') or 'USD'
+                            shipping_price = item.get('shipping_price', 0) or item.get('shippingPrice', 0)
+                            shipping_currency = item.get('shipping_currency') or item.get('shippingCurrency') or purchase_currency
+                            
+                            # Convert to display currency
+                            prev_cost_of_goods_sold += convert_currency(purchase_price, purchase_currency, display_currency)
+                            prev_sold_items_shipping_cost += convert_currency(shipping_price, shipping_currency, display_currency)
                 
                 prev_gross_profit = (
                     prev_total_sales_revenue 
@@ -1914,7 +2037,12 @@ def create_app():
                     if expense_date and expense_date >= prev_start_date and expense_date < prev_end_date:
                         prev_expenses.append(expense)
                 
-                prev_total_expenses = sum(expense.get('amount', 0) for expense in prev_expenses)
+                # Calculate previous period expenses with currency conversion
+                prev_total_expenses = 0
+                for expense in prev_expenses:
+                    amount = expense.get('amount', 0)
+                    expense_currency = expense.get('currency') or 'USD'
+                    prev_total_expenses += convert_currency(amount, expense_currency, display_currency)
                 
                 # --- PREVIOUS PERIOD NET PROFIT ---
                 prev_net_profit_sold = prev_gross_profit - prev_total_expenses
