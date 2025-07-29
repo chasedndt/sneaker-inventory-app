@@ -648,7 +648,7 @@ export const api = {
     }
   },
 
-  getItems: async () => {
+  getItems: async (displayCurrency?: string) => {
     try {
       console.log('🔄 Fetching items from API with user authentication...');
       
@@ -659,8 +659,15 @@ export const api = {
         throw new Error('Authentication required. Please log in to view items.');
       }
       
+      // Build URL with display currency parameter if provided
+      let url = `${API_BASE_URL}/items`;
+      if (displayCurrency) {
+        url += `?display_currency=${encodeURIComponent(displayCurrency)}`;
+        console.log(`💱 Requesting items with display currency: ${displayCurrency}`);
+      }
+      
       // Make the authenticated request
-      const response = await fetch(`${API_BASE_URL}/items`, {
+      const response = await fetch(url, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -860,7 +867,10 @@ export const useApi = () => {
     
     // Override the getItems method to ensure items have the right currency
     getItems: async () => {
-      const items = await api.getItems();
+      // Pass the user's display currency to the backend API for conversion
+      const displayCurrency = settings?.currency || 'USD';
+      console.log(`💱 [Enhanced API] Using display currency: ${displayCurrency}`);
+      const items = await api.getItems(displayCurrency);
       
       console.log('🔍 [API ENHANCED DEBUG] Items received from base API call before enhancement:', 
         items.map((item: Item) => ({

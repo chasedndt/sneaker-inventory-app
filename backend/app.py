@@ -307,15 +307,21 @@ def create_app():
         """
         Get all items with their images for current user.
         Uses database service to fetch from appropriate data source (SQLite or Firebase).
+        Applies currency conversion to all monetary values based on display_currency parameter.
         """
         try:
             logger.debug(f"📊 Fetching items for user_id: {user_id}")
+            
+            # Get display currency from query parameters (default to USD)
+            display_currency = request.args.get('display_currency', 'USD')
+            logger.debug(f"💱 Display currency requested: {display_currency}")
             
             # Use Firebase via database service
             items_data = database_service.get_items(user_id)
             logger.debug(f"✅ Retrieved {len(items_data)} items via Firebase for user_id: {user_id}")
             
             # Process items to convert sizes array to individual size fields for frontend compatibility
+            # AND apply currency conversion to all monetary values
             processed_items = []
             for item in items_data:
                 processed_item = item.copy()
@@ -337,9 +343,60 @@ def create_app():
                     processed_item['size'] = ''
                     processed_item['sizeSystem'] = ''
                 
+                # CURRENCY CONVERSION: Convert all monetary values to display currency
+                # This ensures consistency with Dashboard and other pages
+                
+                # Convert market price (handle 0 market price with fallback)
+                market_price = processed_item.get('marketPrice', 0)
+                market_price_currency = processed_item.get('marketPriceCurrency', 'USD')
+                purchase_price = processed_item.get('purchasePrice', 0)
+                purchase_currency = processed_item.get('purchaseCurrency', 'USD')
+                
+                # If market price is 0, calculate fallback based on purchase price
+                if market_price == 0 and purchase_price > 0:
+                    # Use 1.2x purchase price as fallback market price
+                    fallback_market_price = purchase_price * 1.2
+                    logger.debug(f"💱 Market price is 0, using fallback: {purchase_price} * 1.2 = {fallback_market_price} {purchase_currency}")
+                    
+                    # Convert fallback market price to display currency
+                    if purchase_currency != display_currency:
+                        converted_market_price = convert_currency(fallback_market_price, purchase_currency, display_currency)
+                        logger.debug(f"💱 Fallback market price: {fallback_market_price} {purchase_currency} -> {converted_market_price:.2f} {display_currency}")
+                        processed_item['marketPrice'] = converted_market_price
+                    else:
+                        processed_item['marketPrice'] = fallback_market_price
+                    processed_item['marketPriceCurrency'] = display_currency
+                elif market_price > 0 and market_price_currency != display_currency:
+                    # Convert existing market price
+                    converted_market_price = convert_currency(market_price, market_price_currency, display_currency)
+                    logger.debug(f"💱 Market price: {market_price} {market_price_currency} -> {converted_market_price:.2f} {display_currency}")
+                    processed_item['marketPrice'] = converted_market_price
+                    processed_item['marketPriceCurrency'] = display_currency
+                elif market_price > 0:
+                    # Market price exists and is already in display currency
+                    processed_item['marketPriceCurrency'] = display_currency
+                
+                # Convert purchase price (if not already converted above)
+                if purchase_currency != display_currency:
+                    converted_purchase_price = convert_currency(purchase_price, purchase_currency, display_currency)
+                    logger.debug(f"💱 Purchase price: {purchase_price} {purchase_currency} -> {converted_purchase_price:.2f} {display_currency}")
+                    processed_item['purchasePrice'] = converted_purchase_price
+                    processed_item['purchaseCurrency'] = display_currency
+                else:
+                    processed_item['purchaseCurrency'] = display_currency
+                
+                # Convert shipping cost
+                shipping_cost = processed_item.get('shippingCost', 0)
+                shipping_currency = processed_item.get('shippingCurrency', purchase_currency)  # Default to purchase currency
+                if shipping_cost and shipping_currency != display_currency:
+                    converted_shipping_cost = convert_currency(shipping_cost, shipping_currency, display_currency)
+                    logger.debug(f"💱 Shipping cost: {shipping_cost} {shipping_currency} -> {converted_shipping_cost:.2f} {display_currency}")
+                    processed_item['shippingCost'] = converted_shipping_cost
+                    processed_item['shippingCurrency'] = display_currency
+                
                 processed_items.append(processed_item)
             
-            logger.debug(f"✅ Processed {len(processed_items)} items with size data for user_id: {user_id}")
+            logger.debug(f"✅ Processed {len(processed_items)} items with size data and currency conversion for user_id: {user_id}")
             return jsonify(processed_items), 200
         except Exception as e:
             logger.error(f"💥 Error fetching items: {str(e)}")

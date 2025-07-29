@@ -9,7 +9,7 @@ import { expensesApi } from '../services/expensesApi';
 import { Expense } from '../models/expenses';
 import { dashboardService } from '../services/dashboardService';
 import { useSettings } from '../contexts/SettingsContext';
-import { currencyConverter } from '../utils/currencyUtils';
+// Removed currencyConverter import - backend now handles all currency conversion
 import { InventoryItem } from '../pages/InventoryPage';
 
 // Control debug logging globally
@@ -63,12 +63,24 @@ const useDashboardData = (): DashboardDataHook => {
         setLoading(true);
       }
       
+      // Get user's display currency preference
+      const displayCurrency = currency === '$' ? 'USD' : currency === '£' ? 'GBP' : currency === '€' ? 'EUR' : 'USD';
+      
       if (enableDebugLogging) {
-        console.log('🔄 Fetching inventory items, sales, and expenses data...');
+        console.log(`🔄 Fetching inventory items, sales, and expenses data with currency: ${displayCurrency}`);
       }
       
-      // Fetch all necessary data in one call after authentication
-      const data = await dashboardService.getDashboardData();
+      // Fetch all necessary data in one call after authentication with display currency
+      const data = await dashboardService.getDashboardData(displayCurrency);
+      
+      if (enableDebugLogging) {
+        console.log(`✅ Received ${data.items.length} items from backend with converted values`);
+        // Log first item to verify conversion
+        if (data.items.length > 0) {
+          const firstItem = data.items[0];
+          console.log(`📦 Sample item: ${firstItem.productName} - Market: $${firstItem.marketPrice} ${firstItem.marketPriceCurrency || displayCurrency}`);
+        }
+      }
       
       // Update state with all datasets
       setItems(data.items);
@@ -84,7 +96,7 @@ const useDashboardData = (): DashboardDataHook => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [currency]);
 
   // Only fetch data after authentication is verified
   useEffect(() => {
@@ -145,23 +157,9 @@ const useDashboardData = (): DashboardDataHook => {
       let marketPrice = item.marketPrice || (item.purchasePrice * 1.2); // Default 20% markup if no market price
       
       // Treat item as InventoryItem to access all needed properties
-      const inventoryItem = item as InventoryItem;
-      const marketPriceCurrency = inventoryItem.marketPriceCurrency || 'GBP'; // Default to GBP if not specified
-      
-      // Original values before conversion
-      const originalMarketPrice = marketPrice;
-      
-      // Convert the market price to the display currency if needed
-      if (marketPriceCurrency !== currency) {
-        try {
-          marketPrice = currencyConverter(marketPrice, marketPriceCurrency, currency || 'USD', enableDebugLogging);
-          // Only log significant conversions or first/last items for reference when debug logging is enabled
-          if (enableDebugLogging && (index === 0 || index === filteredItems.length-1 || Math.abs(marketPrice - originalMarketPrice) > 5)) {
-            console.log(`💱 Item ${item.productName}: ${marketPriceCurrency} ${originalMarketPrice.toFixed(2)} → ${currency || 'USD'} ${marketPrice.toFixed(2)}`);
-          }
-        } catch (error) {
-          console.error(`❌ Currency conversion error for ${item.productName}:`, error);
-        }
+      // Backend already converted market price to display currency
+      if (enableDebugLogging && index < 3) {
+        console.log(`💱 Item ${item.productName}: Backend converted price ${marketPrice.toFixed(2)} ${currency || 'USD'}`);
       }
       
       return sum + marketPrice;
@@ -172,47 +170,23 @@ const useDashboardData = (): DashboardDataHook => {
     }
 
     
-    // Calculate expenses total with currency conversion
+    // Calculate expenses total (backend already converted to display currency)
     const expensesTotal = filteredExpenses.reduce((sum, expense) => {
-      let expenseAmount = expense.amount;
-      const expenseCurrency = expense.currency || 'USD';
+      const expenseAmount = expense.amount;
       
-      // Convert expense amount to display currency if needed
-      if (expenseCurrency !== currency) {
-        try {
-          expenseAmount = currencyConverter(expenseAmount, expenseCurrency, currency || 'USD', enableDebugLogging);
-          if (enableDebugLogging) {
-            console.log(`💰 [EXPENSE] Converted ${expense.amount} ${expenseCurrency} → ${expenseAmount.toFixed(2)} ${currency}`);
-          }
-        } catch (error) {
-          if (enableDebugLogging) {
-            console.warn(`⚠️ [EXPENSE] Failed to convert ${expense.amount} ${expenseCurrency} to ${currency}, using original amount`);
-          }
-          // Use original amount if conversion fails
-        }
+      if (enableDebugLogging && filteredExpenses.indexOf(expense) < 3) {
+        console.log(`💰 [EXPENSE] Backend converted amount: ${expenseAmount.toFixed(2)} ${currency}`);
       }
       
       return sum + expenseAmount;
     }, 0);
     
-    // Calculate sales total with currency conversion
+    // Calculate sales total (backend already converted to display currency)
     const salesTotal = filteredSales.reduce((sum, sale) => {
-      let saleAmount = sale.salePrice;
-      const saleCurrency = sale.currency || 'USD';
+      const saleAmount = sale.salePrice;
       
-      // Convert sale amount to display currency if needed
-      if (saleCurrency !== currency) {
-        try {
-          saleAmount = currencyConverter(saleAmount, saleCurrency, currency || 'USD', enableDebugLogging);
-          if (enableDebugLogging) {
-            console.log(`💰 [SALE] Converted ${sale.salePrice} ${saleCurrency} → ${saleAmount.toFixed(2)} ${currency}`);
-          }
-        } catch (error) {
-          if (enableDebugLogging) {
-            console.warn(`⚠️ [SALE] Failed to convert ${sale.salePrice} ${saleCurrency} to ${currency}, using original amount`);
-          }
-          // Use original amount if conversion fails
-        }
+      if (enableDebugLogging && filteredSales.indexOf(sale) < 3) {
+        console.log(`💰 [SALE] Backend converted amount: ${saleAmount.toFixed(2)} ${currency}`);
       }
       
       return sum + saleAmount;

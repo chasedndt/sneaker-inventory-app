@@ -58,7 +58,7 @@ import { tagService } from '../services/tagService';
 import { useAuthReady } from '../hooks/useAuthReady';
 import { useApiConnection } from '../hooks/useApiConnection';
 import { useSettings } from '../contexts/SettingsContext';
-import { currencyConverter } from '../utils/currencyUtils';
+// Removed currencyConverter import - backend now handles all currency conversion
 
 export interface InventoryItem extends Item {
   marketPrice: number;
@@ -1213,70 +1213,38 @@ const InventoryPage: React.FC = () => {
     
     console.log(`📈 Item counts: Total=${totalItems}, Unlisted=${unlistedItems}, Listed=${listedItems}, Sold=${soldItems}`);
     
-    // Convert all purchase prices to the current currency before summing
-    const totalPurchaseValue = filteredItems.reduce((sum, item, index) => {
-      console.log(`\n📦 INVENTORY ITEM ${index + 1}/${filteredItems.length}: ${item.productName} (ID: ${item.id})`);
-      
-      // Get purchase price and its currency
-      const purchasePrice = item.purchasePrice;
-      const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
-      
-      console.log(`💰 RAW PURCHASE: ${purchasePrice} ${purchaseCurrency}`);
-      
-      // Convert to display currency
-      const convertedPrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
-      
-      console.log(`💱 CONVERTED PURCHASE: ${convertedPrice} ${defaultCurrency}`);
-      console.log(`📊 RUNNING PURCHASE TOTAL: ${sum + convertedPrice}`);
-      
-      return sum + convertedPrice;
+    // Sum purchase prices (backend already converted to display currency)
+    const totalPurchaseValue = filteredItems.reduce((sum, item) => {
+      const purchasePrice = item.purchasePrice || 0;
+      console.log(`💰 BACKEND CONVERTED PURCHASE: ${purchasePrice} ${defaultCurrency}`);
+      console.log(`📊 RUNNING PURCHASE TOTAL: ${sum + purchasePrice}`);
+      return sum + purchasePrice;
     }, 0);
-    // Convert all shipping prices to the current currency before summing
+    // Sum shipping prices (backend already converted to display currency)
     const totalShippingValue = filteredItems.reduce((sum, item) => {
-      // Get shipping price and its currency
       const shippingPrice = item.shippingPrice || 0;
-      if (shippingPrice === 0) return sum;
-      
-      const shippingCurrency = item.purchaseDetails?.shippingCurrency || item.purchaseDetails?.purchaseCurrency || 'GBP';
-      
-      // Convert to display currency
-      const convertedPrice = currencyConverter(shippingPrice, shippingCurrency, defaultCurrency || 'GBP');
-      return sum + convertedPrice;
+      return sum + shippingPrice;
     }, 0);
-    // Convert all market prices to the current currency before summing
+    // Sum market prices (backend already converted to display currency)
     const totalMarketValue = filteredItems.reduce((sum, item) => {
-      // If item has marketPriceCurrency, convert to current currency
-      if (item.marketPriceCurrency) {
-        const convertedPrice = currencyConverter(item.marketPrice, item.marketPriceCurrency, defaultCurrency || 'GBP');
-        return sum + convertedPrice;
-      }
-      // Otherwise just add the price (assuming it's already in the correct currency)
-      return sum + item.marketPrice;
+      const marketPrice = item.marketPrice || 0;
+      return sum + marketPrice;
     }, 0);
 
-    // Calculate estimated profit for active items only (not sold) with comprehensive currency conversion
+    // Calculate estimated profit for active items only (not sold) - backend already converted values
     const activeItems = filteredItems.filter(item => item.status !== 'sold');
     let totalEstimatedProfit = 0;
     
-    // Log key information for debugging but keep it minimal
     console.log(`📊 [INVENTORY PROFIT] Calculating profit for ${activeItems.length} active items in ${defaultCurrency}`);
     
     for (const item of activeItems) {
       try {
-        // 1. Get market price (with fallback) and its currency
-        let marketPrice = item.marketPrice || (item.purchasePrice * 1.2);
-        const marketPriceCurrency = item.marketPriceCurrency || 'GBP';
+        // Backend already converted all values to display currency
+        const marketPrice = item.marketPrice || 0;
+        const purchasePrice = item.purchasePrice || 0;
         
-        // 2. Get purchase price and its currency
-        let purchasePrice = item.purchasePrice;
-        const purchaseCurrency = item.purchaseDetails?.purchaseCurrency || 'GBP';
-        
-        // 3. Convert both to the display currency using the enhanced utility
-        const convertedMarketPrice = currencyConverter(marketPrice, marketPriceCurrency, defaultCurrency || 'GBP');
-        const convertedPurchasePrice = currencyConverter(purchasePrice, purchaseCurrency, defaultCurrency || 'GBP');
-        
-        // 4. Calculate profit in the display currency
-        const itemProfit = convertedMarketPrice - convertedPurchasePrice;
+        // Calculate profit using backend-converted values
+        const itemProfit = marketPrice - purchasePrice;
         
         // Add to running total
         totalEstimatedProfit += itemProfit;

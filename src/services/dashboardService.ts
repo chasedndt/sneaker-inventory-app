@@ -225,21 +225,28 @@ export const dashboardService = {
 
   /**
    * Fetches all dashboard data (items, sales, expenses) in parallel for useDashboardData
+   * @param {string} displayCurrency - User's preferred display currency (USD, GBP, etc.)
    * @returns {Promise<{items: Item[], sales: Sale[], expenses: Expense[]}>}
    */
-  getDashboardData: async () => {
+  getDashboardData: async (displayCurrency: string = 'USD') => {
     try {
       // Ensure authentication
       const token = await getApiAuthToken(); // Use the imported helper
       if (!token) {
         throw new Error('Authentication required. Please log in to view dashboard data.');
       }
-      // Fetch all in parallel
+      
+      console.log(`🔄 [Dashboard Service] Fetching data with display currency: ${displayCurrency}`);
+      
+      // Fetch all in parallel with display currency
       const [items, sales, expenses] = await Promise.all([
-        api.getItems(),
+        api.getItems(displayCurrency), // Pass display currency to get converted values
         salesApi.getSales(),
-        expensesApi.getExpenses()
+        expensesApi.getExpenses({ display_currency: displayCurrency }) // Pass display currency for expenses too
       ]);
+      
+      console.log(`✅ [Dashboard Service] Fetched ${items.length} items, ${sales.length} sales, ${expenses.length} expenses`);
+      
       return { items, sales, expenses };
     } catch (error) {
       console.error('💥 Error fetching dashboard data (items, sales, expenses):', error);

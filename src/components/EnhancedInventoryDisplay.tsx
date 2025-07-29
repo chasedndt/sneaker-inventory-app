@@ -22,7 +22,7 @@ import { getCategoryPlaceholderImage, safeImageUrl, getImageUrl } from '../utils
 import { useAuth } from '../contexts/AuthContext';
 import useFormat from '../hooks/useFormat'; // Import formatting hook
 import { useSettings } from '../contexts/SettingsContext'; // Import settings context
-import { currencyConverter } from '../utils/currencyUtils'; // Import currency converter
+// Removed currencyConverter import - backend now handles all currency conversion
 import { User } from 'firebase/auth';
 import { InventoryItem } from '../pages/InventoryPage'; // Import InventoryItem type
 
@@ -493,7 +493,7 @@ const EnhancedInventoryDisplay: React.FC<EnhancedInventoryDisplayProps> = ({
                             color: 'white'
                           }}
                         >
-                          {money(effectiveMarketPrice, (item as any).marketPriceCurrency || 'USD')}
+                          {currency}${effectiveMarketPrice.toFixed(2)}
                         </Typography>
                         
                         <Tooltip
